@@ -123,6 +123,7 @@ function state(permissions: FrontendState["permissions"]): FrontendState {
     timeline: createTimeline("chat", 1),
     snapshot: null,
     assetViews: {},
+    connections: [],
     permissions,
     activeChatId: "chat",
     activeCharacterId: "character-a",

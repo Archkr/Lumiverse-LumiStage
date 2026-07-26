@@ -29,6 +29,7 @@ const EMPTY_BACKEND: FrontendState = {
   timeline: null,
   snapshot: null,
   assetViews: {},
+  connections: [],
   permissions: {
     generation: false,
     chats: false,

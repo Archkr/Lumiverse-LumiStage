@@ -1595,6 +1595,9 @@ function resolveUserId(chatId, eventUserId) {
 function send(message, userId) {
   spindle.sendToFrontend(message, userId);
 }
+function settleBackground(operation) {
+  void operation.catch(() => void 0);
+}
 function hasPermission(permission) {
   try {
     return spindle.permissions.has(permission);
@@ -1612,6 +1615,18 @@ function permissions() {
     uiPanels: hasPermission("ui_panels")
   };
 }
+async function connectionViews(userId) {
+  if (!hasPermission("generation")) return [];
+  const connections = await spindle.connections.list(userId).catch(() => []);
+  return connections.map((connection) => ({
+    id: connection.id,
+    name: connection.name,
+    provider: connection.provider,
+    model: connection.model,
+    isDefault: connection.is_default,
+    hasApiKey: connection.has_api_key
+  }));
+}
 function queueKey(userId, chatId) {
   return `${userId}:${chatId}`;
 }
@@ -1626,18 +1641,18 @@ function enqueueAnalysis(userId, chatId, operation) {
   analysisQueues.set(key, next);
   return next;
 }
-async function characterName(characterId) {
+async function characterName(userId, characterId) {
   if (!hasPermission("characters")) return "Character";
-  const character = await spindle.characters.get(characterId).catch(() => null);
+  const character = await spindle.characters.get(characterId, userId).catch(() => null);
   return character?.name || "Character";
 }
 async function profilesForChat(userId, chatId) {
   if (!hasPermission("chats")) return { chat: {}, profiles: [], catalog: [], primaryCharacterId: null };
-  const chatDto = await spindle.chats.get(chatId);
+  const chatDto = await spindle.chats.get(chatId, userId);
   if (!chatDto) return { chat: {}, profiles: [], catalog: [], primaryCharacterId: null };
   const { characterIds: ids, primaryCharacterId } = resolveChatCharacterIds(chatDto);
   const profiles = [];
-  for (const characterId of ids) profiles.push(await repository.getProfile(userId, characterId, await characterName(characterId)));
+  for (const characterId of ids) profiles.push(await repository.getProfile(userId, characterId, await characterName(userId, characterId)));
   return {
     chat: chatDto,
     profiles,
@@ -1708,7 +1723,7 @@ async function buildState(userId, chatId, characterId) {
     profile = profiles.find((item) => item.characterId === resolvedId) ?? null;
     activeCharacterName = profile?.characterName ?? null;
   } else if (activeCharacterId) {
-    activeCharacterName = await characterName(activeCharacterId);
+    activeCharacterName = await characterName(userId, activeCharacterId);
     profile = await repository.getProfile(userId, activeCharacterId, activeCharacterName);
     profiles = [profile];
   }
@@ -1719,6 +1734,7 @@ async function buildState(userId, chatId, characterId) {
     timeline,
     snapshot: timeline?.snapshot ?? null,
     assetViews: await assetViewsForProfiles(userId, profiles),
+    connections: await connectionViews(userId),
     permissions: permissions(),
     activeChatId,
     activeCharacterId,
@@ -1787,7 +1803,7 @@ async function analyzeLatest(userId, chatId, force = false) {
       currentStates,
       settings
     );
-    const response = await spindle.generate.quiet(request);
+    const response = await spindle.generate.quiet({ ...request, userId });
     const parsed = parseDetectorResponse(response);
     if (!parsed) throw new Error("The detector did not return a valid stage decision.");
     const decision = validateDecision(parsed, set.catalog);
@@ -1831,7 +1847,7 @@ function scheduleAnalysis(userId, chatId, delay = 120, force = false) {
 }
 async function importAssets(userId, message) {
   if (!hasPermission("images")) throw new Error("Images permission is required to import media.");
-  const profile = await repository.getProfile(userId, message.characterId, await characterName(message.characterId));
+  const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
   const defaultActor = profile.actors.find((actor) => actor.id === message.targetActorId) ?? profile.actors.find((actor) => actor.id === profile.defaultActorId) ?? profile.actors[0];
   const candidates = [];
   const errors = [];
@@ -1947,7 +1963,7 @@ function archiveForProfile(profile) {
 }
 async function exportProfile(userId, characterId) {
   if (!hasPermission("images")) throw new Error("Images permission is required to export media.");
-  const profile = await repository.getProfile(userId, characterId, await characterName(characterId));
+  const profile = await repository.getProfile(userId, characterId, await characterName(userId, characterId));
   const archive = archiveForProfile(profile);
   const urls = {};
   await mapWithConcurrency(archive.assets, 8, async (entry) => {
@@ -1965,8 +1981,12 @@ async function handleMessage(message, userId) {
   }
   if (message.type === "character-editor") {
     if (!message.characterId) return;
-    const profile = await repository.getProfile(userId, message.characterId, await characterName(message.characterId));
+    const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
     send({ type: "profile", profile, assetViews: await assetViewsForProfiles(userId, [profile]) }, userId);
+    return;
+  }
+  if (message.type === "open-connections") {
+    await spindle.ui.openDrawerTab("connections", { userId });
     return;
   }
   if (message.type === "save-settings") {
@@ -2025,7 +2045,7 @@ async function handleMessage(message, userId) {
   }
   if (message.type === "delete-assets") {
     if (!hasPermission("images")) throw new Error("Images permission is required to delete media.");
-    const profile = await repository.getProfile(userId, message.characterId, await characterName(message.characterId));
+    const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
     const selected = new Set(message.assetIds);
     const assets = allAssets(profile).filter((asset) => selected.has(asset.id));
     const next = removeAssets(profile, selected);
@@ -2047,7 +2067,7 @@ async function handleMessage(message, userId) {
   }
   if (message.type === "request-diagnostics") {
     const context = activeContexts.get(userId);
-    const diagnosticProfiles = context?.chatId ? (await profilesForChat(userId, context.chatId)).profiles : context?.characterId ? [await repository.getProfile(userId, context.characterId, await characterName(context.characterId))] : [];
+    const diagnosticProfiles = context?.chatId ? (await profilesForChat(userId, context.chatId)).profiles : context?.characterId ? [await repository.getProfile(userId, context.characterId, await characterName(userId, context.characterId))] : [];
     const profile = diagnosticProfiles.find((item) => item.characterId === context?.characterId) ?? diagnosticProfiles[0] ?? null;
     const views = await assetViewsForProfiles(userId, diagnosticProfiles);
     const media = diagnosticProfiles.flatMap(allAssets);
@@ -2144,7 +2164,7 @@ onEvent("MESSAGE_DELETED", (payload, eventUserId) => {
   const messageId = readString(payload, ["messageId", "message_id"]);
   const userId = resolveUserId(chatId, eventUserId);
   if (!chatId || !messageId || !userId) return;
-  void enqueueAnalysis(userId, chatId, async () => {
+  settleBackground(enqueueAnalysis(userId, chatId, async () => {
     const settings = await repository.getSettings(userId);
     const set = await profilesForChat(userId, chatId);
     const messages = await normalizedMessages(chatId);
@@ -2154,7 +2174,7 @@ onEvent("MESSAGE_DELETED", (payload, eventUserId) => {
     timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
     await repository.saveTimeline(userId, timeline, expectedRevision);
     await sendState(userId);
-  });
+  }));
 });
 onEvent("CHAT_SWITCHED", (payload, eventUserId) => {
   const chatId = readString(payload, ["chatId", "chat_id"]);
@@ -2163,14 +2183,14 @@ onEvent("CHAT_SWITCHED", (payload, eventUserId) => {
   const previous = activeContexts.get(userId);
   activeContexts.set(userId, { chatId, characterId: previous?.characterId ?? null });
   if (chatId) chatUsers.set(chatId, userId);
-  void sendState(userId, chatId, previous?.characterId ?? null);
+  settleBackground(sendState(userId, chatId, previous?.characterId ?? null));
 });
 onEvent("CHAT_DELETED", (payload, eventUserId) => {
   const chatId = extractChatId(payload);
   const userId = resolveUserId(chatId, eventUserId);
   if (!chatId || !userId) return;
-  void repository.deleteTimeline(userId, chatId);
+  settleBackground(repository.deleteTimeline(userId, chatId));
 });
 spindle.permissions.onChanged(() => {
-  if (lastFrontendUserId) void sendState(lastFrontendUserId);
+  if (lastFrontendUserId) settleBackground(sendState(lastFrontendUserId));
 });

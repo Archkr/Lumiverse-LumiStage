@@ -4330,6 +4330,7 @@ var EMPTY_BACKEND = {
   timeline: null,
   snapshot: null,
   assetViews: {},
+  connections: [],
   permissions: {
     generation: false,
     chats: false,
@@ -5389,6 +5390,7 @@ var NAV = [
   { id: "batch", label: "Batch", icon: "batch" },
   { id: "automation", label: "Automation", icon: "automation" },
   { id: "appearance", label: "Appearance", icon: "appearance" },
+  { id: "settings", label: "Settings", icon: "settings" },
   { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" }
 ];
 var PRIMARY_NAV = NAV.slice(0, 3);
@@ -6007,7 +6009,7 @@ function BatchView(props) {
     ] })
   ] });
 }
-function AutomationView({ client }) {
+function AutomationView({ client, openSettings }) {
   const { backend } = useClientState(client);
   const [draft, setDraft] = d2(backend.settings);
   h2(() => setDraft(backend.settings), [backend.settings.revision]);
@@ -6024,21 +6026,14 @@ function AutomationView({ client }) {
       ] })
     ] }),
     /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(Toggle, { checked: detection.enabled, onChange: (enabled) => setDraft({ ...draft, detection: { ...detection, enabled } }), label: "Automatic stage direction", hint: "Runs only after a successful, saved assistant reply. Stopped or failed generations do not change the stage." }) }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Model routing", description: "Blank values follow Lumiverse\u2019s active connection." }),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Connection profile", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: detection.connectionId ?? "", placeholder: "Active connection", onInput: (event) => setDraft({ ...draft, detection: { ...detection, connectionId: event.currentTarget.value || null } }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Model override", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: detection.model ?? "", placeholder: "Connection default", onInput: (event) => setDraft({ ...draft, detection: { ...detection, model: event.currentTarget.value || null } }) }) })
+    /* @__PURE__ */ u2(Surface, { class: "ls2-route-summary", children: [
+      /* @__PURE__ */ u2("span", { class: "ls2-route-icon", children: /* @__PURE__ */ u2(Icon, { name: "aperture", size: 20 }) }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Detector route" }),
+        /* @__PURE__ */ u2("strong", { children: detection.connectionId ? "Pinned connection" : "Active Lumiverse connection" }),
+        /* @__PURE__ */ u2("small", { children: detection.model ?? "Connection default model" })
       ] }),
-      /* @__PURE__ */ u2(Field, { label: `Conversation context \xB7 ${detection.contextMessages} messages`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "1", max: "20", value: detection.contextMessages, onInput: (event) => setDraft({ ...draft, detection: { ...detection, contextMessages: Number(event.currentTarget.value) } }) }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-locked-value", children: [
-        /* @__PURE__ */ u2(Icon, { name: "lock", size: 14 }),
-        /* @__PURE__ */ u2("span", { children: [
-          "Temperature is fixed at ",
-          /* @__PURE__ */ u2("strong", { children: "0.10" }),
-          " for stable classification."
-        ] })
-      ] })
+      /* @__PURE__ */ u2(Button, { icon: "settings", onClick: openSettings, children: "Configure" })
     ] }),
     /* @__PURE__ */ u2(Surface, { children: [
       /* @__PURE__ */ u2(SectionTitle, { title: "Confidence policy", description: "Uncertain predictions preserve the previous stage." }),
@@ -6046,6 +6041,112 @@ function AutomationView({ client }) {
         /* @__PURE__ */ u2(Field, { label: `Pose and expression \xB7 ${Math.round(detection.stateConfidence * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".3", max: ".95", step: ".05", value: detection.stateConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } }) }) }),
         /* @__PURE__ */ u2(Field, { label: `Outfit change \xB7 ${Math.round(detection.outfitConfidence * 100)}%`, hint: "Also requires an explicit clothing cue.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".5", max: "1", step: ".05", value: detection.outfitConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } }) }) })
       ] })
+    ] })
+  ] });
+}
+function SettingsView({ client }) {
+  const { backend, busy } = useClientState(client);
+  const [draft, setDraft] = d2(backend.settings);
+  h2(() => setDraft(backend.settings), [backend.settings.revision]);
+  const detection = draft.detection;
+  const selected = detection.connectionId ? backend.connections.find((connection) => connection.id === detection.connectionId) ?? null : backend.connections.find((connection) => connection.isDefault) ?? backend.connections[0] ?? null;
+  const configured = backend.connections.filter((connection) => connection.hasApiKey).length;
+  const missingPermissions = Object.entries(backend.permissions).filter(([, granted]) => !granted).map(([name]) => name);
+  const patchDetection = (patch) => setDraft({ ...draft, detection: { ...detection, ...patch } });
+  async function save() {
+    try {
+      await client.saveSettings(draft);
+      client.notify("success", "LumiStage settings saved.");
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
+    }
+  }
+  async function requestPermissions() {
+    try {
+      await client.ctx.permissions.request(["generation", "chats", "chat_mutation", "characters", "images", "ui_panels"]);
+      const active = client.ctx.getActiveChat();
+      client.refresh(active.chatId, active.characterId);
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Permission request was not completed.");
+    }
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Extension configuration", title: "Settings", description: "Provider routing, detector defaults, permissions, and LumiStage-owned data.", actions: /* @__PURE__ */ u2(Button, { icon: "check", variant: "primary", disabled: busy, onClick: () => void save(), children: "Save settings" }) }),
+    /* @__PURE__ */ u2(Surface, { class: "ls2-settings-route", padding: "none", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-settings-route-hero", children: [
+        /* @__PURE__ */ u2("span", { class: "ls2-settings-route-icon", children: /* @__PURE__ */ u2(Icon, { name: "aperture", size: 24 }) }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "API connection" }),
+          /* @__PURE__ */ u2("strong", { children: selected?.name ?? "Follow active connection" }),
+          /* @__PURE__ */ u2("small", { children: selected ? `${selected.provider} \xB7 ${detection.model ?? selected.model ?? "Default model"}` : "Uses whichever LLM connection is active in Lumiverse" })
+        ] }),
+        /* @__PURE__ */ u2(Status, { tone: selected?.hasApiKey || !detection.connectionId && configured > 0 ? "success" : "warning", children: selected?.hasApiKey || !detection.connectionId && configured > 0 ? "Available" : "Needs setup" })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-settings-route-form", children: [
+        /* @__PURE__ */ u2(Field, { label: "Connection profile", hint: "Choosing Active follows Lumiverse whenever its active connection changes.", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: detection.connectionId ?? "", onChange: (event) => patchDetection({ connectionId: event.currentTarget.value || null }), children: [
+          /* @__PURE__ */ u2("option", { value: "", children: "Active Lumiverse connection" }),
+          detection.connectionId && !backend.connections.some((connection) => connection.id === detection.connectionId) && /* @__PURE__ */ u2("option", { value: detection.connectionId, children: "Unavailable saved connection" }),
+          backend.connections.map((connection) => /* @__PURE__ */ u2("option", { value: connection.id, children: [
+            connection.name,
+            " \xB7 ",
+            connection.provider
+          ] }))
+        ] }) }),
+        /* @__PURE__ */ u2(Field, { label: "Model override", hint: "Leave blank to use the selected connection\u2019s configured model.", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: detection.model ?? "", placeholder: selected?.model || "Connection default", onInput: (event) => patchDetection({ model: event.currentTarget.value.trim() || null }) }) }),
+        /* @__PURE__ */ u2(Button, { icon: "settings", onClick: () => client.send({ type: "open-connections" }), children: "Manage connections in Lumiverse" })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Available connections", description: "LumiStage receives safe profile metadata only. API keys are never exposed.", trailing: /* @__PURE__ */ u2("span", { class: "ls2-count", children: [
+        configured,
+        " ready"
+      ] }) }),
+      backend.connections.length ? /* @__PURE__ */ u2("div", { class: "ls2-connection-list", children: backend.connections.map((connection) => /* @__PURE__ */ u2("button", { type: "button", "data-selected": connection.id === detection.connectionId, onClick: () => patchDetection({ connectionId: connection.id }), children: [
+        /* @__PURE__ */ u2("span", { class: "ls2-connection-mark", children: connection.name.slice(0, 2).toLocaleUpperCase() }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: connection.name }),
+          /* @__PURE__ */ u2("small", { children: [
+            connection.provider,
+            " \xB7 ",
+            connection.model || "Default model"
+          ] })
+        ] }),
+        /* @__PURE__ */ u2("span", { class: "ls2-connection-state", "data-ready": connection.hasApiKey, children: connection.isDefault ? "Default" : connection.hasApiKey ? "Ready" : "No key" })
+      ] })) }) : /* @__PURE__ */ u2(EmptyState, { icon: "aperture", title: "No LLM connections available", description: "Create an API connection in Lumiverse, then return here to choose it for expression detection.", action: /* @__PURE__ */ u2(Button, { icon: "settings", variant: "primary", onClick: () => client.send({ type: "open-connections" }), children: "Open Connections" }) })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Detector defaults", description: "Applied to LumiStage\u2019s private classification request." }),
+      /* @__PURE__ */ u2("div", { class: "ls2-range-stack", children: [
+        /* @__PURE__ */ u2(Field, { label: `Conversation context \xB7 ${detection.contextMessages} messages`, hint: "The detector receives only this trailing window.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "1", max: "20", value: detection.contextMessages, onInput: (event) => patchDetection({ contextMessages: Number(event.currentTarget.value) }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Adjacent media preload \xB7 ${draft.preloadAdjacent}`, hint: "More preloading improves transitions but uses additional bandwidth.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "0", max: "10", value: draft.preloadAdjacent, onInput: (event) => setDraft({ ...draft, preloadAdjacent: Number(event.currentTarget.value) }) }) })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-locked-value", children: [
+        /* @__PURE__ */ u2(Icon, { name: "lock", size: 14 }),
+        /* @__PURE__ */ u2("span", { children: [
+          "Classification temperature is fixed at ",
+          /* @__PURE__ */ u2("strong", { children: "0.10" }),
+          " for repeatable decisions."
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Permissions", description: missingPermissions.length ? `${missingPermissions.length} required permission${missingPermissions.length === 1 ? "" : "s"} unavailable.` : "Every requested LumiStage capability is available.", trailing: /* @__PURE__ */ u2(Status, { tone: missingPermissions.length ? "warning" : "success", children: missingPermissions.length ? "Review" : "Ready" }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-permission-strip", children: Object.entries(backend.permissions).map(([name, granted]) => /* @__PURE__ */ u2("span", { "data-granted": granted, children: [
+        /* @__PURE__ */ u2(Icon, { name: granted ? "check" : "warning", size: 13 }),
+        name.replace(/([A-Z])/g, " $1")
+      ] })) }),
+      missingPermissions.length > 0 && /* @__PURE__ */ u2(Button, { icon: "lock", onClick: () => void requestPermissions(), children: "Review permissions" })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "LumiStage data", description: "Profiles and timelines stay in extension-owned user storage. Archives include only LumiStage metadata and media." }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { icon: "download", disabled: !backend.profile, onClick: () => void client.exportProfile(), children: "Export active profile" }),
+        /* @__PURE__ */ u2(Button, { icon: "upload", onClick: () => showImportModal(client, backend.profile), children: "Import archive" })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(InlineNotice, { tone: "success", children: [
+      /* @__PURE__ */ u2("strong", { children: "Private by design." }),
+      /* @__PURE__ */ u2("span", { children: "LumiStage never reads vanilla expression configuration, and connection metadata never includes API key values." })
     ] })
   ] });
 }
@@ -6258,7 +6359,7 @@ function Studio({ client }) {
           /* @__PURE__ */ u2("span", { class: "ls2-nav-menu-icon", children: /* @__PURE__ */ u2(Icon, { name: item.icon, size: 18 }) }),
           /* @__PURE__ */ u2("span", { children: [
             /* @__PURE__ */ u2("strong", { children: item.label }),
-            /* @__PURE__ */ u2("small", { children: item.id === "automation" ? "Detection and confidence" : item.id === "appearance" ? "Stage layout and motion" : "Health and privacy report" })
+            /* @__PURE__ */ u2("small", { children: item.id === "automation" ? "Detection and confidence" : item.id === "appearance" ? "Stage layout and motion" : item.id === "settings" ? "Connections and extension data" : "Health and privacy report" })
           ] }),
           /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
         ] }))
@@ -6269,8 +6370,9 @@ function Studio({ client }) {
       view === "stage" && /* @__PURE__ */ u2(LiveView, { client, navigate: setView }),
       view === "library" && /* @__PURE__ */ u2(LibraryView, { client, profile: draft, update, selected, setSelected }),
       view === "batch" && /* @__PURE__ */ u2(BatchView, { profile: draft, selected, setSelected, mutate, undo, redo, canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 }),
-      view === "automation" && /* @__PURE__ */ u2(AutomationView, { client }),
+      view === "automation" && /* @__PURE__ */ u2(AutomationView, { client, openSettings: () => setView("settings") }),
       view === "appearance" && /* @__PURE__ */ u2(AppearanceView, { client }),
+      view === "settings" && /* @__PURE__ */ u2(SettingsView, { client }),
       view === "diagnostics" && /* @__PURE__ */ u2(DiagnosticsView, { client, profile: draft })
     ] }),
     (dirty || view === "library" || view === "batch") && /* @__PURE__ */ u2("div", { class: "ls2-savebar", "data-dirty": dirty, children: [
@@ -6428,9 +6530,10 @@ var LUMI_STAGE_CSS = `
   position: absolute; top: calc(100% + 7px); right: 10px; left: 10px; z-index: 25;
   max-width: 390px; margin-left: auto; overflow: hidden;
   border: 1px solid var(--ls2-glass-border); border-radius: var(--ls2-radius-lg);
-  background: color-mix(in srgb, var(--ls2-glass) 96%, var(--ls2-panel));
-  backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow);
+  background: var(--lumiverse-bg-elevated, var(--lumiverse-bg, #191a21));
+  box-shadow: 0 22px 70px color-mix(in srgb,var(--ls2-canvas) 70%,transparent),var(--ls2-shadow);
 }
+.ls2-nav:has(.ls2-nav-menu)::after { content: ""; position: fixed; inset: 0; z-index: 24; pointer-events: none; background: color-mix(in srgb,var(--ls2-canvas) 38%,transparent); }
 .ls2-nav-menu-head { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 5px 7px 5px 13px; border-bottom: 1px solid var(--ls2-line); color: var(--ls2-muted); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .ls2-nav-menu > button {
   appearance: none; width: 100%; min-height: 62px; display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 10px;
@@ -6736,6 +6839,40 @@ var LUMI_STAGE_CSS = `
 .ls2-matrix td svg { margin: auto; }
 .ls2-count { color: var(--ls2-muted); font-size: 11px; }
 
+.ls2-route-summary { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; }
+.ls2-route-icon, .ls2-settings-route-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); border-radius: var(--ls2-radius); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-route-summary > div { min-width: 0; display: flex; flex-direction: column; }
+.ls2-route-summary strong { overflow: hidden; margin-top: 2px; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-route-summary small { overflow: hidden; color: var(--ls2-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+.ls2-settings-route { border-color: color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); }
+.ls2-settings-route-hero { min-height: 78px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 14px; background: linear-gradient(120deg,var(--ls2-accent-soft),transparent 72%); }
+.ls2-settings-route-icon { width: 46px; height: 46px; }
+.ls2-settings-route-hero > div { min-width: 0; display: flex; flex-direction: column; }
+.ls2-settings-route-hero strong, .ls2-settings-route-hero small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-settings-route-hero strong { margin-top: 3px; font-size: 15px; }
+.ls2-settings-route-hero small { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; }
+.ls2-settings-route-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; gap: 11px; padding: 14px; border-top: 1px solid var(--ls2-line); }
+.ls2-settings-route-form > .ls2-button { grid-column: 1/-1; justify-self: start; }
+.ls2-connection-list { display: grid; gap: 6px; }
+.ls2-connection-list > button {
+  appearance: none; width: 100%; min-height: 56px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
+  color: var(--ls2-muted); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition);
+}
+.ls2-connection-list > button:hover { color: var(--ls2-text); border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); }
+.ls2-connection-list > button[data-selected="true"] { color: var(--ls2-text); border-color: var(--ls2-accent); background: var(--ls2-accent-soft); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
+.ls2-connection-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--ls2-line); border-radius: 10px; color: var(--ls2-accent); background: var(--ls2-panel); font-size: 10px; font-weight: 800; }
+.ls2-connection-list > button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.ls2-connection-list strong, .ls2-connection-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-connection-list strong { font-size: 12px; }
+.ls2-connection-list small { margin-top: 2px; color: var(--ls2-dim); font-size: 10px; }
+.ls2-connection-state { padding: 3px 7px; border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-warning); font-size: 10px; font-weight: 700; }
+.ls2-connection-state[data-ready="true"] { color: var(--ls2-success); border-color: color-mix(in srgb,var(--ls2-success) 30%,var(--ls2-line)); }
+.ls2-permission-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ls2-permission-strip > span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-warning); background: var(--ls2-fill); font-size: 10px; text-transform: capitalize; }
+.ls2-permission-strip > span[data-granted="true"] { color: var(--ls2-success); }
+
 .ls2-appearance-preview { display: grid; grid-template-columns: minmax(190px,1.25fr) minmax(130px,.75fr); align-items: center; }
 .ls2-preview-window { position: relative; min-height: 190px; overflow: hidden; border-right: 1px solid var(--ls2-line); background: var(--lumiverse-card-image-bg,var(--ls2-canvas)); }
 .ls2-preview-toolbar { height: 27px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--ls2-glass-border); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); }
@@ -6855,6 +6992,8 @@ var LUMI_STAGE_CSS = `
   .ls2-cue-monitor-meta { display: none; }
   .ls2-onboarding-stage { min-height: 420px; }
   .ls2-onboarding-copy { padding: 26px 22px 23px; }
+  .ls2-settings-route-form { grid-template-columns: 1fr; }
+  .ls2-settings-route-form > .ls2-button { grid-column: auto; }
   .ls2-form-grid, .ls2-action-grid, .ls2-picker-context, .ls2-appearance-preview { grid-template-columns: 1fr; }
   .ls2-preview-window { border-right: 0; border-bottom: 1px solid var(--ls2-line); }
   .ls2-library-context { grid-template-columns: auto minmax(0,1fr); }
@@ -6879,6 +7018,10 @@ var LUMI_STAGE_CSS = `
   .ls2-onboarding-copy { padding: 24px 18px 20px; }
   .ls2-onboarding-copy h3 { font-size: 21px; }
   .ls2-onboarding-actions .ls2-button { flex: 1 1 100%; }
+  .ls2-route-summary { grid-template-columns: auto minmax(0,1fr); }
+  .ls2-route-summary > .ls2-button { grid-column: 1/-1; }
+  .ls2-settings-route-hero { grid-template-columns: auto minmax(0,1fr); }
+  .ls2-settings-route-hero > .ls2-status { grid-column: 2; justify-self: start; }
   .ls2-cue-steps > button { grid-template-columns: 24px 32px minmax(0,1fr) auto; padding-inline: 10px; }
   .ls2-folder-button { min-width: 118px; }
   .ls2-scene-cast { grid-template-columns: 1fr; }

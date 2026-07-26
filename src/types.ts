@@ -3,7 +3,7 @@ export const LUMI_STAGE_ID = "lumi_stage";
 
 export type MediaKind = "image" | "video";
 export type TransitionStyle = "crossfade" | "lift" | "cut";
-export type StudioView = "stage" | "library" | "batch" | "automation" | "appearance" | "diagnostics";
+export type StudioView = "stage" | "library" | "batch" | "automation" | "appearance" | "settings" | "diagnostics";
 
 export interface StageAsset {
   id: string;
@@ -214,6 +214,15 @@ export interface AssetView extends StageAsset {
   thumbUrl: string | null;
 }
 
+export interface LlmConnectionView {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  isDefault: boolean;
+  hasApiKey: boolean;
+}
+
 export interface FrontendState {
   settings: LumiStageSettingsV1;
   profile: CharacterProfileV1 | null;
@@ -221,6 +230,7 @@ export interface FrontendState {
   timeline: ChatTimelineV1 | null;
   snapshot: StageSnapshotV1 | null;
   assetViews: Record<string, AssetView>;
+  connections: LlmConnectionView[];
   permissions: PermissionState;
   activeChatId: string | null;
   activeCharacterId: string | null;
@@ -266,6 +276,7 @@ export type FrontendToBackend =
   | { type: "delete-assets"; requestId: string; characterId: string; assetIds: string[] }
   | { type: "request-export"; requestId: string; characterId: string }
   | { type: "request-diagnostics"; requestId: string }
+  | { type: "open-connections" }
   | { type: "character-editor"; characterId: string | null };
 
 export type BackendToFrontend =

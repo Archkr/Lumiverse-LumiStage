@@ -46,6 +46,10 @@ if (!/\bsetup\b/.test(frontendBundle) || !/export\s*\{/.test(frontendBundle)) {
 }
 if (!backend.includes('onEvent("GENERATION_ENDED"')) violations.push("backend: missing completed-generation trigger");
 if (!backend.includes('onEvent("GENERATION_STOPPED"')) violations.push("backend: stopped generations are not explicitly ignored");
+if (!backend.includes("spindle.characters.get(characterId, userId)")) violations.push("backend: character reads must carry operator userId");
+if (!backend.includes("spindle.chats.get(chatId, userId)")) violations.push("backend: chat reads must carry operator userId");
+if (!backend.includes("spindle.connections.list(userId)")) violations.push("backend: connection reads must carry operator userId");
+if (!backend.includes("{ ...request, userId }")) violations.push("backend: detector generation must carry operator userId");
 if (backend.includes('onEvent("GENERATION_STARTED"') && backend.match(/GENERATION_STARTED[\s\S]{0,800}scheduleAnalysis/)) {
   violations.push("backend: detection must not run when generation starts");
 }

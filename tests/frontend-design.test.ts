@@ -15,6 +15,7 @@ describe("frontend design contract", () => {
     expect(styles).toContain("--ls2-accent: var(--lumiverse-primary");
     expect(styles).toContain("--ls2-line: var(--lumiverse-border");
     expect(styles).toContain("--ls2-glass: var(--lcs-glass-bg");
+    expect(styles).toMatch(/\.ls2-nav-menu\s*\{[\s\S]*?background:\s*var\(--lumiverse-bg-elevated/);
     expect(styles).toContain("var(--lumiverse-font-family");
     expect(styles).toContain("var(--lumiverse-font-scale");
     expect(styles).toContain("var(--lumiverse-transition-fast");
@@ -41,7 +42,9 @@ describe("frontend design contract", () => {
     expect(studio).not.toContain("ls2-appbar");
     expect(studio).toContain("ls2-onboarding-stage");
     expect(studio).toContain("ls2-cue-sheet");
-    for (const view of ["Stage", "Library", "Batch", "Automation", "Appearance", "Diagnostics"]) {
+    expect(studio).toContain("function SettingsView");
+    expect(studio).toContain('type: "open-connections"');
+    for (const view of ["Stage", "Library", "Batch", "Automation", "Appearance", "Settings", "Diagnostics"]) {
       expect(studio).toContain(`label: "${view}"`);
     }
   });

@@ -48,6 +48,7 @@ const NAV: Array<{ id: StudioView; label: string; icon: IconName }> = [
   { id: "batch", label: "Batch", icon: "batch" },
   { id: "automation", label: "Automation", icon: "automation" },
   { id: "appearance", label: "Appearance", icon: "appearance" },
+  { id: "settings", label: "Settings", icon: "settings" },
   { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" },
 ];
 const PRIMARY_NAV = NAV.slice(0, 3);
@@ -568,7 +569,7 @@ function BatchView(props: {
   );
 }
 
-function AutomationView({ client }: { client: LumiStageClient }) {
+function AutomationView({ client, openSettings }: { client: LumiStageClient; openSettings: () => void }) {
   const { backend } = useClientState(client);
   const [draft, setDraft] = useState<LumiStageSettingsV1>(backend.settings);
   useEffect(() => setDraft(backend.settings), [backend.settings.revision]);
@@ -581,14 +582,10 @@ function AutomationView({ client }: { client: LumiStageClient }) {
       <Surface>
         <Toggle checked={detection.enabled} onChange={(enabled) => setDraft({ ...draft, detection: { ...detection, enabled } })} label="Automatic stage direction" hint="Runs only after a successful, saved assistant reply. Stopped or failed generations do not change the stage." />
       </Surface>
-      <Surface>
-        <SectionTitle title="Model routing" description="Blank values follow Lumiverse’s active connection." />
-        <div class="ls2-form-grid">
-          <Field label="Connection profile"><input class="ls2-input" value={detection.connectionId ?? ""} placeholder="Active connection" onInput={(event) => setDraft({ ...draft, detection: { ...detection, connectionId: event.currentTarget.value || null } })} /></Field>
-          <Field label="Model override"><input class="ls2-input" value={detection.model ?? ""} placeholder="Connection default" onInput={(event) => setDraft({ ...draft, detection: { ...detection, model: event.currentTarget.value || null } })} /></Field>
-        </div>
-        <Field label={`Conversation context · ${detection.contextMessages} messages`}><input class="ls2-range" type="range" min="1" max="20" value={detection.contextMessages} onInput={(event) => setDraft({ ...draft, detection: { ...detection, contextMessages: Number(event.currentTarget.value) } })} /></Field>
-        <div class="ls2-locked-value"><Icon name="lock" size={14} /><span>Temperature is fixed at <strong>0.10</strong> for stable classification.</span></div>
+      <Surface class="ls2-route-summary">
+        <span class="ls2-route-icon"><Icon name="aperture" size={20} /></span>
+        <div><span class="ls2-eyebrow">Detector route</span><strong>{detection.connectionId ? "Pinned connection" : "Active Lumiverse connection"}</strong><small>{detection.model ?? "Connection default model"}</small></div>
+        <Button icon="settings" onClick={openSettings}>Configure</Button>
       </Surface>
       <Surface>
         <SectionTitle title="Confidence policy" description="Uncertain predictions preserve the previous stage." />
@@ -597,6 +594,108 @@ function AutomationView({ client }: { client: LumiStageClient }) {
           <Field label={`Outfit change · ${Math.round(detection.outfitConfidence * 100)}%`} hint="Also requires an explicit clothing cue."><input class="ls2-range" type="range" min=".5" max="1" step=".05" value={detection.outfitConfidence} onInput={(event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } })} /></Field>
         </div>
       </Surface>
+    </div>
+  );
+}
+
+function SettingsView({ client }: { client: LumiStageClient }) {
+  const { backend, busy } = useClientState(client);
+  const [draft, setDraft] = useState<LumiStageSettingsV1>(backend.settings);
+  useEffect(() => setDraft(backend.settings), [backend.settings.revision]);
+  const detection = draft.detection;
+  const selected = detection.connectionId
+    ? backend.connections.find((connection) => connection.id === detection.connectionId) ?? null
+    : backend.connections.find((connection) => connection.isDefault) ?? backend.connections[0] ?? null;
+  const configured = backend.connections.filter((connection) => connection.hasApiKey).length;
+  const missingPermissions = Object.entries(backend.permissions).filter(([, granted]) => !granted).map(([name]) => name);
+
+  const patchDetection = (patch: Partial<typeof detection>) => setDraft({ ...draft, detection: { ...detection, ...patch } });
+  async function save() {
+    try {
+      await client.saveSettings(draft);
+      client.notify("success", "LumiStage settings saved.");
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
+    }
+  }
+  async function requestPermissions() {
+    try {
+      await client.ctx.permissions.request(["generation", "chats", "chat_mutation", "characters", "images", "ui_panels"]);
+      const active = client.ctx.getActiveChat();
+      client.refresh(active.chatId, active.characterId);
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Permission request was not completed.");
+    }
+  }
+
+  return (
+    <div class="ls2-view">
+      <ViewHeader eyebrow="Extension configuration" title="Settings" description="Provider routing, detector defaults, permissions, and LumiStage-owned data." actions={<Button icon="check" variant="primary" disabled={busy} onClick={() => void save()}>Save settings</Button>} />
+
+      <Surface class="ls2-settings-route" padding="none">
+        <div class="ls2-settings-route-hero">
+          <span class="ls2-settings-route-icon"><Icon name="aperture" size={24} /></span>
+          <div><span class="ls2-eyebrow">API connection</span><strong>{selected?.name ?? "Follow active connection"}</strong><small>{selected ? `${selected.provider} · ${detection.model ?? selected.model ?? "Default model"}` : "Uses whichever LLM connection is active in Lumiverse"}</small></div>
+          <Status tone={selected?.hasApiKey || (!detection.connectionId && configured > 0) ? "success" : "warning"}>{selected?.hasApiKey || (!detection.connectionId && configured > 0) ? "Available" : "Needs setup"}</Status>
+        </div>
+        <div class="ls2-settings-route-form">
+          <Field label="Connection profile" hint="Choosing Active follows Lumiverse whenever its active connection changes.">
+            <select class="ls2-select" value={detection.connectionId ?? ""} onChange={(event) => patchDetection({ connectionId: event.currentTarget.value || null })}>
+              <option value="">Active Lumiverse connection</option>
+              {detection.connectionId && !backend.connections.some((connection) => connection.id === detection.connectionId) && <option value={detection.connectionId}>Unavailable saved connection</option>}
+              {backend.connections.map((connection) => <option value={connection.id}>{connection.name} · {connection.provider}</option>)}
+            </select>
+          </Field>
+          <Field label="Model override" hint="Leave blank to use the selected connection’s configured model.">
+            <input class="ls2-input" value={detection.model ?? ""} placeholder={selected?.model || "Connection default"} onInput={(event) => patchDetection({ model: event.currentTarget.value.trim() || null })} />
+          </Field>
+          <Button icon="settings" onClick={() => client.send({ type: "open-connections" })}>Manage connections in Lumiverse</Button>
+        </div>
+      </Surface>
+
+      <Surface>
+        <SectionTitle title="Available connections" description="LumiStage receives safe profile metadata only. API keys are never exposed." trailing={<span class="ls2-count">{configured} ready</span>} />
+        {backend.connections.length ? (
+          <div class="ls2-connection-list">
+            {backend.connections.map((connection) => (
+              <button type="button" data-selected={connection.id === detection.connectionId} onClick={() => patchDetection({ connectionId: connection.id })}>
+                <span class="ls2-connection-mark">{connection.name.slice(0, 2).toLocaleUpperCase()}</span>
+                <span><strong>{connection.name}</strong><small>{connection.provider} · {connection.model || "Default model"}</small></span>
+                <span class="ls2-connection-state" data-ready={connection.hasApiKey}>{connection.isDefault ? "Default" : connection.hasApiKey ? "Ready" : "No key"}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon="aperture" title="No LLM connections available" description="Create an API connection in Lumiverse, then return here to choose it for expression detection." action={<Button icon="settings" variant="primary" onClick={() => client.send({ type: "open-connections" })}>Open Connections</Button>} />
+        )}
+      </Surface>
+
+      <Surface>
+        <SectionTitle title="Detector defaults" description="Applied to LumiStage’s private classification request." />
+        <div class="ls2-range-stack">
+          <Field label={`Conversation context · ${detection.contextMessages} messages`} hint="The detector receives only this trailing window."><input class="ls2-range" type="range" min="1" max="20" value={detection.contextMessages} onInput={(event) => patchDetection({ contextMessages: Number(event.currentTarget.value) })} /></Field>
+          <Field label={`Adjacent media preload · ${draft.preloadAdjacent}`} hint="More preloading improves transitions but uses additional bandwidth."><input class="ls2-range" type="range" min="0" max="10" value={draft.preloadAdjacent} onInput={(event) => setDraft({ ...draft, preloadAdjacent: Number(event.currentTarget.value) })} /></Field>
+        </div>
+        <div class="ls2-locked-value"><Icon name="lock" size={14} /><span>Classification temperature is fixed at <strong>0.10</strong> for repeatable decisions.</span></div>
+      </Surface>
+
+      <Surface>
+        <SectionTitle title="Permissions" description={missingPermissions.length ? `${missingPermissions.length} required permission${missingPermissions.length === 1 ? "" : "s"} unavailable.` : "Every requested LumiStage capability is available."} trailing={<Status tone={missingPermissions.length ? "warning" : "success"}>{missingPermissions.length ? "Review" : "Ready"}</Status>} />
+        <div class="ls2-permission-strip">
+          {Object.entries(backend.permissions).map(([name, granted]) => <span data-granted={granted}><Icon name={granted ? "check" : "warning"} size={13} />{name.replace(/([A-Z])/g, " $1")}</span>)}
+        </div>
+        {missingPermissions.length > 0 && <Button icon="lock" onClick={() => void requestPermissions()}>Review permissions</Button>}
+      </Surface>
+
+      <Surface>
+        <SectionTitle title="LumiStage data" description="Profiles and timelines stay in extension-owned user storage. Archives include only LumiStage metadata and media." />
+        <Toolbar>
+          <Button icon="download" disabled={!backend.profile} onClick={() => void client.exportProfile()}>Export active profile</Button>
+          <Button icon="upload" onClick={() => showImportModal(client, backend.profile)}>Import archive</Button>
+        </Toolbar>
+      </Surface>
+
+      <InlineNotice tone="success"><strong>Private by design.</strong><span>LumiStage never reads vanilla expression configuration, and connection metadata never includes API key values.</span></InlineNotice>
     </div>
   );
 }
@@ -775,7 +874,7 @@ export function Studio({ client }: { client: LumiStageClient }) {
               {SECONDARY_NAV.map((item) => (
                 <button type="button" role="menuitem" data-active={view === item.id} aria-current={view === item.id ? "page" : undefined} onClick={() => { setView(item.id); setMoreOpen(false); }}>
                   <span class="ls2-nav-menu-icon"><Icon name={item.icon} size={18} /></span>
-                  <span><strong>{item.label}</strong><small>{item.id === "automation" ? "Detection and confidence" : item.id === "appearance" ? "Stage layout and motion" : "Health and privacy report"}</small></span>
+                  <span><strong>{item.label}</strong><small>{item.id === "automation" ? "Detection and confidence" : item.id === "appearance" ? "Stage layout and motion" : item.id === "settings" ? "Connections and extension data" : "Health and privacy report"}</small></span>
                   <Icon name="chevronRight" size={16} />
                 </button>
               ))}
@@ -788,8 +887,9 @@ export function Studio({ client }: { client: LumiStageClient }) {
           {view === "stage" && <LiveView client={client} navigate={setView} />}
           {view === "library" && <LibraryView client={client} profile={draft} update={update} selected={selected} setSelected={setSelected} />}
           {view === "batch" && <BatchView profile={draft} selected={selected} setSelected={setSelected} mutate={mutate} undo={undo} redo={redo} canUndo={undoRef.current.length > 0} canRedo={redoRef.current.length > 0} />}
-          {view === "automation" && <AutomationView client={client} />}
+          {view === "automation" && <AutomationView client={client} openSettings={() => setView("settings")} />}
           {view === "appearance" && <AppearanceView client={client} />}
+          {view === "settings" && <SettingsView client={client} />}
           {view === "diagnostics" && <DiagnosticsView client={client} profile={draft} />}
         </main>
 

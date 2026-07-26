@@ -85,9 +85,10 @@ export const LUMI_STAGE_CSS = `
   position: absolute; top: calc(100% + 7px); right: 10px; left: 10px; z-index: 25;
   max-width: 390px; margin-left: auto; overflow: hidden;
   border: 1px solid var(--ls2-glass-border); border-radius: var(--ls2-radius-lg);
-  background: color-mix(in srgb, var(--ls2-glass) 96%, var(--ls2-panel));
-  backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow);
+  background: var(--lumiverse-bg-elevated, var(--lumiverse-bg, #191a21));
+  box-shadow: 0 22px 70px color-mix(in srgb,var(--ls2-canvas) 70%,transparent),var(--ls2-shadow);
 }
+.ls2-nav:has(.ls2-nav-menu)::after { content: ""; position: fixed; inset: 0; z-index: 24; pointer-events: none; background: color-mix(in srgb,var(--ls2-canvas) 38%,transparent); }
 .ls2-nav-menu-head { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 5px 7px 5px 13px; border-bottom: 1px solid var(--ls2-line); color: var(--ls2-muted); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .ls2-nav-menu > button {
   appearance: none; width: 100%; min-height: 62px; display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 10px;
@@ -393,6 +394,40 @@ export const LUMI_STAGE_CSS = `
 .ls2-matrix td svg { margin: auto; }
 .ls2-count { color: var(--ls2-muted); font-size: 11px; }
 
+.ls2-route-summary { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; }
+.ls2-route-icon, .ls2-settings-route-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); border-radius: var(--ls2-radius); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-route-summary > div { min-width: 0; display: flex; flex-direction: column; }
+.ls2-route-summary strong { overflow: hidden; margin-top: 2px; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-route-summary small { overflow: hidden; color: var(--ls2-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+.ls2-settings-route { border-color: color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); }
+.ls2-settings-route-hero { min-height: 78px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 14px; background: linear-gradient(120deg,var(--ls2-accent-soft),transparent 72%); }
+.ls2-settings-route-icon { width: 46px; height: 46px; }
+.ls2-settings-route-hero > div { min-width: 0; display: flex; flex-direction: column; }
+.ls2-settings-route-hero strong, .ls2-settings-route-hero small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-settings-route-hero strong { margin-top: 3px; font-size: 15px; }
+.ls2-settings-route-hero small { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; }
+.ls2-settings-route-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; gap: 11px; padding: 14px; border-top: 1px solid var(--ls2-line); }
+.ls2-settings-route-form > .ls2-button { grid-column: 1/-1; justify-self: start; }
+.ls2-connection-list { display: grid; gap: 6px; }
+.ls2-connection-list > button {
+  appearance: none; width: 100%; min-height: 56px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
+  color: var(--ls2-muted); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition);
+}
+.ls2-connection-list > button:hover { color: var(--ls2-text); border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); }
+.ls2-connection-list > button[data-selected="true"] { color: var(--ls2-text); border-color: var(--ls2-accent); background: var(--ls2-accent-soft); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
+.ls2-connection-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--ls2-line); border-radius: 10px; color: var(--ls2-accent); background: var(--ls2-panel); font-size: 10px; font-weight: 800; }
+.ls2-connection-list > button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.ls2-connection-list strong, .ls2-connection-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-connection-list strong { font-size: 12px; }
+.ls2-connection-list small { margin-top: 2px; color: var(--ls2-dim); font-size: 10px; }
+.ls2-connection-state { padding: 3px 7px; border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-warning); font-size: 10px; font-weight: 700; }
+.ls2-connection-state[data-ready="true"] { color: var(--ls2-success); border-color: color-mix(in srgb,var(--ls2-success) 30%,var(--ls2-line)); }
+.ls2-permission-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ls2-permission-strip > span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-warning); background: var(--ls2-fill); font-size: 10px; text-transform: capitalize; }
+.ls2-permission-strip > span[data-granted="true"] { color: var(--ls2-success); }
+
 .ls2-appearance-preview { display: grid; grid-template-columns: minmax(190px,1.25fr) minmax(130px,.75fr); align-items: center; }
 .ls2-preview-window { position: relative; min-height: 190px; overflow: hidden; border-right: 1px solid var(--ls2-line); background: var(--lumiverse-card-image-bg,var(--ls2-canvas)); }
 .ls2-preview-toolbar { height: 27px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--ls2-glass-border); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); }
@@ -512,6 +547,8 @@ export const LUMI_STAGE_CSS = `
   .ls2-cue-monitor-meta { display: none; }
   .ls2-onboarding-stage { min-height: 420px; }
   .ls2-onboarding-copy { padding: 26px 22px 23px; }
+  .ls2-settings-route-form { grid-template-columns: 1fr; }
+  .ls2-settings-route-form > .ls2-button { grid-column: auto; }
   .ls2-form-grid, .ls2-action-grid, .ls2-picker-context, .ls2-appearance-preview { grid-template-columns: 1fr; }
   .ls2-preview-window { border-right: 0; border-bottom: 1px solid var(--ls2-line); }
   .ls2-library-context { grid-template-columns: auto minmax(0,1fr); }
@@ -536,6 +573,10 @@ export const LUMI_STAGE_CSS = `
   .ls2-onboarding-copy { padding: 24px 18px 20px; }
   .ls2-onboarding-copy h3 { font-size: 21px; }
   .ls2-onboarding-actions .ls2-button { flex: 1 1 100%; }
+  .ls2-route-summary { grid-template-columns: auto minmax(0,1fr); }
+  .ls2-route-summary > .ls2-button { grid-column: 1/-1; }
+  .ls2-settings-route-hero { grid-template-columns: auto minmax(0,1fr); }
+  .ls2-settings-route-hero > .ls2-status { grid-column: 2; justify-self: start; }
   .ls2-cue-steps > button { grid-template-columns: 24px 32px minmax(0,1fr) auto; padding-inline: 10px; }
   .ls2-folder-button { min-width: 118px; }
   .ls2-scene-cast { grid-template-columns: 1fr; }
