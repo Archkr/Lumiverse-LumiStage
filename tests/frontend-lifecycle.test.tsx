@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import frontend from "../src/frontend";
+import { setup } from "../src/frontend";
 import { createTimeline, defaultSettings } from "../src/model";
 import type { BackendToFrontend, FrontendState } from "../src/types";
 import { profileA } from "./fixtures";
@@ -135,7 +135,7 @@ function state(permissions: FrontendState["permissions"]): FrontendState {
 describe("frontend host lifecycle", () => {
   it("registers permission-gated placements, removes them on revocation, and cleans every subscription", async () => {
     const mock = mockContext();
-    const cleanup = frontend.setup(mock.context as never) as () => void;
+    const cleanup = setup(mock.context as never);
     await Promise.resolve();
     expect(mock.context.deferReady).toHaveBeenCalledOnce();
     expect(mock.context.ui.registerDrawerTab).toHaveBeenCalledOnce();
@@ -179,4 +179,3 @@ describe("frontend host lifecycle", () => {
     expect(mock.removeStyle).toHaveBeenCalledOnce();
   });
 });
-

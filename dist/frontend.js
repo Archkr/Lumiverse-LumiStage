@@ -6047,7 +6047,7 @@ function initialPosition(width, height, x2, y3) {
     y: y3 >= 0 ? y3 : Math.max(inset, window.innerHeight - height - 96)
   };
 }
-function setupFrontend(ctx) {
+function setup(ctx) {
   ctx.deferReady();
   const client = new LumiStageClient(ctx);
   client.start();
@@ -6240,8 +6240,6 @@ function setupFrontend(ctx) {
     client.destroy();
   };
 }
-var frontend = { setup: setupFrontend };
-var frontend_default = frontend;
 export {
-  frontend_default as default
+  setup
 };

@@ -38,6 +38,12 @@ if (manifest.identifier !== "lumi_stage") violations.push("spindle.json: identif
 if (manifest.minimum_lumiverse_version !== "1.1.0") violations.push("spindle.json: minimum Lumiverse version must be 1.1.0");
 
 const backend = await readFile(resolve(root, "src/backend.ts"), "utf8");
+const frontend = await readFile(resolve(root, "src/frontend.tsx"), "utf8");
+const frontendBundle = await readFile(resolve(root, "dist/frontend.js"), "utf8");
+if (!/export\s+function\s+setup\s*\(/.test(frontend)) violations.push("frontend: Spindle requires a named setup export");
+if (!/\bsetup\b/.test(frontendBundle) || !/export\s*\{/.test(frontendBundle)) {
+  violations.push("dist/frontend.js: production bundle is missing a named setup export");
+}
 if (!backend.includes('onEvent("GENERATION_ENDED"')) violations.push("backend: missing completed-generation trigger");
 if (!backend.includes('onEvent("GENERATION_STOPPED"')) violations.push("backend: stopped generations are not explicitly ignored");
 if (backend.includes('onEvent("GENERATION_STARTED"') && backend.match(/GENERATION_STARTED[\s\S]{0,800}scheduleAnalysis/)) {
@@ -50,4 +56,3 @@ if (violations.length) {
 } else {
   console.log(`LumiStage source contract passed across ${targets.length} files.`);
 }
-

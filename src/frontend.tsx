@@ -4,7 +4,6 @@ import type {
   SpindleDrawerTabHandle,
   SpindleFloatWidgetHandle,
   SpindleFrontendContext,
-  SpindleFrontendModule,
   SpindleInputBarActionHandle,
 } from "lumiverse-spindle-types";
 import { CharacterSetup, showQuickPicker, Stage, Studio } from "./ui/components";
@@ -28,7 +27,7 @@ function initialPosition(width: number, height: number, x: number, y: number) {
   };
 }
 
-function setupFrontend(ctx: SpindleFrontendContext): () => void {
+export function setup(ctx: SpindleFrontendContext): () => void {
   ctx.deferReady();
   const client = new LumiStageClient(ctx);
   client.start();
@@ -234,6 +233,3 @@ function setupFrontend(ctx: SpindleFrontendContext): () => void {
     client.destroy();
   };
 }
-
-const frontend: SpindleFrontendModule = { setup: setupFrontend };
-export default frontend;
