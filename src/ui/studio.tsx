@@ -695,7 +695,6 @@ function SettingsView({ client }: { client: LumiStageClient }) {
         </Toolbar>
       </Surface>
 
-      <InlineNotice tone="success"><strong>Private by design.</strong><span>LumiStage never reads vanilla expression configuration, and connection metadata never includes API key values.</span></InlineNotice>
     </div>
   );
 }

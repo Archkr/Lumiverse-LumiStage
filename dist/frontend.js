@@ -6143,10 +6143,6 @@ function SettingsView({ client }) {
         /* @__PURE__ */ u2(Button, { icon: "download", disabled: !backend.profile, onClick: () => void client.exportProfile(), children: "Export active profile" }),
         /* @__PURE__ */ u2(Button, { icon: "upload", onClick: () => showImportModal(client, backend.profile), children: "Import archive" })
       ] })
-    ] }),
-    /* @__PURE__ */ u2(InlineNotice, { tone: "success", children: [
-      /* @__PURE__ */ u2("strong", { children: "Private by design." }),
-      /* @__PURE__ */ u2("span", { children: "LumiStage never reads vanilla expression configuration, and connection metadata never includes API key values." })
     ] })
   ] });
 }
