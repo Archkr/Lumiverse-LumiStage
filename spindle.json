@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "name": "LumiStage",
+  "identifier": "lumi_stage",
+  "author": "Archkr",
+  "github": "https://github.com/Archkr/Lumiverse-LumiStage",
+  "homepage": "https://github.com/Archkr/Lumiverse-LumiStage",
+  "description": "A cinematic, independent expression studio with layered outfits, poses, automation, batch controls, and an ensemble sprite stage.",
+  "permissions": [
+    "generation",
+    "chats",
+    "chat_mutation",
+    "characters",
+    "images",
+    "ui_panels"
+  ],
+  "entry_backend": "dist/backend.js",
+  "entry_frontend": "dist/frontend.js",
+  "minimum_lumiverse_version": "1.1.0"
+}

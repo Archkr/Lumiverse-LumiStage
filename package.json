@@ -1,0 +1,33 @@
+{
+  "name": "lumiverse-lumi-stage",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "author": "Archkr",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": "https://github.com/Archkr/Lumiverse-LumiStage",
+  "description": "A cinematic, independent expression and sprite studio for Lumiverse.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "contract": "node tests/source-contract.mjs",
+    "safety": "node scripts/safety-scan.mjs",
+    "check": "npm run typecheck && npm run test && npm run build && npm run contract && npm run safety"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "preact": "^10.27.2",
+    "tus-js-client": "^4.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/preact": "^3.2.4",
+    "@types/node": "^24.1.0",
+    "esbuild": "^0.27.0",
+    "happy-dom": "^18.0.1",
+    "lumiverse-spindle-types": "0.6.8",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}
