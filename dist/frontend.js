@@ -668,1368 +668,6 @@ n = w.slice, l = { __e: function(n2, l3, u4, t3) {
   return n2.__v.__b - l3.__v.__b;
 }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
-// node_modules/preact/hooks/dist/hooks.module.js
-var t2;
-var r2;
-var u2;
-var i2;
-var o2 = 0;
-var f2 = [];
-var c2 = l;
-var e2 = c2.__b;
-var a2 = c2.__r;
-var v2 = c2.diffed;
-var l2 = c2.__c;
-var m2 = c2.unmount;
-var p2 = c2.__;
-function s2(n2, t3) {
-  c2.__h && c2.__h(r2, n2, o2 || t3), o2 = 0;
-  var u4 = r2.__H || (r2.__H = { __: [], __h: [] });
-  return n2 >= u4.__.length && u4.__.push({}), u4.__[n2];
-}
-function d2(n2) {
-  return o2 = 1, y2(D2, n2);
-}
-function y2(n2, u4, i3) {
-  var o3 = s2(t2++, 2);
-  if (o3.t = n2, !o3.__c && (o3.__ = [i3 ? i3(u4) : D2(void 0, u4), function(n3) {
-    var t3 = o3.__N ? o3.__N[0] : o3.__[0], r3 = o3.t(t3, n3);
-    t3 !== r3 && (o3.__N = [r3, o3.__[1]], o3.__c.setState({}));
-  }], o3.__c = r2, !r2.__f)) {
-    var f4 = function(n3, t3, r3) {
-      if (!o3.__c.__H) return true;
-      var u5 = false, i4 = o3.__c.props !== n3;
-      if (o3.__c.__H.__.some(function(n4) {
-        if (n4.__N) {
-          u5 = true;
-          var t4 = n4.__[0];
-          n4.__ = n4.__N, n4.__N = void 0, t4 !== n4.__[0] && (i4 = true);
-        }
-      }), c3) {
-        var f5 = c3.call(this, n3, t3, r3);
-        return u5 ? f5 || i4 : f5;
-      }
-      return !u5 || i4;
-    };
-    r2.__f = true;
-    var c3 = r2.shouldComponentUpdate, e3 = r2.componentWillUpdate;
-    r2.componentWillUpdate = function(n3, t3, r3) {
-      if (this.__e) {
-        var u5 = c3;
-        c3 = void 0, f4(n3, t3, r3), c3 = u5;
-      }
-      e3 && e3.call(this, n3, t3, r3);
-    }, r2.shouldComponentUpdate = f4;
-  }
-  return o3.__N || o3.__;
-}
-function h2(n2, u4) {
-  var i3 = s2(t2++, 3);
-  !c2.__s && C2(i3.__H, u4) && (i3.__ = n2, i3.u = u4, r2.__H.__h.push(i3));
-}
-function A2(n2) {
-  return o2 = 5, T2(function() {
-    return { current: n2 };
-  }, []);
-}
-function T2(n2, r3) {
-  var u4 = s2(t2++, 7);
-  return C2(u4.__H, r3) && (u4.__ = n2(), u4.__H = r3, u4.__h = n2), u4.__;
-}
-function j2() {
-  for (var n2; n2 = f2.shift(); ) {
-    var t3 = n2.__H;
-    if (n2.__P && t3) try {
-      t3.__h.some(z2), t3.__h.some(B2), t3.__h = [];
-    } catch (r3) {
-      t3.__h = [], c2.__e(r3, n2.__v);
-    }
-  }
-}
-c2.__b = function(n2) {
-  r2 = null, e2 && e2(n2);
-}, c2.__ = function(n2, t3) {
-  n2 && t3.__k && t3.__k.__m && (n2.__m = t3.__k.__m), p2 && p2(n2, t3);
-}, c2.__r = function(n2) {
-  a2 && a2(n2), t2 = 0;
-  var i3 = (r2 = n2.__c).__H;
-  i3 && (u2 === r2 ? (i3.__h = [], r2.__h = [], i3.__.some(function(n3) {
-    n3.__N && (n3.__ = n3.__N), n3.u = n3.__N = void 0;
-  })) : (i3.__h.some(z2), i3.__h.some(B2), i3.__h = [], t2 = 0)), u2 = r2;
-}, c2.diffed = function(n2) {
-  v2 && v2(n2);
-  var t3 = n2.__c;
-  t3 && t3.__H && (t3.__H.__h.length && (1 !== f2.push(t3) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t3.__H.__.some(function(n3) {
-    n3.u && (n3.__H = n3.u, n3.u = void 0);
-  })), u2 = r2 = null;
-}, c2.__c = function(n2, t3) {
-  t3.some(function(n3) {
-    try {
-      n3.__h.some(z2), n3.__h = n3.__h.filter(function(n4) {
-        return !n4.__ || B2(n4);
-      });
-    } catch (r3) {
-      t3.some(function(n4) {
-        n4.__h && (n4.__h = []);
-      }), t3 = [], c2.__e(r3, n3.__v);
-    }
-  }), l2 && l2(n2, t3);
-}, c2.unmount = function(n2) {
-  m2 && m2(n2);
-  var t3, r3 = n2.__c;
-  r3 && r3.__H && (r3.__H.__.some(function(n3) {
-    try {
-      z2(n3);
-    } catch (n4) {
-      t3 = n4;
-    }
-  }), r3.__H = void 0, t3 && c2.__e(t3, r3.__v));
-};
-var k2 = "function" == typeof requestAnimationFrame;
-function w2(n2) {
-  var t3, r3 = function() {
-    clearTimeout(u4), k2 && cancelAnimationFrame(t3), setTimeout(n2);
-  }, u4 = setTimeout(r3, 35);
-  k2 && (t3 = requestAnimationFrame(r3));
-}
-function z2(n2) {
-  var t3 = r2, u4 = n2.__c;
-  "function" == typeof u4 && (n2.__c = void 0, u4()), r2 = t3;
-}
-function B2(n2) {
-  var t3 = r2;
-  n2.__c = n2.__(), r2 = t3;
-}
-function C2(n2, t3) {
-  return !n2 || n2.length !== t3.length || t3.some(function(t4, r3) {
-    return t4 !== n2[r3];
-  });
-}
-function D2(n2, t3) {
-  return "function" == typeof t3 ? t3(n2) : t3;
-}
-
-// src/ids.ts
-function createId(prefix) {
-  const uuid2 = globalThis.crypto?.randomUUID?.();
-  if (uuid2) return `${prefix}_${uuid2}`;
-  const bytes = new Uint8Array(16);
-  globalThis.crypto?.getRandomValues?.(bytes);
-  const fallback = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-  return `${prefix}_${fallback || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
-}
-function cleanName(value, fallback = "Default") {
-  const cleaned = value.normalize("NFKC").replace(/\.[a-z0-9]{2,5}$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  return cleaned || fallback;
-}
-function normalizedKey(value) {
-  return cleanName(value, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-// src/types.ts
-var SCHEMA_VERSION = 1;
-var DEFAULT_SETTINGS = {
-  schemaVersion: SCHEMA_VERSION,
-  revision: 0,
-  detection: {
-    enabled: true,
-    connectionId: null,
-    model: null,
-    contextMessages: 5,
-    temperature: 0.1,
-    stateConfidence: 0.6,
-    outfitConfidence: 0.85
-  },
-  appearance: {
-    transition: "crossfade",
-    transitionMs: 280,
-    opacity: 1,
-    focusedScale: 1.035,
-    idleOpacity: 0.46,
-    showCaptions: true,
-    showChrome: true,
-    ensembleOverlap: 0.34,
-    width: 320,
-    height: 420,
-    x: -1,
-    y: -1,
-    fullscreen: false,
-    visible: true
-  },
-  preloadAdjacent: 3,
-  updatedAt: 0
-};
-
-// src/model.ts
-function defaultSettings(now = Date.now()) {
-  return structuredClone({ ...DEFAULT_SETTINGS, updatedAt: now });
-}
-function createExpression(name = "Neutral", now = Date.now()) {
-  return {
-    id: createId("expression"),
-    name: cleanName(name, "Neutral"),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    assets: []
-  };
-}
-function createPose(name = "Default", now = Date.now()) {
-  const expression = createExpression("Neutral", now);
-  return {
-    id: createId("pose"),
-    name: cleanName(name),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    defaultExpressionId: expression.id,
-    expressions: [expression]
-  };
-}
-function createOutfit(name = "Default", now = Date.now()) {
-  const pose = createPose("Default", now);
-  return {
-    id: createId("outfit"),
-    name: cleanName(name),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    allowAutoSwitch: true,
-    defaultPoseId: pose.id,
-    poses: [pose]
-  };
-}
-function createActor(name, now = Date.now()) {
-  const outfit = createOutfit("Default", now);
-  return {
-    id: createId("actor"),
-    name: cleanName(name, "Actor"),
-    aliases: [],
-    enabled: true,
-    order: 0,
-    defaultOutfitId: outfit.id,
-    outfits: [outfit]
-  };
-}
-function createProfile(characterId, characterName = "Character", now = Date.now()) {
-  const actor = createActor(characterName, now);
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    revision: 0,
-    characterId,
-    characterName: cleanName(characterName, "Character"),
-    defaultActorId: actor.id,
-    actors: [actor],
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function emptySnapshot(chatId, now = Date.now()) {
-  return { schemaVersion: SCHEMA_VERSION, chatId, revision: 0, actors: {}, focusedActorIds: [], updatedAt: now };
-}
-function createTimeline(chatId, now = Date.now()) {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    revision: 0,
-    chatId,
-    decisions: [],
-    manualOverrides: {},
-    layoutOverride: null,
-    snapshot: emptySnapshot(chatId, now),
-    updatedAt: now
-  };
-}
-function allAssets(profile) {
-  return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap(
-      (outfit) => outfit.poses.flatMap((pose) => pose.expressions.flatMap((expression) => expression.assets))
-    )
-  );
-}
-function allExpressions(profile) {
-  return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap((outfit) => outfit.poses.flatMap((pose) => pose.expressions))
-  );
-}
-function mutateExpressions(profile, ids, mutate) {
-  return {
-    ...profile,
-    actors: profile.actors.map((actor) => ({
-      ...actor,
-      outfits: actor.outfits.map((outfit) => ({
-        ...outfit,
-        poses: outfit.poses.map((pose) => ({
-          ...pose,
-          expressions: pose.expressions.map((expression) => ids.has(expression.id) ? mutate(expression) : expression)
-        }))
-      }))
-    }))
-  };
-}
-function applyBatchMutation(profile, mutation, now = Date.now()) {
-  let next = structuredClone(profile);
-  if (mutation.type === "set-enabled" || mutation.type === "set-priority" || mutation.type === "delete") {
-    const ids = new Set(mutation.assetIds);
-    for (const actor of next.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-      for (const expression of pose.expressions) {
-        if (mutation.type === "delete") expression.assets = expression.assets.filter((asset) => !ids.has(asset.id));
-        else expression.assets = expression.assets.map((asset) => {
-          if (!ids.has(asset.id)) return asset;
-          return mutation.type === "set-enabled" ? { ...asset, enabled: mutation.enabled } : { ...asset, priority: mutation.priority };
-        });
-      }
-    }
-  } else if (mutation.type === "add-tags" || mutation.type === "add-aliases") {
-    const ids = new Set(mutation.expressionIds);
-    next = mutateExpressions(next, ids, (expression) => mutation.type === "add-tags" ? {
-      ...expression,
-      tags: [.../* @__PURE__ */ new Set([...expression.tags, ...mutation.tags.map((tag) => tag.trim()).filter(Boolean)])]
-    } : {
-      ...expression,
-      aliases: [.../* @__PURE__ */ new Set([...expression.aliases, ...mutation.aliases.map((alias) => alias.trim()).filter(Boolean)])]
-    });
-  } else if (mutation.type === "rename") {
-    const ids = new Set(mutation.expressionIds);
-    if (!mutation.find) return profile;
-    next = mutateExpressions(next, ids, (expression) => ({
-      ...expression,
-      name: cleanName(expression.name.split(mutation.find).join(mutation.replace), expression.name)
-    }));
-  } else if (mutation.type === "move") {
-    const assetIds = new Set(mutation.assetIds);
-    const moving = [];
-    for (const expression of allExpressions(next)) {
-      const assets = expression.assets.filter((asset) => assetIds.has(asset.id));
-      if (assets.length) moving.push({ expression, assets });
-    }
-    for (const expression of allExpressions(next)) {
-      expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
-    }
-    for (const actor of next.actors) {
-      const outfit = actor.outfits.find((item) => item.id === mutation.outfitId);
-      const pose = outfit?.poses.find((item) => item.id === mutation.poseId);
-      if (pose) {
-        for (const item of moving) {
-          const match = pose.expressions.find((expression) => normalizedKey(expression.name) === normalizedKey(item.expression.name));
-          if (match) match.assets.push(...item.assets);
-          else pose.expressions.push({
-            ...structuredClone(item.expression),
-            id: createId("expression"),
-            assets: item.assets,
-            order: pose.expressions.length
-          });
-        }
-      }
-    }
-  } else if (mutation.type === "duplicate") {
-    const ids = new Set(mutation.assetIds);
-    for (const expression of allExpressions(next)) {
-      const copies = expression.assets.filter((asset) => ids.has(asset.id)).map((asset) => ({
-        ...asset,
-        id: createId("asset"),
-        fileName: asset.fileName.replace(/(\.[^.]+)?$/, " copy$1"),
-        createdAt: now
-      }));
-      expression.assets.push(...copies);
-    }
-  }
-  next.revision += 1;
-  next.updatedAt = now;
-  return next;
-}
-function inspectProfile(profile) {
-  const issues = [];
-  const hashes = /* @__PURE__ */ new Map();
-  for (const actor of profile.actors) {
-    if (!actor.outfits.some((item) => item.enabled)) issues.push({ severity: "error", code: "actor-no-outfit", message: `${actor.name} has no enabled outfit.` });
-    const aliases = actor.aliases.map(normalizedKey);
-    if (new Set(aliases).size !== aliases.length) issues.push({ severity: "warning", code: "duplicate-alias", message: `${actor.name} contains duplicate aliases.` });
-    for (const outfit of actor.outfits) for (const pose of outfit.poses) for (const expression of pose.expressions) {
-      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${pose.name} / ${expression.name} has no media.` });
-      for (const asset of expression.assets) hashes.set(asset.contentHash, (hashes.get(asset.contentHash) ?? 0) + 1);
-    }
-  }
-  for (const [hash, count] of hashes) if (count > 1) {
-    issues.push({ severity: "warning", code: "duplicate-content", message: `${count} media references share hash ${hash.slice(0, 10)}\u2026` });
-  }
-  return issues;
-}
-
-// node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
-var f3 = 0;
-function u3(e3, t3, n2, o3, i3, u4) {
-  t3 || (t3 = {});
-  var a3, c3, p3 = t3;
-  if ("ref" in p3) for (c3 in p3 = {}, t3) "ref" == c3 ? a3 = t3[c3] : p3[c3] = t3[c3];
-  var l3 = { type: e3, props: p3, key: n2, ref: a3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f3, __i: -1, __u: 0, __source: i3, __self: u4 };
-  if ("function" == typeof e3 && (a3 = e3.defaultProps)) for (c3 in a3) void 0 === p3[c3] && (p3[c3] = a3[c3]);
-  return l.vnode && l.vnode(l3), l3;
-}
-
-// src/ui/components.tsx
-var STAGE_ICON = /* @__PURE__ */ u3("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.4", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", children: [
-  /* @__PURE__ */ u3("path", { d: "M4 4h16M6 4v5m12-5v5M5 20h14" }),
-  /* @__PURE__ */ u3("path", { d: "M8 8.5c1.4 1 2.7 1.5 4 1.5s2.6-.5 4-1.5V18H8z" }),
-  /* @__PURE__ */ u3("path", { d: "M10 14c.8.7 3.2.7 4 0" })
-] });
-function useClientState(client) {
-  const [state, setState] = d2(() => client.getSnapshot());
-  h2(() => client.subscribe(() => setState(client.getSnapshot())), [client]);
-  return state;
-}
-function Button(props) {
-  const tone = props.tone ? ` ls-button-${props.tone}` : "";
-  return /* @__PURE__ */ u3("button", { type: props.type ?? "button", class: `ls-button${tone}`, onClick: props.onClick, disabled: props.disabled, title: props.title, children: props.children });
-}
-function Toggle(props) {
-  return /* @__PURE__ */ u3("div", { class: "ls-switch-row", children: [
-    /* @__PURE__ */ u3("div", { class: "ls-switch-copy", children: [
-      /* @__PURE__ */ u3("strong", { children: props.label }),
-      props.hint && /* @__PURE__ */ u3("span", { children: props.hint })
-    ] }),
-    /* @__PURE__ */ u3("button", { type: "button", class: "ls-switch", role: "switch", "aria-checked": props.checked, "aria-label": props.label, onClick: () => props.onChange(!props.checked) })
-  ] });
-}
-function Field(props) {
-  return /* @__PURE__ */ u3("label", { class: "ls-field", children: [
-    /* @__PURE__ */ u3("span", { class: "ls-field-label", children: props.label }),
-    props.children
-  ] });
-}
-function SectionHead(props) {
-  return /* @__PURE__ */ u3("div", { class: "ls-section-head", children: [
-    /* @__PURE__ */ u3("div", { children: [
-      /* @__PURE__ */ u3("h2", { class: "ls-section-title", children: props.title }),
-      /* @__PURE__ */ u3("p", { class: "ls-section-note", children: props.note })
-    ] }),
-    props.actions && /* @__PURE__ */ u3("div", { class: "ls-toolbar", children: props.actions })
-  ] });
-}
-function Notice({ client }) {
-  const { notice, progress } = useClientState(client);
-  if (!notice && !progress) return null;
-  return /* @__PURE__ */ u3("div", { class: "ls-notice", "data-tone": notice?.tone ?? "info", role: "status", children: [
-    notice?.message ?? progress?.message,
-    progress && progress.total > 0 && /* @__PURE__ */ u3("div", { class: "ls-progress", style: { marginTop: 6 }, children: /* @__PURE__ */ u3("div", { class: "ls-progress-bar", style: { width: `${Math.min(100, progress.completed / progress.total * 100)}%` } }) })
-  ] });
-}
-function activeNodes(profile, actorId, outfitId, poseId) {
-  const actor = profile?.actors.find((item) => item.id === actorId) ?? profile?.actors[0] ?? null;
-  const outfit = actor?.outfits.find((item) => item.id === outfitId) ?? actor?.outfits[0] ?? null;
-  const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
-  return { actor, outfit, pose };
-}
-function assetLocation(profile, assetId) {
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) {
-      const asset = expression.assets.find((item) => item.id === assetId);
-      if (asset) return { actor, outfit, pose, expression, asset };
-    }
-  }
-  return null;
-}
-function Media({ src, kind, label, className = "ls-asset-media" }) {
-  if (!src) return /* @__PURE__ */ u3("div", { class: `${className} ls-live-avatar-fallback`, "aria-label": `${label} media unavailable`, children: "?" });
-  if (kind === "video") return /* @__PURE__ */ u3("video", { class: className, src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": label });
-  return /* @__PURE__ */ u3("img", { class: className, src, alt: label, loading: "lazy", draggable: false });
-}
-function LiveView({ client, openQuick }) {
-  const { backend } = useClientState(client);
-  const actors = Object.values(backend.snapshot?.actors ?? {}).sort((a3, b2) => Number(b2.focused) - Number(a3.focused));
-  const statusTone = backend.lastDetection.status === "error" ? "error" : backend.lastDetection.status === "success" ? "success" : backend.lastDetection.status === "running" ? "warning" : "info";
-  return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(
-      SectionHead,
-      {
-        title: "Live Stage",
-        note: "The current independent stage state for this chat.",
-        actions: /* @__PURE__ */ u3(S, { children: [
-          /* @__PURE__ */ u3(Button, { onClick: openQuick, disabled: !backend.activeChatId, children: "Quick select" }),
-          /* @__PURE__ */ u3(Button, { tone: "primary", onClick: () => client.analyzeNow(), disabled: !backend.activeChatId, children: "Analyze now" })
-        ] })
-      }
-    ),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Detector" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", "data-tone": statusTone, children: backend.lastDetection.status })
-      ] }),
-      /* @__PURE__ */ u3("p", { class: "ls-section-note", children: backend.lastDetection.message }),
-      backend.queueDepth > 0 && /* @__PURE__ */ u3("div", { class: "ls-progress", style: { marginTop: 9 }, children: /* @__PURE__ */ u3("div", { class: "ls-progress-bar", style: { width: "72%" } }) })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Ensemble" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-          actors.length,
-          " actors"
-        ] })
-      ] }),
-      actors.length === 0 ? /* @__PURE__ */ u3("div", { class: "ls-empty", children: /* @__PURE__ */ u3("div", { children: [
-        /* @__PURE__ */ u3("strong", { children: "The stage is waiting" }),
-        "Import media in Library, then analyze a completed reply or choose a state manually."
-      ] }) }) : /* @__PURE__ */ u3("div", { class: "ls-live-list", children: actors.map((actor) => {
-        const view = actor.assetId ? backend.assetViews[actor.assetId] : null;
-        return /* @__PURE__ */ u3("div", { class: "ls-live-row", children: [
-          /* @__PURE__ */ u3(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: view?.mediaKind ?? "image", label: actor.label, className: "ls-live-avatar" }),
-          /* @__PURE__ */ u3("div", { style: { minWidth: 0 }, children: [
-            /* @__PURE__ */ u3("div", { class: "ls-live-name", children: actor.label.split(" \xB7 ")[0] }),
-            /* @__PURE__ */ u3("div", { class: "ls-live-state", children: actor.label.split(" \xB7 ").slice(1).join(" / ") })
-          ] }),
-          /* @__PURE__ */ u3("span", { class: "ls-badge", "data-tone": actor.focused ? "success" : "info", children: actor.focused ? "focus" : `${Math.round(actor.confidence * 100)}%` })
-        ] }, actor.actorId);
-      }) })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-stat-grid", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-stat", children: [
-        /* @__PURE__ */ u3("strong", { children: backend.stageProfiles.reduce((sum, profile) => sum + profile.actors.length, 0) }),
-        /* @__PURE__ */ u3("span", { children: "Actors" })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-stat", children: [
-        /* @__PURE__ */ u3("strong", { children: backend.stageProfiles.reduce((sum, profile) => sum + allAssets(profile).length, 0) }),
-        /* @__PURE__ */ u3("span", { children: "Media" })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-stat", children: [
-        /* @__PURE__ */ u3("strong", { children: Object.keys(backend.timeline?.manualOverrides ?? {}).length }),
-        /* @__PURE__ */ u3("span", { children: "Locks" })
-      ] })
-    ] })
-  ] });
-}
-function LibraryView(props) {
-  const { backend } = useClientState(props.client);
-  const [actorId, setActorId] = d2(props.profile?.actors[0]?.id);
-  const [outfitId, setOutfitId] = d2();
-  const [poseId, setPoseId] = d2();
-  const [query, setQuery] = d2("");
-  const [page, setPage] = d2(0);
-  const [draggedNode, setDraggedNode] = d2(null);
-  const lastIndex = A2(null);
-  const { actor, outfit, pose } = activeNodes(props.profile, actorId, outfitId, poseId);
-  h2(() => {
-    if (!actorId && props.profile?.actors[0]) setActorId(props.profile.actors[0].id);
-  }, [props.profile, actorId]);
-  h2(() => {
-    if (actor && !actor.outfits.some((item) => item.id === outfitId)) setOutfitId(actor.outfits[0]?.id);
-  }, [actor, outfitId]);
-  h2(() => {
-    if (outfit && !outfit.poses.some((item) => item.id === poseId)) setPoseId(outfit.poses[0]?.id);
-  }, [outfit, poseId]);
-  const rows = T2(() => {
-    if (!actor || !outfit || !pose) return [];
-    const needle = query.trim().toLocaleLowerCase();
-    return pose.expressions.flatMap(
-      (expression) => expression.assets.map((asset) => ({ expression, asset }))
-    ).filter(({ expression, asset }) => !needle || [expression.name, asset.fileName, ...expression.tags, ...expression.aliases].join(" ").toLocaleLowerCase().includes(needle));
-  }, [actor, outfit, pose, query]);
-  const pageSize = 96;
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageStart = safePage * pageSize;
-  const pageRows = rows.slice(pageStart, pageStart + pageSize);
-  h2(() => setPage(0), [actor?.id, outfit?.id, pose?.id, query]);
-  function select(index, assetId, shift) {
-    const next = new Set(props.selected);
-    if (shift && lastIndex.current !== null) {
-      const [start, end] = [lastIndex.current, index].sort((a3, b2) => a3 - b2);
-      for (let cursor = start; cursor <= end; cursor += 1) next.add(rows[cursor].asset.id);
-    } else if (next.has(assetId)) next.delete(assetId);
-    else next.add(assetId);
-    lastIndex.current = index;
-    props.setSelected(next);
-  }
-  function addActor() {
-    const name = window.prompt("Actor name");
-    if (!name) return;
-    props.update((profile) => {
-      const next = createActor(name);
-      next.order = profile.actors.length;
-      profile.actors.push(next);
-    });
-  }
-  function addOutfit() {
-    const name = window.prompt("Outfit folder name");
-    if (!name || !actor) return;
-    props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id);
-      if (!target) return;
-      const next = createOutfit(name);
-      next.order = target.outfits.length;
-      target.outfits.push(next);
-      target.defaultOutfitId ??= next.id;
-      setOutfitId(next.id);
-    });
-  }
-  function addPose() {
-    const name = window.prompt("Pose name");
-    if (!name || !actor || !outfit) return;
-    props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-      if (!target) return;
-      const next = createPose(name);
-      next.order = target.poses.length;
-      target.poses.push(next);
-      target.defaultPoseId ??= next.id;
-      setPoseId(next.id);
-    });
-  }
-  function addExpression() {
-    const name = window.prompt("Expression name");
-    if (!name || !actor || !outfit || !pose) return;
-    props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
-      if (!target) return;
-      const next = createExpression(name);
-      next.order = target.expressions.length;
-      target.expressions.push(next);
-      target.defaultExpressionId ??= next.id;
-    });
-  }
-  function reorderNodes(kind, sourceId, targetId) {
-    if (!actor || sourceId === targetId) return;
-    props.update((profile) => {
-      const targetActor = profile.actors.find((item) => item.id === actor.id);
-      if (kind === "outfit") {
-        const list = targetActor?.outfits;
-        if (!list) return;
-        const from = list.findIndex((item) => item.id === sourceId);
-        const to = list.findIndex((item) => item.id === targetId);
-        if (from < 0 || to < 0) return;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        list.forEach((item, index) => {
-          item.order = index;
-        });
-      } else {
-        const list = targetActor?.outfits.find((item) => item.id === outfit?.id)?.poses;
-        if (!list) return;
-        const from = list.findIndex((item) => item.id === sourceId);
-        const to = list.findIndex((item) => item.id === targetId);
-        if (from < 0 || to < 0) return;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        list.forEach((item, index) => {
-          item.order = index;
-        });
-      }
-    });
-  }
-  const listValue = (values) => values.join(", ");
-  const parseList = (value) => [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
-  if (!props.profile) return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "Library", note: "Open a character or chat to edit its LumiStage profile." }),
-    /* @__PURE__ */ u3("div", { class: "ls-empty", children: /* @__PURE__ */ u3("div", { children: [
-      /* @__PURE__ */ u3("strong", { children: "No character selected" }),
-      "Choose a character in Lumiverse, then return to LumiStage."
-    ] }) })
-  ] });
-  return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "Library", note: "Layer media through actor, outfit, pose, and expression folders.", actions: /* @__PURE__ */ u3(S, { children: [
-      /* @__PURE__ */ u3(Button, { onClick: props.importMedia, tone: "primary", children: "Import media" }),
-      /* @__PURE__ */ u3(Button, { onClick: addActor, children: "+ Actor" })
-    ] }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-      /* @__PURE__ */ u3(Field, { label: "Actor", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: actor?.id, onChange: (event) => setActorId(event.currentTarget.value), children: props.profile.actors.map((item) => /* @__PURE__ */ u3("option", { value: item.id, children: item.name })) }) }),
-      /* @__PURE__ */ u3(Field, { label: "Search this pose", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: query, onInput: (event) => setQuery(event.currentTarget.value), placeholder: "Names, aliases, tags\u2026" }) })
-    ] }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-library-layout", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card ls-library-tree", children: [
-        /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-          /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Outfits" }),
-          /* @__PURE__ */ u3("button", { class: "ls-icon-btn", type: "button", onClick: addOutfit, "aria-label": "Add outfit", children: "+" })
-        ] }),
-        /* @__PURE__ */ u3("div", { class: "ls-tree", children: actor?.outfits.map((item) => /* @__PURE__ */ u3("div", { class: "ls-tree-row", draggable: true, onDragStart: () => setDraggedNode(item.id), onDragOver: (event) => event.preventDefault(), onDrop: () => {
-          if (draggedNode) reorderNodes("outfit", draggedNode, item.id);
-          setDraggedNode(null);
-        }, children: /* @__PURE__ */ u3("button", { type: "button", class: "ls-tree-btn", "data-active": item.id === outfit?.id, onClick: () => setOutfitId(item.id), children: [
-          /* @__PURE__ */ u3("span", { children: item.name }),
-          /* @__PURE__ */ u3("span", { class: "ls-tree-count", children: item.poses.reduce((sum, value) => sum + value.expressions.reduce((n2, expression) => n2 + expression.assets.length, 0), 0) })
-        ] }) }, item.id)) }),
-        /* @__PURE__ */ u3("div", { class: "ls-card-head", style: { marginTop: 12 }, children: [
-          /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Poses" }),
-          /* @__PURE__ */ u3("button", { class: "ls-icon-btn", type: "button", onClick: addPose, "aria-label": "Add pose", children: "+" })
-        ] }),
-        /* @__PURE__ */ u3("div", { class: "ls-tree", children: outfit?.poses.map((item) => /* @__PURE__ */ u3("div", { class: "ls-tree-row", draggable: true, onDragStart: () => setDraggedNode(item.id), onDragOver: (event) => event.preventDefault(), onDrop: () => {
-          if (draggedNode) reorderNodes("pose", draggedNode, item.id);
-          setDraggedNode(null);
-        }, children: /* @__PURE__ */ u3("button", { type: "button", class: "ls-tree-btn", "data-active": item.id === pose?.id, onClick: () => setPoseId(item.id), children: [
-          /* @__PURE__ */ u3("span", { children: item.name }),
-          /* @__PURE__ */ u3("span", { class: "ls-tree-count", children: item.expressions.length })
-        ] }) }, item.id)) })
-      ] }),
-      /* @__PURE__ */ u3("div", { style: { minWidth: 0 }, children: [
-        /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { marginBottom: 8 }, children: [
-          /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-            rows.length,
-            " media \xB7 page ",
-            safePage + 1,
-            "/",
-            pageCount
-          ] }),
-          /* @__PURE__ */ u3(Button, { onClick: addExpression, children: "+ Empty expression" }),
-          /* @__PURE__ */ u3(Button, { onClick: () => props.setSelected(new Set(pageRows.map((row) => row.asset.id))), disabled: !pageRows.length, children: "Select page" }),
-          /* @__PURE__ */ u3(Button, { onClick: () => props.setSelected(new Set(rows.map((row) => row.asset.id))), disabled: !rows.length, children: "Select all filtered" }),
-          /* @__PURE__ */ u3(Button, { onClick: () => setPage(Math.max(0, safePage - 1)), disabled: safePage === 0, children: "\u2190" }),
-          /* @__PURE__ */ u3(Button, { onClick: () => setPage(Math.min(pageCount - 1, safePage + 1)), disabled: safePage >= pageCount - 1, children: "\u2192" })
-        ] }),
-        rows.length === 0 ? /* @__PURE__ */ u3("div", { class: "ls-empty", children: /* @__PURE__ */ u3("div", { children: [
-          /* @__PURE__ */ u3("strong", { children: "No media in this pose" }),
-          "Import images or video, or create an empty expression slot."
-        ] }) }) : /* @__PURE__ */ u3("div", { class: "ls-asset-grid", children: pageRows.map(({ expression, asset }, index) => {
-          const view = backend.assetViews[asset.id];
-          return /* @__PURE__ */ u3("article", { class: "ls-asset", "data-selected": props.selected.has(asset.id), onClick: (event) => select(pageStart + index, asset.id, event.shiftKey), children: [
-            /* @__PURE__ */ u3("input", { class: "ls-asset-check", type: "checkbox", checked: props.selected.has(asset.id), onClick: (event) => event.stopPropagation(), onChange: () => select(pageStart + index, asset.id, false), "aria-label": `Select ${expression.name}` }),
-            /* @__PURE__ */ u3(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: asset.mediaKind, label: expression.name }),
-            /* @__PURE__ */ u3("div", { class: "ls-asset-meta", children: [
-              /* @__PURE__ */ u3("div", { class: "ls-asset-name", children: expression.name }),
-              /* @__PURE__ */ u3("div", { class: "ls-asset-kind", children: [
-                asset.mediaKind,
-                " \xB7 priority ",
-                asset.priority
-              ] })
-            ] })
-          ] }, asset.id);
-        }) })
-      ] })
-    ] }),
-    actor && outfit && pose && /* @__PURE__ */ u3("div", { class: "ls-card", style: { marginTop: 10 }, children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Folder direction metadata" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: "aliases \xB7 cues \xB7 defaults" })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Actor aliases", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: listValue(actor.aliases), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id);
-          if (node) node.aliases = parseList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u3(Field, { label: "Outfit aliases", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: listValue(outfit.aliases), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.aliases = parseList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u3(Field, { label: "Outfit cue phrases", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: listValue(outfit.cues), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.cues = parseList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u3(Field, { label: "Pose cue phrases", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: listValue(pose.cues), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
-          if (node) node.cues = parseList(event.currentTarget.value);
-        }) }) })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { marginTop: 9 }, children: [
-        /* @__PURE__ */ u3(Button, { onClick: () => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id);
-          if (node) node.defaultOutfitId = outfit.id;
-        }), children: "Set default outfit" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.defaultPoseId = pose.id;
-        }), children: "Set default pose" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.allowAutoSwitch = !node.allowAutoSwitch;
-        }), children: outfit.allowAutoSwitch ? "Disable outfit automation" : "Enable outfit automation" })
-      ] })
-    ] })
-  ] });
-}
-function BatchView(props) {
-  const [priority, setPriority] = d2(0);
-  const [find, setFind] = d2("");
-  const [replace, setReplace] = d2("");
-  const [tags, setTags] = d2("");
-  const [aliases, setAliases] = d2("");
-  const [destination, setDestination] = d2("");
-  const selectedExpressions = T2(() => {
-    if (!props.profile) return [];
-    return [...new Set([...props.selected].map((assetId) => assetLocation(props.profile, assetId)?.expression.id).filter((id) => !!id))];
-  }, [props.profile, props.selected]);
-  const profile = props.profile;
-  const expressionNames = profile ? [...new Set(allExpressions(profile).map((item) => item.name))] : [];
-  const poses = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses)) ?? [];
-  const destinations = profile?.actors.flatMap((actor) => actor.outfits.flatMap(
-    (outfit) => outfit.poses.map((pose) => ({
-      key: `${outfit.id}|${pose.id}`,
-      outfitId: outfit.id,
-      poseId: pose.id,
-      label: `${actor.name} / ${outfit.name} / ${pose.name}`
-    }))
-  )) ?? [];
-  const selectedDestination = destinations.find((item) => item.key === destination) ?? null;
-  return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "Batch Lab", note: "Preview and apply reversible changes across selected media.", actions: /* @__PURE__ */ u3(S, { children: [
-      /* @__PURE__ */ u3(Button, { onClick: props.undo, disabled: !props.canUndo, children: "Undo" }),
-      /* @__PURE__ */ u3(Button, { onClick: props.redo, disabled: !props.canRedo, children: "Redo" })
-    ] }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Selection" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-          props.selected.size,
-          " media \xB7 ",
-          selectedExpressions.length,
-          " expressions"
-        ] })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-toolbar", children: [
-        /* @__PURE__ */ u3(Button, { onClick: () => profile && props.setSelected(new Set(allAssets(profile).map((asset) => asset.id))), disabled: !profile, children: "Select all" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => props.setSelected(/* @__PURE__ */ new Set()), disabled: !props.selected.size, children: "Clear" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true }), disabled: !props.selected.size, children: "Enable" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false }), disabled: !props.selected.size, children: "Disable" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => props.mutate({ type: "duplicate", assetIds: [...props.selected] }), disabled: !props.selected.size, children: "Duplicate" }),
-        /* @__PURE__ */ u3(Button, { tone: "danger", onClick: () => props.mutate({ type: "delete", assetIds: [...props.selected] }), disabled: !props.selected.size, children: "Session trash" })
-      ] }),
-      /* @__PURE__ */ u3("p", { class: "ls-section-note", style: { marginTop: 8 }, children: "Session trash is recoverable with Undo until the library is saved." })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Priority" }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Asset priority", children: /* @__PURE__ */ u3("input", { class: "ls-input", type: "number", value: priority, onInput: (event) => setPriority(Number(event.currentTarget.value)) }) }),
-        /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { alignItems: "end" }, children: /* @__PURE__ */ u3(Button, { tone: "primary", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority }), children: "Apply priority" }) })
-      ] })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Tags and aliases" }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Tags (comma separated)", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: tags, onInput: (event) => setTags(event.currentTarget.value), placeholder: "smile, joy, bright" }) }),
-        /* @__PURE__ */ u3(Field, { label: "Aliases (comma separated)", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: aliases, onInput: (event) => setAliases(event.currentTarget.value), placeholder: "grin, cheerful" }) })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { marginTop: 9 }, children: [
-        /* @__PURE__ */ u3(Button, { disabled: !selectedExpressions.length || !tags.trim(), onClick: () => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") }), children: "Add tags" }),
-        /* @__PURE__ */ u3(Button, { disabled: !selectedExpressions.length || !aliases.trim(), onClick: () => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") }), children: "Add aliases" })
-      ] })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Move / reassign" }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Destination pose", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: destination, onChange: (event) => setDestination(event.currentTarget.value), children: [
-          /* @__PURE__ */ u3("option", { value: "", children: "Choose destination\u2026" }),
-          destinations.map((item) => /* @__PURE__ */ u3("option", { value: item.key, children: item.label }))
-        ] }) }),
-        /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { alignItems: "end" }, children: /* @__PURE__ */ u3(Button, { tone: "primary", disabled: !props.selected.size || !selectedDestination, onClick: () => selectedDestination && props.mutate({ type: "move", assetIds: [...props.selected], outfitId: selectedDestination.outfitId, poseId: selectedDestination.poseId }), children: "Move selected media" }) })
-      ] })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Rename expressions" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-          "preview: ",
-          find ? `${find} \u2192 ${replace || "\u2205"}` : "enter text"
-        ] })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Find", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: find, onInput: (event) => setFind(event.currentTarget.value) }) }),
-        /* @__PURE__ */ u3(Field, { label: "Replace", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: replace, onInput: (event) => setReplace(event.currentTarget.value) }) })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { marginTop: 9 }, children: /* @__PURE__ */ u3(Button, { disabled: !find || !selectedExpressions.length, onClick: () => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace }), children: "Apply rename" }) })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Completeness matrix" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-          poses.length,
-          " poses"
-        ] })
-      ] }),
-      poses.length && expressionNames.length ? /* @__PURE__ */ u3("div", { style: { overflowX: "auto" }, children: /* @__PURE__ */ u3("table", { class: "ls-matrix", children: [
-        /* @__PURE__ */ u3("thead", { children: /* @__PURE__ */ u3("tr", { children: [
-          /* @__PURE__ */ u3("th", { children: "Pose" }),
-          expressionNames.map((name) => /* @__PURE__ */ u3("th", { children: name }))
-        ] }) }),
-        /* @__PURE__ */ u3("tbody", { children: poses.map((pose) => /* @__PURE__ */ u3("tr", { children: [
-          /* @__PURE__ */ u3("th", { children: pose.name }),
-          expressionNames.map((name) => {
-            const expression = pose.expressions.find((item) => item.name === name);
-            const complete = !!expression?.assets.some((asset) => asset.enabled);
-            return /* @__PURE__ */ u3("td", { "data-complete": complete, children: complete ? "\u25CF" : "\u25CB" });
-          })
-        ] })) })
-      ] }) }) : /* @__PURE__ */ u3("div", { class: "ls-empty", children: /* @__PURE__ */ u3("div", { children: [
-        /* @__PURE__ */ u3("strong", { children: "No matrix yet" }),
-        "Add outfits, poses, expressions, and media to see coverage."
-      ] }) })
-    ] })
-  ] });
-}
-function AutomationView({ client }) {
-  const { backend } = useClientState(client);
-  const [draft, setDraft] = d2(backend.settings);
-  h2(() => setDraft(backend.settings), [backend.settings.revision]);
-  const detection = draft.detection;
-  const missing = [
-    !backend.permissions.generation && "Generation",
-    !backend.permissions.chats && "Chats",
-    !backend.permissions.chatMutation && "Chat History"
-  ].filter(Boolean);
-  return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "Automation", note: "One structured post-reply classification, independent from Lumiverse\u2019s built-in detector.", actions: /* @__PURE__ */ u3(Button, { tone: "primary", onClick: () => void client.saveSettings(draft), children: "Save" }) }),
-    missing.length > 0 && /* @__PURE__ */ u3("div", { class: "ls-notice", "data-tone": "warning", children: [
-      "Automation is waiting for: ",
-      missing.join(", "),
-      "."
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: /* @__PURE__ */ u3(Toggle, { checked: detection.enabled, onChange: (enabled) => setDraft({ ...draft, detection: { ...detection, enabled } }), label: "Automatic post-reply detection", hint: "Runs after a successfully saved assistant reply. Errors and stopped generations leave the stage unchanged." }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Controller" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-          "temperature ",
-          detection.temperature.toFixed(2)
-        ] })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Connection profile ID", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: detection.connectionId ?? "", placeholder: "Blank uses active connection", onInput: (event) => setDraft({ ...draft, detection: { ...detection, connectionId: event.currentTarget.value || null } }) }) }),
-        /* @__PURE__ */ u3(Field, { label: "Model override", children: /* @__PURE__ */ u3("input", { class: "ls-input", value: detection.model ?? "", placeholder: "Connection default", onInput: (event) => setDraft({ ...draft, detection: { ...detection, model: event.currentTarget.value || null } }) }) }),
-        /* @__PURE__ */ u3(Field, { label: `Context messages \xB7 ${detection.contextMessages}`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: "1", max: "20", value: detection.contextMessages, onInput: (event) => setDraft({ ...draft, detection: { ...detection, contextMessages: Number(event.currentTarget.value) } }) }) }),
-        /* @__PURE__ */ u3(Field, { label: `Temperature \xB7 ${detection.temperature.toFixed(2)}`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: "0", max: "1", step: ".05", value: detection.temperature, onInput: (event) => setDraft({ ...draft, detection: { ...detection, temperature: Number(event.currentTarget.value) } }) }) })
-      ] })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Confidence gates" }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: `Pose / expression \xB7 ${Math.round(detection.stateConfidence * 100)}%`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: ".3", max: ".95", step: ".05", value: detection.stateConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } }) }) }),
-        /* @__PURE__ */ u3(Field, { label: `Sticky outfit \xB7 ${Math.round(detection.outfitConfidence * 100)}%`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: ".5", max: "1", step: ".05", value: detection.outfitConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } }) }) })
-      ] }),
-      /* @__PURE__ */ u3("p", { class: "ls-section-note", children: "An outfit still requires an explicit clothing cue and an outfit folder that permits automatic switching." })
-    ] })
-  ] });
-}
-function AppearanceView({ client }) {
-  const { backend } = useClientState(client);
-  const [chatScoped, setChatScoped] = d2(Boolean(backend.timeline?.layoutOverride));
-  const [draft, setDraft] = d2({
-    ...backend.settings,
-    appearance: client.effectiveAppearance()
-  });
-  h2(() => {
-    setChatScoped(Boolean(backend.timeline?.layoutOverride));
-    setDraft({ ...backend.settings, appearance: client.effectiveAppearance() });
-  }, [backend.settings.revision, backend.timeline?.revision]);
-  const appearance = draft.appearance;
-  const patch = (value) => setDraft({ ...draft, appearance: { ...appearance, ...value } });
-  async function save() {
-    if (chatScoped) {
-      await client.saveChatLayout(appearance);
-      return;
-    }
-    if (backend.timeline?.layoutOverride) await client.saveChatLayout(null);
-    await client.saveSettings(draft);
-  }
-  return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "Appearance", note: "Tune the chromeless stage while preserving the active Lumiverse theme.", actions: /* @__PURE__ */ u3(Button, { tone: "primary", onClick: () => void save(), children: "Save" }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3(Toggle, { checked: chatScoped, onChange: setChatScoped, label: "Chat-specific stage layout", hint: "Store this stage geometry and appearance on LumiStage\u2019s private chat timeline instead of the global default." }),
-      !backend.activeChatId && /* @__PURE__ */ u3("p", { class: "ls-section-note", children: "Open a chat to enable a chat-specific layout." })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-      /* @__PURE__ */ u3(Field, { label: "Transition", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: appearance.transition, onChange: (event) => patch({ transition: event.currentTarget.value }), children: [
-        /* @__PURE__ */ u3("option", { value: "crossfade", children: "Crossfade" }),
-        /* @__PURE__ */ u3("option", { value: "lift", children: "Lift" }),
-        /* @__PURE__ */ u3("option", { value: "cut", children: "Cut" })
-      ] }) }),
-      /* @__PURE__ */ u3(Field, { label: `Duration \xB7 ${appearance.transitionMs}ms`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: "0", max: "1000", step: "20", value: appearance.transitionMs, onInput: (event) => patch({ transitionMs: Number(event.currentTarget.value) }) }) }),
-      /* @__PURE__ */ u3(Field, { label: `Stage opacity \xB7 ${Math.round(appearance.opacity * 100)}%`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: ".1", max: "1", step: ".05", value: appearance.opacity, onInput: (event) => patch({ opacity: Number(event.currentTarget.value) }) }) }),
-      /* @__PURE__ */ u3(Field, { label: `Idle actors \xB7 ${Math.round(appearance.idleOpacity * 100)}%`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: ".05", max: "1", step: ".05", value: appearance.idleOpacity, onInput: (event) => patch({ idleOpacity: Number(event.currentTarget.value) }) }) }),
-      /* @__PURE__ */ u3(Field, { label: `Focus scale \xB7 ${appearance.focusedScale.toFixed(2)}\xD7`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: ".8", max: "1.3", step: ".01", value: appearance.focusedScale, onInput: (event) => patch({ focusedScale: Number(event.currentTarget.value) }) }) }),
-      /* @__PURE__ */ u3(Field, { label: `Ensemble overlap \xB7 ${Math.round(appearance.ensembleOverlap * 100)}%`, children: /* @__PURE__ */ u3("input", { class: "ls-range", type: "range", min: "0", max: ".8", step: ".02", value: appearance.ensembleOverlap, onInput: (event) => patch({ ensembleOverlap: Number(event.currentTarget.value) }) }) })
-    ] }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3(Toggle, { checked: appearance.showChrome, onChange: (showChrome) => patch({ showChrome }), label: "Cinematic stage frame", hint: "Adds a subtle themed frame and lighting well." }),
-      /* @__PURE__ */ u3(Toggle, { checked: appearance.showCaptions, onChange: (showCaptions) => patch({ showCaptions }), label: "State captions", hint: "Shows actor, outfit, pose, and expression labels." }),
-      /* @__PURE__ */ u3(Toggle, { checked: appearance.visible, onChange: (visible) => patch({ visible }), label: "Stage visible", hint: "The drawer and quick selector remain available while hidden." })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-      /* @__PURE__ */ u3(Field, { label: "Width", children: /* @__PURE__ */ u3("input", { class: "ls-input", type: "number", min: "180", max: "1200", value: appearance.width, onInput: (event) => patch({ width: Number(event.currentTarget.value) }) }) }),
-      /* @__PURE__ */ u3(Field, { label: "Height", children: /* @__PURE__ */ u3("input", { class: "ls-input", type: "number", min: "220", max: "1000", value: appearance.height, onInput: (event) => patch({ height: Number(event.currentTarget.value) }) }) })
-    ] }) })
-  ] });
-}
-function DiagnosticsView({ client, profile }) {
-  const { backend } = useClientState(client);
-  const [report, setReport] = d2(null);
-  const issues = profile ? inspectProfile(profile) : [];
-  async function refresh() {
-    try {
-      setReport(await client.diagnostics());
-    } catch (error) {
-      client.notify("error", error instanceof Error ? error.message : "Diagnostics failed.");
-    }
-  }
-  async function copy() {
-    const text = JSON.stringify(report, null, 2);
-    await navigator.clipboard.writeText(text);
-    client.notify("success", "Privacy-safe diagnostics copied.");
-  }
-  return /* @__PURE__ */ u3("section", { class: "ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "Diagnostics", note: "Catalog and runtime health without transcript text or raw detector output.", actions: /* @__PURE__ */ u3(S, { children: [
-      /* @__PURE__ */ u3(Button, { onClick: () => void refresh(), children: "Refresh" }),
-      /* @__PURE__ */ u3(Button, { onClick: () => void copy(), disabled: !report, children: "Copy report" })
-    ] }) }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Permissions" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", children: [
-          Object.values(backend.permissions).filter(Boolean).length,
-          "/6 granted"
-        ] })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-toolbar", children: Object.entries(backend.permissions).map(([name, granted]) => /* @__PURE__ */ u3("span", { class: "ls-badge", "data-tone": granted ? "success" : "error", children: name })) })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-card-head", children: [
-        /* @__PURE__ */ u3("h3", { class: "ls-card-title", children: "Catalog integrity" }),
-        /* @__PURE__ */ u3("span", { class: "ls-badge", "data-tone": issues.some((item) => item.severity === "error") ? "error" : issues.length ? "warning" : "success", children: [
-          issues.length,
-          " findings"
-        ] })
-      ] }),
-      issues.length ? /* @__PURE__ */ u3("div", { class: "ls-live-list", children: issues.slice(0, 40).map((issue) => /* @__PURE__ */ u3("div", { class: "ls-live-row", style: { gridTemplateColumns: "auto 1fr" }, children: [
-        /* @__PURE__ */ u3("span", { class: "ls-badge", "data-tone": issue.severity, children: issue.severity }),
-        /* @__PURE__ */ u3("div", { class: "ls-live-state", children: issue.message })
-      ] })) }) : /* @__PURE__ */ u3("p", { class: "ls-section-note", children: "No catalog issues found." })
-    ] }),
-    report && /* @__PURE__ */ u3("pre", { class: "ls-diagnostic", children: JSON.stringify(report, null, 2) })
-  ] });
-}
-function openImportModal(client, profile) {
-  const modal = client.ctx.ui.showModal({ title: "Import LumiStage media", width: 560, maxHeight: 650, persistent: true });
-  function ImportBody() {
-    const [files, setFiles] = d2([]);
-    const [layout, setLayout] = d2("outfit-pose-expression");
-    const [actorId, setActorId] = d2(profile?.defaultActorId ?? profile?.actors[0]?.id ?? "");
-    const [working, setWorking] = d2(false);
-    async function run() {
-      setWorking(true);
-      try {
-        await client.importFiles(files, layout, actorId || void 0);
-        modal.dismiss();
-      } catch (error) {
-        client.notify("error", error instanceof Error ? error.message : "Import failed.");
-      } finally {
-        setWorking(false);
-      }
-    }
-    return /* @__PURE__ */ u3("div", { class: "ls-modal-root", children: [
-      /* @__PURE__ */ u3("label", { class: "ls-file-drop", children: [
-        /* @__PURE__ */ u3("input", { type: "file", multiple: true, accept: ".zip,image/png,image/jpeg,image/webp,image/gif,video/webm,video/mp4", onChange: (event) => setFiles(Array.from(event.currentTarget.files ?? [])) }),
-        /* @__PURE__ */ u3("div", { children: [
-          /* @__PURE__ */ u3("strong", { children: files.length ? `${files.length} file(s) selected` : "Choose images, video, or a ZIP archive" }),
-          /* @__PURE__ */ u3("p", { class: "ls-section-note", children: "PNG, JPEG, WebP, GIF, WebM, MP4, and .lumistage.zip are supported." })
-        ] })
-      ] }),
-      /* @__PURE__ */ u3(Field, { label: "Folder mapping", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: layout, onChange: (event) => setLayout(event.currentTarget.value), children: [
-        /* @__PURE__ */ u3("option", { value: "outfit-pose-expression", children: "Outfit / Pose / Expression" }),
-        /* @__PURE__ */ u3("option", { value: "actor-outfit-pose-expression", children: "Actor / Outfit / Pose / Expression" })
-      ] }) }),
-      layout === "outfit-pose-expression" && profile && /* @__PURE__ */ u3(Field, { label: "Target actor", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: actorId, onChange: (event) => setActorId(event.currentTarget.value), children: profile.actors.map((actor) => /* @__PURE__ */ u3("option", { value: actor.id, children: actor.name })) }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-card", children: /* @__PURE__ */ u3("p", { class: "ls-section-note", children: "Shallower paths receive explicit Default outfit/pose levels. Unsafe paths, unsupported codecs, duplicates, oversized entries, and archive bombs are rejected before the profile is committed." }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-modal-actions", children: [
-        /* @__PURE__ */ u3(Button, { onClick: () => modal.dismiss(), children: "Cancel" }),
-        /* @__PURE__ */ u3(Button, { tone: "primary", disabled: !files.length || working, onClick: () => void run(), children: working ? "Importing\u2026" : "Import" })
-      ] })
-    ] });
-  }
-  R(/* @__PURE__ */ u3(ImportBody, {}), modal.root);
-  modal.onDismiss(() => R(null, modal.root));
-}
-function showQuickPicker(client) {
-  const modal = client.ctx.ui.showModal({ title: "LumiStage quick select", width: 520, maxHeight: 660 });
-  function Picker() {
-    const { backend } = useClientState(client);
-    const profiles = backend.stageProfiles;
-    const actors = profiles.flatMap((profile) => profile.actors.map((actor) => ({ profile, actor })));
-    const [actorId, setActorId] = d2(actors[0]?.actor.id ?? "");
-    const entry = actors.find((item) => item.actor.id === actorId) ?? actors[0];
-    const current = backend.snapshot?.actors[entry?.actor.id ?? ""];
-    const [outfitId, setOutfitId] = d2(current?.outfitId ?? entry?.actor.defaultOutfitId ?? entry?.actor.outfits[0]?.id ?? "");
-    const outfit = entry?.actor.outfits.find((item) => item.id === outfitId) ?? entry?.actor.outfits[0];
-    const [poseId, setPoseId] = d2(current?.poseId ?? outfit?.defaultPoseId ?? outfit?.poses[0]?.id ?? "");
-    const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0];
-    const [expressionId, setExpressionId] = d2(current?.expressionId ?? pose?.defaultExpressionId ?? pose?.expressions[0]?.id ?? "");
-    const [scope, setScope] = d2("locked");
-    h2(() => {
-      const nextOutfit = entry?.actor.outfits[0];
-      setOutfitId(current?.outfitId ?? nextOutfit?.id ?? "");
-      setPoseId(current?.poseId ?? nextOutfit?.poses[0]?.id ?? "");
-      setExpressionId(current?.expressionId ?? nextOutfit?.poses[0]?.expressions[0]?.id ?? "");
-    }, [actorId]);
-    async function apply() {
-      if (!entry) return;
-      const override = { actorId: entry.actor.id, outfitId, poseId, expressionId, scope, createdAt: Date.now() };
-      try {
-        await client.applyManual(override);
-        modal.dismiss();
-      } catch (error) {
-        client.notify("error", error instanceof Error ? error.message : "Could not apply state.");
-      }
-    }
-    return /* @__PURE__ */ u3("div", { class: "ls-modal-root", children: !actors.length ? /* @__PURE__ */ u3("div", { class: "ls-empty", children: /* @__PURE__ */ u3("div", { children: [
-      /* @__PURE__ */ u3("strong", { children: "No configured actors" }),
-      "Import media in Library first."
-    ] }) }) : /* @__PURE__ */ u3(S, { children: [
-      /* @__PURE__ */ u3(Field, { label: "Actor", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: entry?.actor.id, onChange: (event) => setActorId(event.currentTarget.value), children: actors.map((item) => /* @__PURE__ */ u3("option", { value: item.actor.id, children: item.actor.name })) }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-grid-2", children: [
-        /* @__PURE__ */ u3(Field, { label: "Outfit", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: outfit?.id, onChange: (event) => {
-          setOutfitId(event.currentTarget.value);
-          const next = entry?.actor.outfits.find((item) => item.id === event.currentTarget.value);
-          setPoseId(next?.defaultPoseId ?? next?.poses[0]?.id ?? "");
-          setExpressionId(next?.poses[0]?.defaultExpressionId ?? next?.poses[0]?.expressions[0]?.id ?? "");
-        }, children: entry?.actor.outfits.map((item) => /* @__PURE__ */ u3("option", { value: item.id, children: item.name })) }) }),
-        /* @__PURE__ */ u3(Field, { label: "Pose", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: pose?.id, onChange: (event) => {
-          setPoseId(event.currentTarget.value);
-          const next = outfit?.poses.find((item) => item.id === event.currentTarget.value);
-          setExpressionId(next?.defaultExpressionId ?? next?.expressions[0]?.id ?? "");
-        }, children: outfit?.poses.map((item) => /* @__PURE__ */ u3("option", { value: item.id, children: item.name })) }) })
-      ] }),
-      /* @__PURE__ */ u3(Field, { label: "Expression", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: expressionId, onChange: (event) => setExpressionId(event.currentTarget.value), children: pose?.expressions.map((item) => /* @__PURE__ */ u3("option", { value: item.id, children: item.name })) }) }),
-      /* @__PURE__ */ u3(Field, { label: "Override scope", children: /* @__PURE__ */ u3("select", { class: "ls-select", value: scope, onChange: (event) => setScope(event.currentTarget.value), children: [
-        /* @__PURE__ */ u3("option", { value: "locked", children: "Locked until cleared" }),
-        /* @__PURE__ */ u3("option", { value: "once", children: "Apply through the next detector pass" })
-      ] }) }),
-      current && /* @__PURE__ */ u3("div", { class: "ls-card", children: /* @__PURE__ */ u3("p", { class: "ls-section-note", children: [
-        "Current: ",
-        current.label
-      ] }) }),
-      /* @__PURE__ */ u3("div", { class: "ls-modal-actions", children: [
-        backend.timeline?.manualOverrides[entry?.actor.id ?? ""] && /* @__PURE__ */ u3(Button, { tone: "danger", onClick: () => void client.clearManual(entry.actor.id).then(() => modal.dismiss()), children: "Clear lock" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => modal.dismiss(), children: "Cancel" }),
-        /* @__PURE__ */ u3(Button, { tone: "primary", onClick: () => void apply(), children: "Set stage" })
-      ] })
-    ] }) });
-  }
-  R(/* @__PURE__ */ u3(Picker, {}), modal.root);
-  modal.onDismiss(() => R(null, modal.root));
-}
-function Studio({ client }) {
-  const state = useClientState(client);
-  const [view, setView] = d2("stage");
-  const [draft, setDraft] = d2(state.backend.profile);
-  const [dirty, setDirty] = d2(false);
-  const [selected, setSelected] = d2(/* @__PURE__ */ new Set());
-  const undoRef = A2([]);
-  const redoRef = A2([]);
-  const [, forceHistoryRender] = d2(0);
-  h2(() => {
-    if (!dirty || state.backend.profile?.revision !== draft?.revision) {
-      setDraft(state.backend.profile ? structuredClone(state.backend.profile) : null);
-      setDirty(false);
-      undoRef.current = [];
-      redoRef.current = [];
-      forceHistoryRender((value) => value + 1);
-    }
-  }, [state.backend.profile?.revision]);
-  function update(mutator) {
-    if (!draft) return;
-    const next = structuredClone(draft);
-    mutator(next);
-    undoRef.current.push(structuredClone(draft));
-    if (undoRef.current.length > 50) undoRef.current.shift();
-    redoRef.current = [];
-    next.updatedAt = Date.now();
-    setDraft(next);
-    setDirty(true);
-    forceHistoryRender((value) => value + 1);
-  }
-  function mutate(mutation) {
-    if (!draft) return;
-    undoRef.current.push(structuredClone(draft));
-    redoRef.current = [];
-    setDraft(applyBatchMutation(draft, mutation));
-    setDirty(true);
-    forceHistoryRender((value) => value + 1);
-  }
-  function undo() {
-    const previous = undoRef.current.pop();
-    if (!previous || !draft) return;
-    redoRef.current.push(structuredClone(draft));
-    setDraft(previous);
-    setDirty(true);
-    forceHistoryRender((value) => value + 1);
-  }
-  function redo() {
-    const next = redoRef.current.pop();
-    if (!next || !draft) return;
-    undoRef.current.push(structuredClone(draft));
-    setDraft(next);
-    setDirty(true);
-    forceHistoryRender((value) => value + 1);
-  }
-  async function save() {
-    if (!draft) return;
-    try {
-      await client.saveProfile(draft);
-      setDirty(false);
-      client.notify("success", "LumiStage library saved.");
-    } catch (error) {
-      client.notify("error", error instanceof Error ? error.message : "Save failed.");
-    }
-  }
-  const views = [
-    { id: "stage", label: "Live Stage" },
-    { id: "library", label: "Library" },
-    { id: "batch", label: "Batch Lab" },
-    { id: "automation", label: "Automation" },
-    { id: "appearance", label: "Appearance" },
-    { id: "diagnostics", label: "Diagnostics" }
-  ];
-  return /* @__PURE__ */ u3("div", { class: "ls-root", children: /* @__PURE__ */ u3("div", { class: "ls-shell", children: [
-    /* @__PURE__ */ u3("header", { class: "ls-mast", children: /* @__PURE__ */ u3("div", { class: "ls-brand", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-mark", children: STAGE_ICON }),
-      /* @__PURE__ */ u3("div", { class: "ls-brand-copy", children: [
-        /* @__PURE__ */ u3("p", { class: "ls-eyebrow", children: "Independent sprite direction" }),
-        /* @__PURE__ */ u3("h1", { class: "ls-title", children: "LumiStage" }),
-        /* @__PURE__ */ u3("p", { class: "ls-subtitle", children: "Layer outfits, poses, expressions, and ensemble cues without touching Lumiverse\u2019s built-in system." })
-      ] })
-    ] }) }),
-    /* @__PURE__ */ u3(Notice, { client }),
-    /* @__PURE__ */ u3("nav", { class: "ls-nav", "aria-label": "LumiStage studio", children: views.map((item) => /* @__PURE__ */ u3("button", { class: "ls-nav-btn", type: "button", "aria-selected": view === item.id, onClick: () => setView(item.id), children: item.label })) }),
-    /* @__PURE__ */ u3("main", { class: "ls-main", children: [
-      view === "stage" && /* @__PURE__ */ u3(LiveView, { client, openQuick: () => showQuickPicker(client) }),
-      view === "library" && /* @__PURE__ */ u3(LibraryView, { client, profile: draft, update, selected, setSelected, importMedia: () => openImportModal(client, draft) }),
-      view === "batch" && /* @__PURE__ */ u3(BatchView, { profile: draft, selected, setSelected, mutate, undo, redo, canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 }),
-      view === "automation" && /* @__PURE__ */ u3(AutomationView, { client }),
-      view === "appearance" && /* @__PURE__ */ u3(AppearanceView, { client }),
-      view === "diagnostics" && /* @__PURE__ */ u3(DiagnosticsView, { client, profile: draft })
-    ] }),
-    (dirty || view === "library" || view === "batch") && /* @__PURE__ */ u3("div", { class: "ls-selectbar", children: [
-      /* @__PURE__ */ u3("span", { class: "ls-badge", "data-tone": dirty ? "warning" : "success", children: dirty ? "Unsaved changes" : "Library saved" }),
-      /* @__PURE__ */ u3("span", { style: { flex: 1 } }),
-      /* @__PURE__ */ u3(Button, { onClick: () => {
-        setDraft(state.backend.profile ? structuredClone(state.backend.profile) : null);
-        setDirty(false);
-      }, disabled: !dirty, children: "Revert" }),
-      /* @__PURE__ */ u3(Button, { tone: "primary", onClick: () => void save(), disabled: !dirty || state.busy, children: "Save library" })
-    ] }),
-    /* @__PURE__ */ u3("footer", { class: "ls-footer", children: [
-      /* @__PURE__ */ u3("span", { children: state.backend.activeCharacterName ?? "No character selected" }),
-      /* @__PURE__ */ u3("span", { children: "v1.0.0" })
-    ] })
-  ] }) });
-}
-function useStableMedia(src, kind) {
-  const [displayed, setDisplayed] = d2(src);
-  h2(() => {
-    if (!src || src === displayed) return;
-    if (kind === "image") {
-      const image = new Image();
-      image.onload = () => setDisplayed(src);
-      image.src = src;
-      return () => {
-        image.onload = null;
-      };
-    }
-    const video = document.createElement("video");
-    video.muted = true;
-    video.oncanplay = () => setDisplayed(src);
-    video.src = src;
-    video.load();
-    return () => {
-      video.oncanplay = null;
-      video.src = "";
-    };
-  }, [src, kind, displayed]);
-  return displayed;
-}
-function StageSprite({ state, client }) {
-  const { backend } = useClientState(client);
-  const view = state.assetId ? backend.assetViews[state.assetId] : null;
-  const src = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
-  return /* @__PURE__ */ u3("div", { class: "ls-sprite", "data-focused": state.focused, "data-transition": backend.settings.appearance.transition, children: [
-    src && (view?.mediaKind === "video" ? /* @__PURE__ */ u3("video", { class: "ls-sprite-media", src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": state.label }, src) : /* @__PURE__ */ u3("img", { class: "ls-sprite-media", src, alt: state.label, draggable: false }, src)),
-    backend.settings.appearance.showCaptions && /* @__PURE__ */ u3("div", { class: "ls-sprite-caption", children: state.label })
-  ] });
-}
-function Stage(props) {
-  const { backend } = useClientState(props.client);
-  const appearance = props.client.effectiveAppearance();
-  const actors = Object.values(backend.snapshot?.actors ?? {}).filter((actor) => !!actor.assetId).sort((a3, b2) => Number(a3.focused) - Number(b2.focused));
-  const style = {
-    "--ls-stage-opacity": appearance.opacity,
-    "--ls-transition-ms": `${appearance.transitionMs}ms`,
-    "--ls-focused-scale": appearance.focusedScale,
-    "--ls-idle-opacity": appearance.idleOpacity,
-    "--ls-overlap": appearance.ensembleOverlap
-  };
-  const startResize = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startWidth = appearance.width;
-    const startHeight = appearance.height;
-    let width = startWidth;
-    let height = startHeight;
-    const move = (next) => {
-      width = Math.max(180, Math.min(1200, Math.round(startWidth + next.clientX - startX)));
-      height = Math.max(220, Math.min(1e3, Math.round(startHeight + next.clientY - startY)));
-      props.onResize(width, height, false);
-    };
-    const end = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", end);
-      window.removeEventListener("pointercancel", end);
-      props.onResize(width, height, true);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", end, { once: true });
-    window.addEventListener("pointercancel", end, { once: true });
-  };
-  return /* @__PURE__ */ u3("div", { class: "ls-stage-root", style, children: /* @__PURE__ */ u3("div", { class: "ls-stage", "data-chrome": appearance.showChrome, children: [
-    /* @__PURE__ */ u3("div", { class: "ls-stage-rig" }),
-    /* @__PURE__ */ u3("div", { class: "ls-stage-toolbar", children: [
-      /* @__PURE__ */ u3("span", { class: "ls-stage-title", children: backend.activeCharacterName ?? "LumiStage" }),
-      /* @__PURE__ */ u3("button", { type: "button", class: "ls-stage-btn", onClick: props.onQuick, title: "Quick select", "aria-label": "Quick select", children: "\u2726" }),
-      /* @__PURE__ */ u3("button", { type: "button", class: "ls-stage-btn", onClick: props.onFullscreen, title: "Toggle fullscreen", "aria-label": "Toggle fullscreen", children: "\u25A1" }),
-      /* @__PURE__ */ u3("button", { type: "button", class: "ls-stage-btn", onClick: props.onHide, title: "Hide stage", "aria-label": "Hide stage", children: "\xD7" })
-    ] }),
-    actors.length ? /* @__PURE__ */ u3("div", { class: "ls-stage-ensemble", children: actors.map((actor) => /* @__PURE__ */ u3(StageSprite, { state: actor, client: props.client }, actor.actorId)) }) : /* @__PURE__ */ u3("div", { class: "ls-stage-empty", children: [
-      "LumiStage is ready.",
-      /* @__PURE__ */ u3("br", {}),
-      "Import media or choose a state from the quick selector."
-    ] }),
-    /* @__PURE__ */ u3("button", { type: "button", class: "ls-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage" })
-  ] }) });
-}
-function CharacterSetup({ client, characterId, onOpenStudio }) {
-  const { backend } = useClientState(client);
-  const profile = backend.profile?.characterId === characterId ? backend.profile : null;
-  h2(() => client.send({ type: "character-editor", characterId }), [characterId]);
-  if (!profile) return /* @__PURE__ */ u3("div", { class: "ls-root", children: /* @__PURE__ */ u3("div", { class: "ls-main", children: /* @__PURE__ */ u3("div", { class: "ls-empty", children: /* @__PURE__ */ u3("div", { children: /* @__PURE__ */ u3("strong", { children: "Loading LumiStage profile\u2026" }) }) }) }) });
-  const assetCount = allAssets(profile).length;
-  return /* @__PURE__ */ u3("div", { class: "ls-root", children: /* @__PURE__ */ u3("div", { class: "ls-main ls-section", children: [
-    /* @__PURE__ */ u3(SectionHead, { title: "LumiStage Profile", note: "This independent profile never reads or writes the built-in expression configuration." }),
-    /* @__PURE__ */ u3("div", { class: "ls-stat-grid", children: [
-      /* @__PURE__ */ u3("div", { class: "ls-stat", children: [
-        /* @__PURE__ */ u3("strong", { children: profile.actors.length }),
-        /* @__PURE__ */ u3("span", { children: "Actors" })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-stat", children: [
-        /* @__PURE__ */ u3("strong", { children: profile.actors.reduce((sum, actor) => sum + actor.outfits.length, 0) }),
-        /* @__PURE__ */ u3("span", { children: "Outfits" })
-      ] }),
-      /* @__PURE__ */ u3("div", { class: "ls-stat", children: [
-        /* @__PURE__ */ u3("strong", { children: assetCount }),
-        /* @__PURE__ */ u3("span", { children: "Media" })
-      ] })
-    ] }),
-    /* @__PURE__ */ u3("div", { class: "ls-card", children: [
-      /* @__PURE__ */ u3("p", { class: "ls-section-note", children: "Use the full LumiStage drawer for hierarchical editing, batch operations, archive transfer, detector settings, and diagnostics." }),
-      /* @__PURE__ */ u3("div", { class: "ls-toolbar", style: { marginTop: 9 }, children: [
-        /* @__PURE__ */ u3(Button, { tone: "primary", onClick: onOpenStudio, children: "Open LumiStage" }),
-        /* @__PURE__ */ u3(Button, { onClick: () => openImportModal(client, profile), children: "Import media" })
-      ] })
-    ] })
-  ] }) });
-}
-
 // node_modules/fflate/esm/browser.js
 var u8 = Uint8Array;
 var u16 = Uint16Array;
@@ -5429,6 +4067,261 @@ var Upload = /* @__PURE__ */ (function(_BaseUpload) {
 })(upload_default);
 var isSupported = typeof XMLHttpRequest === "function" && typeof Blob === "function" && typeof Blob.prototype.slice === "function";
 
+// src/ids.ts
+function createId(prefix) {
+  const uuid2 = globalThis.crypto?.randomUUID?.();
+  if (uuid2) return `${prefix}_${uuid2}`;
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  const fallback = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${prefix}_${fallback || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+}
+function cleanName(value, fallback = "Default") {
+  const cleaned = value.normalize("NFKC").replace(/\.[a-z0-9]{2,5}$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
+}
+function normalizedKey(value) {
+  return cleanName(value, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// src/types.ts
+var SCHEMA_VERSION = 1;
+var DEFAULT_SETTINGS = {
+  schemaVersion: SCHEMA_VERSION,
+  revision: 0,
+  detection: {
+    enabled: true,
+    connectionId: null,
+    model: null,
+    contextMessages: 5,
+    temperature: 0.1,
+    stateConfidence: 0.6,
+    outfitConfidence: 0.85
+  },
+  appearance: {
+    transition: "crossfade",
+    transitionMs: 280,
+    opacity: 1,
+    focusedScale: 1.035,
+    idleOpacity: 0.46,
+    showCaptions: true,
+    showChrome: true,
+    ensembleOverlap: 0.34,
+    width: 320,
+    height: 420,
+    x: -1,
+    y: -1,
+    fullscreen: false,
+    visible: true
+  },
+  preloadAdjacent: 3,
+  updatedAt: 0
+};
+
+// src/model.ts
+function defaultSettings(now = Date.now()) {
+  return structuredClone({ ...DEFAULT_SETTINGS, updatedAt: now });
+}
+function createExpression(name = "Neutral", now = Date.now()) {
+  return {
+    id: createId("expression"),
+    name: cleanName(name, "Neutral"),
+    aliases: [],
+    cues: [],
+    tags: [],
+    enabled: true,
+    priority: 0,
+    order: 0,
+    assets: []
+  };
+}
+function createPose(name = "Default", now = Date.now()) {
+  const expression = createExpression("Neutral", now);
+  return {
+    id: createId("pose"),
+    name: cleanName(name),
+    aliases: [],
+    cues: [],
+    tags: [],
+    enabled: true,
+    priority: 0,
+    order: 0,
+    defaultExpressionId: expression.id,
+    expressions: [expression]
+  };
+}
+function createOutfit(name = "Default", now = Date.now()) {
+  const pose = createPose("Default", now);
+  return {
+    id: createId("outfit"),
+    name: cleanName(name),
+    aliases: [],
+    cues: [],
+    tags: [],
+    enabled: true,
+    priority: 0,
+    order: 0,
+    allowAutoSwitch: true,
+    defaultPoseId: pose.id,
+    poses: [pose]
+  };
+}
+function createActor(name, now = Date.now()) {
+  const outfit = createOutfit("Default", now);
+  return {
+    id: createId("actor"),
+    name: cleanName(name, "Actor"),
+    aliases: [],
+    enabled: true,
+    order: 0,
+    defaultOutfitId: outfit.id,
+    outfits: [outfit]
+  };
+}
+function createProfile(characterId, characterName = "Character", now = Date.now()) {
+  const actor = createActor(characterName, now);
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    revision: 0,
+    characterId,
+    characterName: cleanName(characterName, "Character"),
+    defaultActorId: actor.id,
+    actors: [actor],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+function emptySnapshot(chatId, now = Date.now()) {
+  return { schemaVersion: SCHEMA_VERSION, chatId, revision: 0, actors: {}, focusedActorIds: [], updatedAt: now };
+}
+function createTimeline(chatId, now = Date.now()) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    revision: 0,
+    chatId,
+    decisions: [],
+    manualOverrides: {},
+    layoutOverride: null,
+    snapshot: emptySnapshot(chatId, now),
+    updatedAt: now
+  };
+}
+function allAssets(profile) {
+  return profile.actors.flatMap(
+    (actor) => actor.outfits.flatMap(
+      (outfit) => outfit.poses.flatMap((pose) => pose.expressions.flatMap((expression) => expression.assets))
+    )
+  );
+}
+function allExpressions(profile) {
+  return profile.actors.flatMap(
+    (actor) => actor.outfits.flatMap((outfit) => outfit.poses.flatMap((pose) => pose.expressions))
+  );
+}
+function mutateExpressions(profile, ids, mutate) {
+  return {
+    ...profile,
+    actors: profile.actors.map((actor) => ({
+      ...actor,
+      outfits: actor.outfits.map((outfit) => ({
+        ...outfit,
+        poses: outfit.poses.map((pose) => ({
+          ...pose,
+          expressions: pose.expressions.map((expression) => ids.has(expression.id) ? mutate(expression) : expression)
+        }))
+      }))
+    }))
+  };
+}
+function applyBatchMutation(profile, mutation, now = Date.now()) {
+  let next = structuredClone(profile);
+  if (mutation.type === "set-enabled" || mutation.type === "set-priority" || mutation.type === "delete") {
+    const ids = new Set(mutation.assetIds);
+    for (const actor of next.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
+      for (const expression of pose.expressions) {
+        if (mutation.type === "delete") expression.assets = expression.assets.filter((asset) => !ids.has(asset.id));
+        else expression.assets = expression.assets.map((asset) => {
+          if (!ids.has(asset.id)) return asset;
+          return mutation.type === "set-enabled" ? { ...asset, enabled: mutation.enabled } : { ...asset, priority: mutation.priority };
+        });
+      }
+    }
+  } else if (mutation.type === "add-tags" || mutation.type === "add-aliases") {
+    const ids = new Set(mutation.expressionIds);
+    next = mutateExpressions(next, ids, (expression) => mutation.type === "add-tags" ? {
+      ...expression,
+      tags: [.../* @__PURE__ */ new Set([...expression.tags, ...mutation.tags.map((tag) => tag.trim()).filter(Boolean)])]
+    } : {
+      ...expression,
+      aliases: [.../* @__PURE__ */ new Set([...expression.aliases, ...mutation.aliases.map((alias) => alias.trim()).filter(Boolean)])]
+    });
+  } else if (mutation.type === "rename") {
+    const ids = new Set(mutation.expressionIds);
+    if (!mutation.find) return profile;
+    next = mutateExpressions(next, ids, (expression) => ({
+      ...expression,
+      name: cleanName(expression.name.split(mutation.find).join(mutation.replace), expression.name)
+    }));
+  } else if (mutation.type === "move") {
+    const assetIds = new Set(mutation.assetIds);
+    const moving = [];
+    for (const expression of allExpressions(next)) {
+      const assets = expression.assets.filter((asset) => assetIds.has(asset.id));
+      if (assets.length) moving.push({ expression, assets });
+    }
+    for (const expression of allExpressions(next)) {
+      expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
+    }
+    for (const actor of next.actors) {
+      const outfit = actor.outfits.find((item) => item.id === mutation.outfitId);
+      const pose = outfit?.poses.find((item) => item.id === mutation.poseId);
+      if (pose) {
+        for (const item of moving) {
+          const match = pose.expressions.find((expression) => normalizedKey(expression.name) === normalizedKey(item.expression.name));
+          if (match) match.assets.push(...item.assets);
+          else pose.expressions.push({
+            ...structuredClone(item.expression),
+            id: createId("expression"),
+            assets: item.assets,
+            order: pose.expressions.length
+          });
+        }
+      }
+    }
+  } else if (mutation.type === "duplicate") {
+    const ids = new Set(mutation.assetIds);
+    for (const expression of allExpressions(next)) {
+      const copies = expression.assets.filter((asset) => ids.has(asset.id)).map((asset) => ({
+        ...asset,
+        id: createId("asset"),
+        fileName: asset.fileName.replace(/(\.[^.]+)?$/, " copy$1"),
+        createdAt: now
+      }));
+      expression.assets.push(...copies);
+    }
+  }
+  next.revision += 1;
+  next.updatedAt = now;
+  return next;
+}
+function inspectProfile(profile) {
+  const issues = [];
+  const hashes = /* @__PURE__ */ new Map();
+  for (const actor of profile.actors) {
+    if (!actor.outfits.some((item) => item.enabled)) issues.push({ severity: "error", code: "actor-no-outfit", message: `${actor.name} has no enabled outfit.` });
+    const aliases = actor.aliases.map(normalizedKey);
+    if (new Set(aliases).size !== aliases.length) issues.push({ severity: "warning", code: "duplicate-alias", message: `${actor.name} contains duplicate aliases.` });
+    for (const outfit of actor.outfits) for (const pose of outfit.poses) for (const expression of pose.expressions) {
+      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${pose.name} / ${expression.name} has no media.` });
+      for (const asset of expression.assets) hashes.set(asset.contentHash, (hashes.get(asset.contentHash) ?? 0) + 1);
+    }
+  }
+  for (const [hash, count] of hashes) if (count > 1) {
+    issues.push({ severity: "warning", code: "duplicate-content", message: `${count} media references share hash ${hash.slice(0, 10)}\u2026` });
+  }
+  return issues;
+}
+
 // src/ui/client.ts
 var EMPTY_BACKEND = {
   settings: defaultSettings(0),
@@ -5706,10 +4599,10 @@ var LumiStageClient = class {
       const entries = {
         "manifest.json": strToU8(JSON.stringify(archive, null, 2))
       };
-      const paths = Object.keys(urls);
-      for (let index = 0; index < paths.length; index += 1) {
-        const path = paths[index];
-        this.emit({ progress: { completed: index, total: paths.length, message: `Collecting ${path}\u2026` } });
+      const paths2 = Object.keys(urls);
+      for (let index = 0; index < paths2.length; index += 1) {
+        const path = paths2[index];
+        this.emit({ progress: { completed: index, total: paths2.length, message: `Collecting ${path}\u2026` } });
         const response = await fetch(urls[path], { credentials: "include" });
         if (!response.ok) throw new Error(`Could not export ${path}.`);
         entries[path] = new Uint8Array(await response.arrayBuffer());
@@ -5740,306 +4633,2092 @@ var LumiStageClient = class {
   }
 };
 
+// node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
+var f2 = 0;
+function u2(e3, t3, n2, o3, i3, u4) {
+  t3 || (t3 = {});
+  var a3, c3, p3 = t3;
+  if ("ref" in p3) for (c3 in p3 = {}, t3) "ref" == c3 ? a3 = t3[c3] : p3[c3] = t3[c3];
+  var l3 = { type: e3, props: p3, key: n2, ref: a3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f2, __i: -1, __u: 0, __source: i3, __self: u4 };
+  if ("function" == typeof e3 && (a3 = e3.defaultProps)) for (c3 in a3) void 0 === p3[c3] && (p3[c3] = a3[c3]);
+  return l.vnode && l.vnode(l3), l3;
+}
+
+// src/ui/icons.tsx
+var paths = {
+  aperture: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "8.5" }),
+    /* @__PURE__ */ u2("path", { d: "M8.7 4.2 13 11.7m6.8-3.1-8.6.1m4.1 11.1L11 12.3m-6.8 3.1 8.6-.1" })
+  ] }),
+  stage: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M4 4h16M6 4v5m12-5v5M5 20h14" }),
+    /* @__PURE__ */ u2("path", { d: "M8 8.5c1.4 1 2.7 1.5 4 1.5s2.6-.5 4-1.5V18H8z" })
+  ] }),
+  library: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M4 5.5h6l1.6 2H20v11H4z" }),
+    /* @__PURE__ */ u2("path", { d: "M4 8h16" })
+  ] }),
+  batch: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("rect", { x: "4", y: "4", width: "6", height: "6", rx: "1" }),
+    /* @__PURE__ */ u2("rect", { x: "14", y: "4", width: "6", height: "6", rx: "1" }),
+    /* @__PURE__ */ u2("rect", { x: "4", y: "14", width: "6", height: "6", rx: "1" }),
+    /* @__PURE__ */ u2("path", { d: "M17 14v6m-3-3h6" })
+  ] }),
+  automation: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1" }),
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "3.4" })
+  ] }),
+  appearance: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.7 1.8-1.5 0-.5-.2-.9-.2-1.4 0-.8.6-1.4 1.4-1.4h1.8c2.3 0 4.2-1.9 4.2-4.2C21 7.3 17 3 12 3Z" }),
+    /* @__PURE__ */ u2("circle", { cx: "7.5", cy: "11", r: ".8" }),
+    /* @__PURE__ */ u2("circle", { cx: "10", cy: "7.4", r: ".8" }),
+    /* @__PURE__ */ u2("circle", { cx: "14.4", cy: "7", r: ".8" }),
+    /* @__PURE__ */ u2("circle", { cx: "17.4", cy: "10.2", r: ".8" })
+  ] }),
+  diagnostics: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M5 19V9m5 10V5m5 14v-7m4 7V3" }),
+    /* @__PURE__ */ u2("path", { d: "M3 21h18" })
+  ] }),
+  search: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "10.5", cy: "10.5", r: "6.5" }),
+    /* @__PURE__ */ u2("path", { d: "m15.5 15.5 5 5" })
+  ] }),
+  plus: /* @__PURE__ */ u2("path", { d: "M12 5v14M5 12h14" }),
+  upload: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M12 16V4m-4 4 4-4 4 4" }),
+    /* @__PURE__ */ u2("path", { d: "M4 15v5h16v-5" })
+  ] }),
+  sparkles: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2z" }),
+    /* @__PURE__ */ u2("path", { d: "m18 14 .7 2.3L21 17l-2.3.7L18 20l-.7-2.3L15 17l2.3-.7zM5 13l.6 1.8 1.9.7-1.9.6L5 18l-.6-1.9-1.9-.6 1.9-.7z" })
+  ] }),
+  play: /* @__PURE__ */ u2("path", { d: "m8 5 11 7-11 7z" }),
+  lock: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("rect", { x: "5", y: "10", width: "14", height: "11", rx: "2" }),
+    /* @__PURE__ */ u2("path", { d: "M8 10V7a4 4 0 0 1 8 0v3" })
+  ] }),
+  unlock: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("rect", { x: "5", y: "10", width: "14", height: "11", rx: "2" }),
+    /* @__PURE__ */ u2("path", { d: "M8 10V7a4 4 0 0 1 7.4-2.1" })
+  ] }),
+  check: /* @__PURE__ */ u2("path", { d: "m5 12 4 4L19 6" }),
+  close: /* @__PURE__ */ u2("path", { d: "M6 6l12 12M18 6 6 18" }),
+  expand: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M9 4H4v5m11-5h5v5M9 20H4v-5m11 5h5v-5" }),
+    /* @__PURE__ */ u2("path", { d: "m4 9 5-5m6 0 5 5M4 15l5 5m6 0 5-5" })
+  ] }),
+  eye: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" }),
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "2.5" })
+  ] }),
+  eyeOff: /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("path", { d: "m3 3 18 18M10.5 6.2A10.5 10.5 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.3 3.1M6.3 6.3C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8" }) }),
+  undo: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M9 7 4 12l5 5" }),
+    /* @__PURE__ */ u2("path", { d: "M5 12h8a6 6 0 0 1 6 6" })
+  ] }),
+  redo: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "m15 7 5 5-5 5" }),
+    /* @__PURE__ */ u2("path", { d: "M19 12h-8a6 6 0 0 0-6 6" })
+  ] }),
+  copy: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("rect", { x: "8", y: "8", width: "12", height: "12", rx: "2" }),
+    /* @__PURE__ */ u2("path", { d: "M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" })
+  ] }),
+  trash: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7" }),
+    /* @__PURE__ */ u2("path", { d: "M10 11v6m4-6v6" })
+  ] }),
+  move: /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("path", { d: "M12 3v18m0-18-3 3m3-3 3 3m-3 15-3-3m3 3 3-3M3 12h18M3 12l3-3m-3 3 3 3m15-3-3-3m3 3-3 3" }) }),
+  tag: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M20 13 13 20l-9-9V4h7z" }),
+    /* @__PURE__ */ u2("circle", { cx: "8", cy: "8", r: "1" })
+  ] }),
+  settings: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "3" }),
+    /* @__PURE__ */ u2("path", { d: "M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" })
+  ] }),
+  chevronLeft: /* @__PURE__ */ u2("path", { d: "m15 18-6-6 6-6" }),
+  chevronRight: /* @__PURE__ */ u2("path", { d: "m9 18 6-6-6-6" }),
+  chevronDown: /* @__PURE__ */ u2("path", { d: "m6 9 6 6 6-6" }),
+  image: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }),
+    /* @__PURE__ */ u2("circle", { cx: "8.5", cy: "9", r: "1.5" }),
+    /* @__PURE__ */ u2("path", { d: "m4 17 5-5 4 4 2-2 5 4" })
+  ] }),
+  actors: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "9", cy: "8", r: "3" }),
+    /* @__PURE__ */ u2("path", { d: "M3.5 20a5.5 5.5 0 0 1 11 0" }),
+    /* @__PURE__ */ u2("circle", { cx: "17", cy: "9", r: "2.3" }),
+    /* @__PURE__ */ u2("path", { d: "M15 15a4.5 4.5 0 0 1 5.5 4.4" })
+  ] }),
+  outfit: /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("path", { d: "M8 4 5 7l3 3v10h8V10l3-3-3-3c-.8 1.3-2.1 2-4 2S8.8 5.3 8 4Z" }) }),
+  pose: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "5", r: "2" }),
+    /* @__PURE__ */ u2("path", { d: "m8 21 2-7-3-3m9 10-2-7 3-3M7 11l5-3 5 3M12 8v6" })
+  ] }),
+  expression: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "9" }),
+    /* @__PURE__ */ u2("path", { d: "M8.5 10h.1m6.8 0h.1M8 15c1.2 1.3 2.5 2 4 2s2.8-.7 4-2" })
+  ] }),
+  download: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M12 4v12m-4-4 4 4 4-4" }),
+    /* @__PURE__ */ u2("path", { d: "M4 19h16" })
+  ] }),
+  refresh: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M20 7v5h-5" }),
+    /* @__PURE__ */ u2("path", { d: "M19 12a7 7 0 1 0-1.6 4.5" })
+  ] }),
+  menu: /* @__PURE__ */ u2("path", { d: "M5 7h14M5 12h14M5 17h14" }),
+  info: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "9" }),
+    /* @__PURE__ */ u2("path", { d: "M12 11v6m0-10h.01" })
+  ] }),
+  warning: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "m12 3 10 18H2z" }),
+    /* @__PURE__ */ u2("path", { d: "M12 9v5m0 3h.01" })
+  ] }),
+  success: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "9" }),
+    /* @__PURE__ */ u2("path", { d: "m8 12 3 3 5-6" })
+  ] })
+};
+function Icon({ name, size = 18, class: className }) {
+  return /* @__PURE__ */ u2("svg", { class: className, width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", children: paths[name] });
+}
+var LUMI_STAGE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16M6 4v5m12-5v5M5 20h14"/><path d="M8 8.5c1.4 1 2.7 1.5 4 1.5s2.6-.5 4-1.5V18H8z"/></svg>`;
+
+// node_modules/preact/hooks/dist/hooks.module.js
+var t2;
+var r2;
+var u3;
+var i2;
+var o2 = 0;
+var f3 = [];
+var c2 = l;
+var e2 = c2.__b;
+var a2 = c2.__r;
+var v2 = c2.diffed;
+var l2 = c2.__c;
+var m2 = c2.unmount;
+var p2 = c2.__;
+function s2(n2, t3) {
+  c2.__h && c2.__h(r2, n2, o2 || t3), o2 = 0;
+  var u4 = r2.__H || (r2.__H = { __: [], __h: [] });
+  return n2 >= u4.__.length && u4.__.push({}), u4.__[n2];
+}
+function d2(n2) {
+  return o2 = 1, y2(D2, n2);
+}
+function y2(n2, u4, i3) {
+  var o3 = s2(t2++, 2);
+  if (o3.t = n2, !o3.__c && (o3.__ = [i3 ? i3(u4) : D2(void 0, u4), function(n3) {
+    var t3 = o3.__N ? o3.__N[0] : o3.__[0], r3 = o3.t(t3, n3);
+    t3 !== r3 && (o3.__N = [r3, o3.__[1]], o3.__c.setState({}));
+  }], o3.__c = r2, !r2.__f)) {
+    var f4 = function(n3, t3, r3) {
+      if (!o3.__c.__H) return true;
+      var u5 = false, i4 = o3.__c.props !== n3;
+      if (o3.__c.__H.__.some(function(n4) {
+        if (n4.__N) {
+          u5 = true;
+          var t4 = n4.__[0];
+          n4.__ = n4.__N, n4.__N = void 0, t4 !== n4.__[0] && (i4 = true);
+        }
+      }), c3) {
+        var f5 = c3.call(this, n3, t3, r3);
+        return u5 ? f5 || i4 : f5;
+      }
+      return !u5 || i4;
+    };
+    r2.__f = true;
+    var c3 = r2.shouldComponentUpdate, e3 = r2.componentWillUpdate;
+    r2.componentWillUpdate = function(n3, t3, r3) {
+      if (this.__e) {
+        var u5 = c3;
+        c3 = void 0, f4(n3, t3, r3), c3 = u5;
+      }
+      e3 && e3.call(this, n3, t3, r3);
+    }, r2.shouldComponentUpdate = f4;
+  }
+  return o3.__N || o3.__;
+}
+function h2(n2, u4) {
+  var i3 = s2(t2++, 3);
+  !c2.__s && C2(i3.__H, u4) && (i3.__ = n2, i3.u = u4, r2.__H.__h.push(i3));
+}
+function A2(n2) {
+  return o2 = 5, T2(function() {
+    return { current: n2 };
+  }, []);
+}
+function T2(n2, r3) {
+  var u4 = s2(t2++, 7);
+  return C2(u4.__H, r3) && (u4.__ = n2(), u4.__H = r3, u4.__h = n2), u4.__;
+}
+function j2() {
+  for (var n2; n2 = f3.shift(); ) {
+    var t3 = n2.__H;
+    if (n2.__P && t3) try {
+      t3.__h.some(z2), t3.__h.some(B2), t3.__h = [];
+    } catch (r3) {
+      t3.__h = [], c2.__e(r3, n2.__v);
+    }
+  }
+}
+c2.__b = function(n2) {
+  r2 = null, e2 && e2(n2);
+}, c2.__ = function(n2, t3) {
+  n2 && t3.__k && t3.__k.__m && (n2.__m = t3.__k.__m), p2 && p2(n2, t3);
+}, c2.__r = function(n2) {
+  a2 && a2(n2), t2 = 0;
+  var i3 = (r2 = n2.__c).__H;
+  i3 && (u3 === r2 ? (i3.__h = [], r2.__h = [], i3.__.some(function(n3) {
+    n3.__N && (n3.__ = n3.__N), n3.u = n3.__N = void 0;
+  })) : (i3.__h.some(z2), i3.__h.some(B2), i3.__h = [], t2 = 0)), u3 = r2;
+}, c2.diffed = function(n2) {
+  v2 && v2(n2);
+  var t3 = n2.__c;
+  t3 && t3.__H && (t3.__H.__h.length && (1 !== f3.push(t3) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t3.__H.__.some(function(n3) {
+    n3.u && (n3.__H = n3.u, n3.u = void 0);
+  })), u3 = r2 = null;
+}, c2.__c = function(n2, t3) {
+  t3.some(function(n3) {
+    try {
+      n3.__h.some(z2), n3.__h = n3.__h.filter(function(n4) {
+        return !n4.__ || B2(n4);
+      });
+    } catch (r3) {
+      t3.some(function(n4) {
+        n4.__h && (n4.__h = []);
+      }), t3 = [], c2.__e(r3, n3.__v);
+    }
+  }), l2 && l2(n2, t3);
+}, c2.unmount = function(n2) {
+  m2 && m2(n2);
+  var t3, r3 = n2.__c;
+  r3 && r3.__H && (r3.__H.__.some(function(n3) {
+    try {
+      z2(n3);
+    } catch (n4) {
+      t3 = n4;
+    }
+  }), r3.__H = void 0, t3 && c2.__e(t3, r3.__v));
+};
+var k2 = "function" == typeof requestAnimationFrame;
+function w2(n2) {
+  var t3, r3 = function() {
+    clearTimeout(u4), k2 && cancelAnimationFrame(t3), setTimeout(n2);
+  }, u4 = setTimeout(r3, 35);
+  k2 && (t3 = requestAnimationFrame(r3));
+}
+function z2(n2) {
+  var t3 = r2, u4 = n2.__c;
+  "function" == typeof u4 && (n2.__c = void 0, u4()), r2 = t3;
+}
+function B2(n2) {
+  var t3 = r2;
+  n2.__c = n2.__(), r2 = t3;
+}
+function C2(n2, t3) {
+  return !n2 || n2.length !== t3.length || t3.some(function(t4, r3) {
+    return t4 !== n2[r3];
+  });
+}
+function D2(n2, t3) {
+  return "function" == typeof t3 ? t3(n2) : t3;
+}
+
+// src/ui/media.tsx
+function Media(props) {
+  if (!props.src) {
+    return /* @__PURE__ */ u2("div", { class: `ls2-media-fallback ${props.class ?? ""}`, children: [
+      /* @__PURE__ */ u2(Icon, { name: "image", size: 22 }),
+      /* @__PURE__ */ u2("span", { children: "Media unavailable" })
+    ] });
+  }
+  if (props.kind === "video") {
+    return /* @__PURE__ */ u2("video", { class: props.class, "data-fit": props.contain ? "contain" : "cover", src: props.src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": props.label });
+  }
+  return /* @__PURE__ */ u2("img", { class: props.class, "data-fit": props.contain ? "contain" : "cover", src: props.src, alt: props.label, loading: "lazy", draggable: false });
+}
+function useStableMedia(src, kind) {
+  const [displayed, setDisplayed] = d2(src);
+  h2(() => {
+    if (!src || src === displayed) return;
+    if (kind === "image") {
+      const image = new Image();
+      image.onload = () => setDisplayed(src);
+      image.src = src;
+      return () => {
+        image.onload = null;
+      };
+    }
+    const video = document.createElement("video");
+    video.muted = true;
+    video.oncanplay = () => setDisplayed(src);
+    video.src = src;
+    video.load();
+    return () => {
+      video.oncanplay = null;
+      video.src = "";
+    };
+  }, [src, kind, displayed]);
+  return displayed;
+}
+
+// src/ui/primitives.tsx
+function useClientState(client) {
+  const [state, setState] = d2(() => client.getSnapshot());
+  h2(() => client.subscribe(() => setState(client.getSnapshot())), [client]);
+  return state;
+}
+function Button(props) {
+  return /* @__PURE__ */ u2(
+    "button",
+    {
+      type: props.type ?? "button",
+      class: `ls2-button ls2-button-${props.variant ?? "default"} ls2-button-${props.size ?? "default"} ${props.class ?? ""}`,
+      onClick: props.onClick,
+      disabled: props.disabled,
+      title: props.title,
+      children: [
+        props.icon && /* @__PURE__ */ u2(Icon, { name: props.icon, size: props.size === "small" ? 14 : 16 }),
+        /* @__PURE__ */ u2("span", { children: props.children })
+      ]
+    }
+  );
+}
+function IconButton(props) {
+  return /* @__PURE__ */ u2(
+    "button",
+    {
+      type: "button",
+      class: "ls2-icon-button",
+      "data-active": props.active,
+      "data-danger": props.danger,
+      onClick: props.onClick,
+      disabled: props.disabled,
+      "aria-label": props.label,
+      title: props.label,
+      children: /* @__PURE__ */ u2(Icon, { name: props.icon, size: 17 })
+    }
+  );
+}
+function Surface(props) {
+  return /* @__PURE__ */ u2("section", { class: `ls2-surface ${props.class ?? ""}`, "data-tone": props.tone ?? "default", "data-padding": props.padding ?? "default", children: props.children });
+}
+function Field(props) {
+  return /* @__PURE__ */ u2("label", { class: `ls2-field ${props.class ?? ""}`, children: [
+    /* @__PURE__ */ u2("span", { class: "ls2-field-label", children: props.label }),
+    props.children,
+    props.hint && /* @__PURE__ */ u2("span", { class: "ls2-field-hint", children: props.hint })
+  ] });
+}
+function Toggle(props) {
+  return /* @__PURE__ */ u2("label", { class: "ls2-toggle-row", "data-disabled": props.disabled, children: [
+    /* @__PURE__ */ u2("span", { class: "ls2-toggle-copy", children: [
+      /* @__PURE__ */ u2("strong", { children: props.label }),
+      props.hint && /* @__PURE__ */ u2("small", { children: props.hint })
+    ] }),
+    /* @__PURE__ */ u2("input", { type: "checkbox", checked: props.checked, disabled: props.disabled, onChange: (event) => props.onChange(event.currentTarget.checked) }),
+    /* @__PURE__ */ u2("span", { class: "ls2-toggle-track", "aria-hidden": "true", children: /* @__PURE__ */ u2("span", {}) })
+  ] });
+}
+function Status({ tone = "neutral", children }) {
+  return /* @__PURE__ */ u2("span", { class: "ls2-status", "data-tone": tone, children: [
+    /* @__PURE__ */ u2("span", { class: "ls2-status-dot" }),
+    children
+  ] });
+}
+function ViewHeader(props) {
+  return /* @__PURE__ */ u2("header", { class: "ls2-view-header", children: [
+    /* @__PURE__ */ u2("div", { class: "ls2-view-heading", children: [
+      props.eyebrow && /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: props.eyebrow }),
+      /* @__PURE__ */ u2("h2", { children: props.title }),
+      /* @__PURE__ */ u2("p", { children: props.description })
+    ] }),
+    props.actions && /* @__PURE__ */ u2("div", { class: "ls2-view-actions", children: props.actions })
+  ] });
+}
+function SectionTitle(props) {
+  return /* @__PURE__ */ u2("div", { class: "ls2-section-title", children: [
+    /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2("h3", { children: props.title }),
+      props.description && /* @__PURE__ */ u2("p", { children: props.description })
+    ] }),
+    props.trailing && /* @__PURE__ */ u2("div", { class: "ls2-section-trailing", children: props.trailing })
+  ] });
+}
+function EmptyState(props) {
+  return /* @__PURE__ */ u2("div", { class: "ls2-empty", children: [
+    /* @__PURE__ */ u2("div", { class: "ls2-empty-icon", children: /* @__PURE__ */ u2(Icon, { name: props.icon, size: 24 }) }),
+    /* @__PURE__ */ u2("strong", { children: props.title }),
+    /* @__PURE__ */ u2("p", { children: props.description }),
+    props.action && /* @__PURE__ */ u2("div", { class: "ls2-empty-action", children: props.action })
+  ] });
+}
+function InlineNotice({ tone = "accent", children }) {
+  return /* @__PURE__ */ u2("div", { class: "ls2-notice", "data-tone": tone, role: "status", children: [
+    /* @__PURE__ */ u2(Icon, { name: tone === "warning" || tone === "danger" ? "warning" : tone === "success" ? "success" : "info", size: 16 }),
+    /* @__PURE__ */ u2("div", { children })
+  ] });
+}
+function ProgressNotice({ client }) {
+  const { notice, progress } = useClientState(client);
+  if (!notice && !progress) return null;
+  return /* @__PURE__ */ u2("div", { class: "ls2-global-notice", "data-tone": notice?.tone ?? "info", role: "status", children: [
+    /* @__PURE__ */ u2("div", { class: "ls2-global-notice-copy", children: notice?.message ?? progress?.message }),
+    progress && progress.total > 0 && /* @__PURE__ */ u2("div", { class: "ls2-progress", children: /* @__PURE__ */ u2("span", { style: { width: `${Math.min(100, progress.completed / progress.total * 100)}%` } }) })
+  ] });
+}
+function Segmented(props) {
+  return /* @__PURE__ */ u2("div", { class: "ls2-segmented", role: "radiogroup", "aria-label": props.label, children: props.options.map((option) => /* @__PURE__ */ u2("button", { type: "button", role: "radio", "aria-checked": props.value === option.value, "data-active": props.value === option.value, onClick: () => props.onChange(option.value), children: [
+    option.icon && /* @__PURE__ */ u2(Icon, { name: option.icon, size: 14 }),
+    /* @__PURE__ */ u2("span", { children: option.label })
+  ] })) });
+}
+function Toolbar({ children, class: className }) {
+  return /* @__PURE__ */ u2("div", { class: `ls2-toolbar ${className ?? ""}`, children });
+}
+function SearchInput(props) {
+  return /* @__PURE__ */ u2("label", { class: "ls2-search", children: [
+    /* @__PURE__ */ u2(Icon, { name: "search", size: 16 }),
+    /* @__PURE__ */ u2("input", { value: props.value, onInput: (event) => props.onInput(event.currentTarget.value), placeholder: props.placeholder, "aria-label": props.label ?? props.placeholder }),
+    props.value && /* @__PURE__ */ u2("button", { type: "button", onClick: () => props.onInput(""), "aria-label": "Clear search", children: /* @__PURE__ */ u2(Icon, { name: "close", size: 14 }) })
+  ] });
+}
+
+// src/ui/modals.tsx
+function cleanList(value) {
+  return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
+}
+function showTextPrompt(client, options, onSubmit) {
+  const modal = client.ctx.ui.showModal({ title: options.title, width: 460, maxHeight: 430 });
+  function Prompt() {
+    const [value, setValue] = d2(options.initial ?? "");
+    const [busy, setBusy] = d2(false);
+    async function submit(event) {
+      event.preventDefault();
+      if (!value.trim() || busy) return;
+      setBusy(true);
+      try {
+        await onSubmit(value.trim());
+        modal.dismiss();
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Could not save.");
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ u2("form", { class: "ls2-modal", onSubmit: submit, children: [
+      /* @__PURE__ */ u2(Field, { label: options.label, children: /* @__PURE__ */ u2("input", { class: "ls2-input", autoFocus: true, value, placeholder: options.placeholder, onInput: (event) => setValue(event.currentTarget.value) }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-modal-actions", children: [
+        /* @__PURE__ */ u2(Button, { variant: "ghost", onClick: () => modal.dismiss(), children: "Cancel" }),
+        /* @__PURE__ */ u2(Button, { type: "submit", variant: "primary", disabled: !value.trim() || busy, children: options.submitLabel ?? "Create" })
+      ] })
+    ] });
+  }
+  R(/* @__PURE__ */ u2(Prompt, {}), modal.root);
+  modal.onDismiss(() => R(null, modal.root));
+}
+function showImportModal(client, profile) {
+  const modal = client.ctx.ui.showModal({ title: "Import media", width: 660, maxHeight: 760, persistent: true });
+  function Importer() {
+    const [files, setFiles] = d2([]);
+    const [layout, setLayout] = d2("outfit-pose-expression");
+    const [dragging, setDragging] = d2(false);
+    const [busy, setBusy] = d2(false);
+    const preview = T2(() => files.slice(0, 8).map((file) => {
+      const parts = file.webkitRelativePath?.split("/").filter(Boolean) ?? [file.name];
+      const leaf = parts.pop() ?? file.name;
+      const expression = leaf.replace(/\.[^.]+$/, "");
+      if (layout === "actor-outfit-pose-expression") {
+        return `${parts[0] ?? "Default actor"} / ${parts[1] ?? "Default"} / ${parts[2] ?? "Default"} / ${expression}`;
+      }
+      return `${profile?.characterName ?? "Current actor"} / ${parts[0] ?? "Default"} / ${parts[1] ?? "Default"} / ${expression}`;
+    }), [files, layout]);
+    async function start() {
+      if (!files.length || busy) return;
+      setBusy(true);
+      try {
+        await client.importFiles(files, layout, profile?.defaultActorId ?? void 0);
+        modal.dismiss();
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Import failed.");
+        setBusy(false);
+      }
+    }
+    function accept(next) {
+      setFiles(Array.from(next).filter((file) => /\.(?:zip|png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name)));
+    }
+    return /* @__PURE__ */ u2("div", { class: "ls2-modal ls2-import", children: [
+      /* @__PURE__ */ u2(
+        "div",
+        {
+          class: "ls2-dropzone",
+          "data-dragging": dragging,
+          onDragEnter: (event) => {
+            event.preventDefault();
+            setDragging(true);
+          },
+          onDragOver: (event) => event.preventDefault(),
+          onDragLeave: () => setDragging(false),
+          onDrop: (event) => {
+            event.preventDefault();
+            setDragging(false);
+            accept(event.dataTransfer?.files ?? []);
+          },
+          children: [
+            /* @__PURE__ */ u2("input", { type: "file", multiple: true, accept: ".zip,.png,.jpg,.jpeg,.webp,.gif,.webm,.mp4", onChange: (event) => event.currentTarget.files && accept(event.currentTarget.files) }),
+            /* @__PURE__ */ u2("div", { class: "ls2-dropzone-icon", children: /* @__PURE__ */ u2(Icon, { name: "upload", size: 24 }) }),
+            /* @__PURE__ */ u2("strong", { children: files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop media or a LumiStage archive" }),
+            /* @__PURE__ */ u2("p", { children: "PNG, JPEG, WebP, GIF, muted WebM, muted MP4, or `.lumistage.zip`" }),
+            /* @__PURE__ */ u2(Button, { icon: "plus", variant: "default", children: "Choose files" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ u2(Surface, { children: [
+        /* @__PURE__ */ u2("div", { class: "ls2-modal-section-head", children: /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("strong", { children: "Folder mapping" }),
+          /* @__PURE__ */ u2("span", { children: "Nothing is uploaded until you confirm." })
+        ] }) }),
+        /* @__PURE__ */ u2(
+          Segmented,
+          {
+            label: "Import layout",
+            value: layout,
+            onChange: setLayout,
+            options: [
+              { value: "outfit-pose-expression", label: "Outfit / Pose / Expression" },
+              { value: "actor-outfit-pose-expression", label: "Actor / Outfit / Pose / Expression" }
+            ]
+          }
+        ),
+        files.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-mapping-preview", children: [
+          preview.map((path) => /* @__PURE__ */ u2("div", { children: [
+            /* @__PURE__ */ u2(Icon, { name: "image", size: 14 }),
+            /* @__PURE__ */ u2("span", { children: path })
+          ] })),
+          files.length > preview.length && /* @__PURE__ */ u2("small", { children: [
+            "+ ",
+            files.length - preview.length,
+            " more files"
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-safe-note", children: [
+        /* @__PURE__ */ u2(Icon, { name: "success", size: 16 }),
+        /* @__PURE__ */ u2("span", { children: "Paths, codecs, expansion size, collisions, and duplicate content are validated before commit." })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-modal-actions", children: [
+        /* @__PURE__ */ u2(Button, { variant: "ghost", onClick: () => modal.dismiss(), children: "Cancel" }),
+        /* @__PURE__ */ u2(Button, { variant: "primary", icon: "upload", disabled: !files.length || busy, onClick: () => void start(), children: busy ? "Importing\u2026" : "Review & import" })
+      ] })
+    ] });
+  }
+  R(/* @__PURE__ */ u2(Importer, {}), modal.root);
+  modal.onDismiss(() => R(null, modal.root));
+}
+function showQuickPicker(client) {
+  const modal = client.ctx.ui.showModal({ title: "Direct the stage", width: 720, maxHeight: 780 });
+  function Picker() {
+    const { backend, busy } = useClientState(client);
+    const actors = backend.stageProfiles.flatMap((profile) => profile.actors.map((actor) => ({ profile, actor })));
+    const [actorId, setActorId] = d2(actors.find((entry2) => entry2.actor.id === backend.snapshot?.focusedActorIds[0])?.actor.id ?? actors[0]?.actor.id ?? "");
+    const entry = actors.find((item) => item.actor.id === actorId) ?? actors[0] ?? null;
+    const current = entry ? backend.snapshot?.actors[entry.actor.id] : null;
+    const [outfitId, setOutfitId] = d2(current?.outfitId ?? entry?.actor.defaultOutfitId ?? entry?.actor.outfits[0]?.id ?? "");
+    const outfit = entry?.actor.outfits.find((item) => item.id === outfitId) ?? entry?.actor.outfits[0] ?? null;
+    const [poseId, setPoseId] = d2(current?.poseId ?? outfit?.defaultPoseId ?? outfit?.poses[0]?.id ?? "");
+    const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
+    const [expressionId, setExpressionId] = d2(current?.expressionId ?? pose?.defaultExpressionId ?? pose?.expressions[0]?.id ?? "");
+    const [scope, setScope] = d2("once");
+    const [query, setQuery] = d2("");
+    const expressions = (pose?.expressions ?? []).filter(
+      (expression) => !query.trim() || [expression.name, ...expression.aliases, ...expression.tags].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+    );
+    const locked = entry ? backend.timeline?.manualOverrides[entry.actor.id]?.scope === "locked" : false;
+    async function apply() {
+      if (!entry || !outfit || !pose || !expressionId) return;
+      const override = {
+        actorId: entry.actor.id,
+        outfitId: outfit.id,
+        poseId: pose.id,
+        expressionId,
+        scope,
+        createdAt: Date.now()
+      };
+      try {
+        await client.applyManual(override);
+        modal.dismiss();
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Could not direct the stage.");
+      }
+    }
+    if (!actors.length) {
+      return /* @__PURE__ */ u2("div", { class: "ls2-modal", children: /* @__PURE__ */ u2(EmptyState, { icon: "actors", title: "No stage actors yet", description: "Create a LumiStage profile and import media before directing the live stage." }) });
+    }
+    return /* @__PURE__ */ u2("div", { class: "ls2-modal ls2-picker", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-picker-context", children: [
+        /* @__PURE__ */ u2(Field, { label: "Actor", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: entry?.actor.id, onChange: (event) => {
+          const id = event.currentTarget.value;
+          setActorId(id);
+          const next = actors.find((item) => item.actor.id === id);
+          const nextOutfit = next?.actor.outfits.find((item) => item.id === next.actor.defaultOutfitId) ?? next?.actor.outfits[0];
+          const nextPose = nextOutfit?.poses.find((item) => item.id === nextOutfit.defaultPoseId) ?? nextOutfit?.poses[0];
+          setOutfitId(nextOutfit?.id ?? "");
+          setPoseId(nextPose?.id ?? "");
+          setExpressionId(nextPose?.defaultExpressionId ?? nextPose?.expressions[0]?.id ?? "");
+        }, children: actors.map((item) => /* @__PURE__ */ u2("option", { value: item.actor.id, children: item.actor.name })) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Outfit", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: outfit?.id, onChange: (event) => {
+          const id = event.currentTarget.value;
+          setOutfitId(id);
+          const next = entry?.actor.outfits.find((item) => item.id === id);
+          const nextPose = next?.poses.find((item) => item.id === next.defaultPoseId) ?? next?.poses[0];
+          setPoseId(nextPose?.id ?? "");
+          setExpressionId(nextPose?.defaultExpressionId ?? nextPose?.expressions[0]?.id ?? "");
+        }, children: entry?.actor.outfits.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Pose", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: pose?.id, onChange: (event) => {
+          const id = event.currentTarget.value;
+          setPoseId(id);
+          const next = outfit?.poses.find((item) => item.id === id);
+          setExpressionId(next?.defaultExpressionId ?? next?.expressions[0]?.id ?? "");
+        }, children: outfit?.poses.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) }) })
+      ] }),
+      /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Find an expression\u2026" }),
+      /* @__PURE__ */ u2("div", { class: "ls2-picker-grid", children: expressions.map((expression) => {
+        const media = [...expression.assets].filter((asset) => asset.enabled).sort((a3, b2) => b2.priority - a3.priority)[0];
+        const view = media ? backend.assetViews[media.id] : null;
+        return /* @__PURE__ */ u2("button", { type: "button", class: "ls2-expression-choice", "data-selected": expression.id === expressionId, onClick: () => setExpressionId(expression.id), children: [
+          /* @__PURE__ */ u2(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: view?.mediaKind ?? "image", label: expression.name, class: "ls2-expression-choice-media", contain: true }),
+          /* @__PURE__ */ u2("span", { children: [
+            /* @__PURE__ */ u2("strong", { children: expression.name }),
+            /* @__PURE__ */ u2("small", { children: [
+              expression.assets.length,
+              " media"
+            ] })
+          ] }),
+          expression.id === expressionId && /* @__PURE__ */ u2("span", { class: "ls2-choice-check", children: /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) })
+        ] });
+      }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-picker-footer", children: [
+        /* @__PURE__ */ u2(Segmented, { label: "Override duration", value: scope, onChange: setScope, options: [{ value: "once", label: "Apply once", icon: "play" }, { value: "locked", label: "Lock state", icon: "lock" }] }),
+        /* @__PURE__ */ u2(Toolbar, { children: [
+          locked && /* @__PURE__ */ u2(Button, { icon: "unlock", variant: "ghost", onClick: () => entry && void client.clearManual(entry.actor.id), children: "Clear lock" }),
+          /* @__PURE__ */ u2(Button, { variant: "primary", icon: scope === "locked" ? "lock" : "play", disabled: !expressionId || busy, onClick: () => void apply(), children: scope === "locked" ? "Lock on stage" : "Apply now" })
+        ] })
+      ] })
+    ] });
+  }
+  R(/* @__PURE__ */ u2(Picker, {}), modal.root);
+  modal.onDismiss(() => R(null, modal.root));
+}
+
+// src/ui/stage.tsx
+function StageActor({ state, client }) {
+  const { backend } = useClientState(client);
+  const view = state.assetId ? backend.assetViews[state.assetId] : null;
+  const src = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
+  return /* @__PURE__ */ u2("figure", { class: "ls2-stage-actor", "data-focused": state.focused, children: [
+    /* @__PURE__ */ u2("div", { class: "ls2-stage-actor-frame", children: src && (view?.mediaKind === "video" ? /* @__PURE__ */ u2("video", { src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": state.label }, src) : /* @__PURE__ */ u2("img", { src, alt: state.label, draggable: false }, src)) }),
+    backend.settings.appearance.showCaptions && /* @__PURE__ */ u2("figcaption", { children: [
+      /* @__PURE__ */ u2("strong", { children: state.label.split(" \xB7 ")[0] }),
+      /* @__PURE__ */ u2("span", { children: state.label.split(" \xB7 ").slice(1).join(" / ") })
+    ] })
+  ] });
+}
+function Stage(props) {
+  const { backend } = useClientState(props.client);
+  const appearance = props.client.effectiveAppearance();
+  const actors = Object.values(backend.snapshot?.actors ?? {}).filter((actor) => !!actor.assetId).sort((a3, b2) => Number(a3.focused) - Number(b2.focused));
+  const style = {
+    "--ls2-stage-opacity": appearance.opacity,
+    "--ls2-stage-transition": `${appearance.transitionMs}ms`,
+    "--ls2-stage-focus-scale": appearance.focusedScale,
+    "--ls2-stage-idle-opacity": appearance.idleOpacity,
+    "--ls2-stage-overlap": appearance.ensembleOverlap
+  };
+  function startResize(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startWidth = appearance.width;
+    const startHeight = appearance.height;
+    let width = startWidth;
+    let height = startHeight;
+    const move = (next) => {
+      width = Math.max(200, Math.min(1200, Math.round(startWidth + next.clientX - startX)));
+      height = Math.max(240, Math.min(1e3, Math.round(startHeight + next.clientY - startY)));
+      props.onResize(width, height, false);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      props.onResize(width, height, true);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end, { once: true });
+    window.addEventListener("pointercancel", end, { once: true });
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls2-stage-root", style, "data-chrome": appearance.showChrome, "data-transition": appearance.transition, children: /* @__PURE__ */ u2("div", { class: "ls2-stage-chrome", children: [
+    /* @__PURE__ */ u2("div", { class: "ls2-stage-grab", children: [
+      /* @__PURE__ */ u2("span", { class: "ls2-stage-live", children: [
+        /* @__PURE__ */ u2("span", {}),
+        "LumiStage"
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-stage-actions", children: [
+        /* @__PURE__ */ u2("button", { type: "button", onClick: props.onQuick, title: "Direct stage", "aria-label": "Direct stage", children: /* @__PURE__ */ u2(Icon, { name: "sparkles", size: 15 }) }),
+        /* @__PURE__ */ u2("button", { type: "button", onClick: props.onFullscreen, title: "Toggle fullscreen", "aria-label": "Toggle fullscreen", children: /* @__PURE__ */ u2(Icon, { name: "expand", size: 15 }) }),
+        /* @__PURE__ */ u2("button", { type: "button", onClick: props.onHide, title: "Hide stage", "aria-label": "Hide stage", children: /* @__PURE__ */ u2(Icon, { name: "close", size: 15 }) })
+      ] })
+    ] }),
+    actors.length ? /* @__PURE__ */ u2("div", { class: "ls2-stage-ensemble", children: actors.map((actor) => /* @__PURE__ */ u2(StageActor, { state: actor, client: props.client }, actor.actorId)) }) : /* @__PURE__ */ u2("div", { class: "ls2-stage-waiting", children: [
+      /* @__PURE__ */ u2("div", { children: /* @__PURE__ */ u2(Icon, { name: "stage", size: 24 }) }),
+      /* @__PURE__ */ u2("strong", { children: "Stage ready" }),
+      /* @__PURE__ */ u2("span", { children: "Choose a state or complete a reply." })
+    ] }),
+    /* @__PURE__ */ u2("button", { type: "button", class: "ls2-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
+  ] }) });
+}
+
+// src/ui/studio.tsx
+var NAV = [
+  { id: "stage", label: "Stage", icon: "stage" },
+  { id: "library", label: "Library", icon: "library" },
+  { id: "batch", label: "Batch", icon: "batch" },
+  { id: "automation", label: "Automation", icon: "automation" },
+  { id: "appearance", label: "Appearance", icon: "appearance" },
+  { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" }
+];
+function activeNodes(profile, actorId, outfitId, poseId) {
+  const actor = profile?.actors.find((item) => item.id === actorId) ?? profile?.actors[0] ?? null;
+  const outfit = actor?.outfits.find((item) => item.id === outfitId) ?? actor?.outfits[0] ?? null;
+  const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
+  return { actor, outfit, pose };
+}
+function assetLocation(profile, assetId) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
+    for (const expression of pose.expressions) {
+      const asset = expression.assets.find((item) => item.id === assetId);
+      if (asset) return { actor, outfit, pose, expression, asset };
+    }
+  }
+  return null;
+}
+function ContextAvatar({ name }) {
+  const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase();
+  return /* @__PURE__ */ u2("span", { class: "ls2-context-avatar", children: initials || "LS" });
+}
+function LiveView({ client, openLibrary }) {
+  const { backend } = useClientState(client);
+  const actors = Object.values(backend.snapshot?.actors ?? {}).sort((a3, b2) => Number(b2.focused) - Number(a3.focused));
+  const statusTone = backend.lastDetection.status === "error" ? "danger" : backend.lastDetection.status === "success" ? "success" : backend.lastDetection.status === "running" ? "accent" : "neutral";
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(
+      ViewHeader,
+      {
+        eyebrow: "Live direction",
+        title: "Live Stage",
+        description: "The resolved visual state for this conversation.",
+        actions: /* @__PURE__ */ u2(S, { children: [
+          /* @__PURE__ */ u2(Button, { icon: "sparkles", onClick: () => showQuickPicker(client), disabled: !backend.activeChatId, children: "Direct" }),
+          /* @__PURE__ */ u2(Button, { icon: "play", variant: "primary", onClick: () => client.analyzeNow(), disabled: !backend.activeChatId, children: "Analyze" })
+        ] })
+      }
+    ),
+    /* @__PURE__ */ u2(Surface, { class: "ls2-detector-strip", padding: "small", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-detector-state", children: [
+        /* @__PURE__ */ u2(Status, { tone: statusTone, children: backend.lastDetection.status }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("strong", { children: backend.lastDetection.message }),
+          /* @__PURE__ */ u2("span", { children: backend.queueDepth ? `${backend.queueDepth} task${backend.queueDepth === 1 ? "" : "s"} queued` : "Post-reply automation" })
+        ] })
+      ] }),
+      /* @__PURE__ */ u2(IconButton, { icon: "refresh", label: "Analyze latest reply", onClick: () => client.analyzeNow(), disabled: !backend.activeChatId })
+    ] }),
+    actors.length ? /* @__PURE__ */ u2(Surface, { padding: "none", class: "ls2-scene", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-scene-head", children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Now playing" }),
+          /* @__PURE__ */ u2("h3", { children: backend.activeCharacterName ?? "Ensemble" })
+        ] }),
+        /* @__PURE__ */ u2("span", { children: [
+          actors.length,
+          " actor",
+          actors.length === 1 ? "" : "s"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-scene-cast", children: actors.map((actor) => {
+        const view = actor.assetId ? backend.assetViews[actor.assetId] : null;
+        const parts = actor.label.split(" \xB7 ");
+        return /* @__PURE__ */ u2("article", { class: "ls2-scene-actor", "data-focused": actor.focused, children: [
+          /* @__PURE__ */ u2("div", { class: "ls2-scene-media", children: [
+            /* @__PURE__ */ u2(Media, { src: view?.url ?? view?.thumbUrl ?? null, kind: view?.mediaKind ?? "image", label: actor.label, class: "ls2-scene-media-file", contain: true }),
+            actor.focused && /* @__PURE__ */ u2("span", { class: "ls2-focus-flag", children: [
+              /* @__PURE__ */ u2(Icon, { name: "sparkles", size: 12 }),
+              "Focus"
+            ] })
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "ls2-scene-actor-copy", children: [
+            /* @__PURE__ */ u2("strong", { children: parts[0] }),
+            /* @__PURE__ */ u2("span", { children: parts.slice(1).join(" / ") })
+          ] })
+        ] });
+      }) })
+    ] }) : /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(
+      EmptyState,
+      {
+        icon: "stage",
+        title: "Build your first scene",
+        description: "Add media to a character, then direct the stage manually or let automation respond to the next completed reply.",
+        action: /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(Button, { icon: "library", variant: "primary", onClick: openLibrary, children: "Open library" }),
+          /* @__PURE__ */ u2(Button, { icon: "sparkles", onClick: () => showQuickPicker(client), children: "Direct stage" })
+        ] })
+      }
+    ) }),
+    /* @__PURE__ */ u2("div", { class: "ls2-metric-grid", children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "actors", size: 18 }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: backend.stageProfiles.reduce((sum, profile) => sum + profile.actors.length, 0) }),
+          "Actors"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "image", size: 18 }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: backend.stageProfiles.reduce((sum, profile) => sum + allAssets(profile).length, 0) }),
+          "Media"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "lock", size: 18 }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: Object.keys(backend.timeline?.manualOverrides ?? {}).length }),
+          "Locks"
+        ] })
+      ] })
+    ] })
+  ] });
+}
+function FolderButton(props) {
+  return /* @__PURE__ */ u2(
+    "button",
+    {
+      type: "button",
+      class: "ls2-folder-button",
+      "data-active": props.active,
+      onClick: props.onClick,
+      draggable: props.draggable,
+      onDragStart: props.onDragStart,
+      onDragOver: (event) => props.draggable && event.preventDefault(),
+      onDrop: props.onDrop,
+      children: [
+        /* @__PURE__ */ u2("span", { class: "ls2-folder-icon", children: /* @__PURE__ */ u2(Icon, { name: props.icon, size: 16 }) }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: props.label }),
+          /* @__PURE__ */ u2("small", { children: props.count })
+        ] })
+      ]
+    }
+  );
+}
+function LibraryView(props) {
+  const { backend } = useClientState(props.client);
+  const [actorId, setActorId] = d2(props.profile?.defaultActorId ?? props.profile?.actors[0]?.id ?? "");
+  const [outfitId, setOutfitId] = d2("");
+  const [poseId, setPoseId] = d2("");
+  const [expressionId, setExpressionId] = d2("");
+  const [query, setQuery] = d2("");
+  const [page, setPage] = d2(0);
+  const [dragged, setDragged] = d2(null);
+  const lastIndex = A2(null);
+  const { actor, outfit, pose } = activeNodes(props.profile, actorId, outfitId, poseId);
+  h2(() => {
+    if (props.profile && !props.profile.actors.some((item) => item.id === actorId)) setActorId(props.profile.defaultActorId ?? props.profile.actors[0]?.id ?? "");
+  }, [props.profile?.revision, actorId]);
+  h2(() => {
+    if (actor && !actor.outfits.some((item) => item.id === outfitId)) setOutfitId(actor.defaultOutfitId ?? actor.outfits[0]?.id ?? "");
+  }, [actor?.id, outfitId]);
+  h2(() => {
+    if (outfit && !outfit.poses.some((item) => item.id === poseId)) setPoseId(outfit.defaultPoseId ?? outfit.poses[0]?.id ?? "");
+  }, [outfit?.id, poseId]);
+  const rows = T2(() => {
+    if (!pose) return [];
+    const needle = query.trim().toLocaleLowerCase();
+    return pose.expressions.flatMap((expression) => expression.assets.map((asset) => ({ expression, asset }))).filter(({ expression, asset }) => !needle || [expression.name, asset.fileName, ...expression.tags, ...expression.aliases, ...expression.cues].join(" ").toLocaleLowerCase().includes(needle));
+  }, [pose, query]);
+  const pageSize = 72;
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * pageSize;
+  const pageRows = rows.slice(pageStart, pageStart + pageSize);
+  const inspectedExpression = pose?.expressions.find((item) => item.id === expressionId) ?? null;
+  h2(() => setPage(0), [actor?.id, outfit?.id, pose?.id, query]);
+  function select(index, assetId, shift) {
+    const next = new Set(props.selected);
+    if (shift && lastIndex.current !== null) {
+      const [start, end] = [lastIndex.current, index].sort((a3, b2) => a3 - b2);
+      for (let cursor = start; cursor <= end; cursor += 1) next.add(rows[cursor].asset.id);
+    } else if (next.has(assetId)) next.delete(assetId);
+    else next.add(assetId);
+    lastIndex.current = index;
+    props.setSelected(next);
+  }
+  function reorder(kind, sourceId, targetId) {
+    if (!actor || sourceId === targetId) return;
+    props.update((profile) => {
+      const targetActor = profile.actors.find((item) => item.id === actor.id);
+      if (kind === "outfit") {
+        const list = targetActor?.outfits;
+        if (!list) return;
+        const from = list.findIndex((item) => item.id === sourceId);
+        const to = list.findIndex((item) => item.id === targetId);
+        if (from < 0 || to < 0) return;
+        const [moved] = list.splice(from, 1);
+        list.splice(to, 0, moved);
+        list.forEach((item, index) => {
+          item.order = index;
+        });
+      } else {
+        const list = targetActor?.outfits.find((item) => item.id === outfit?.id)?.poses;
+        if (!list) return;
+        const from = list.findIndex((item) => item.id === sourceId);
+        const to = list.findIndex((item) => item.id === targetId);
+        if (from < 0 || to < 0) return;
+        const [moved] = list.splice(from, 1);
+        list.splice(to, 0, moved);
+        list.forEach((item, index) => {
+          item.order = index;
+        });
+      }
+    });
+  }
+  function addActor() {
+    showTextPrompt(props.client, { title: "New actor", label: "Actor name", placeholder: "e.g. Aster" }, (name) => props.update((profile) => {
+      const next = createActor(name);
+      next.order = profile.actors.length;
+      profile.actors.push(next);
+      profile.defaultActorId ??= next.id;
+      setActorId(next.id);
+    }));
+  }
+  function addOutfit() {
+    if (!actor) return;
+    showTextPrompt(props.client, { title: "New outfit folder", label: "Outfit name", placeholder: "e.g. Evening wear" }, (name) => props.update((profile) => {
+      const target = profile.actors.find((item) => item.id === actor.id);
+      if (!target) return;
+      const next = createOutfit(name);
+      next.order = target.outfits.length;
+      target.outfits.push(next);
+      target.defaultOutfitId ??= next.id;
+      setOutfitId(next.id);
+    }));
+  }
+  function addPose() {
+    if (!actor || !outfit) return;
+    showTextPrompt(props.client, { title: "New pose folder", label: "Pose name", placeholder: "e.g. Seated" }, (name) => props.update((profile) => {
+      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+      if (!target) return;
+      const next = createPose(name);
+      next.order = target.poses.length;
+      target.poses.push(next);
+      target.defaultPoseId ??= next.id;
+      setPoseId(next.id);
+    }));
+  }
+  function addExpression() {
+    if (!actor || !outfit || !pose) return;
+    showTextPrompt(props.client, { title: "New expression", label: "Expression name", placeholder: "e.g. Relieved" }, (name) => props.update((profile) => {
+      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
+      if (!target) return;
+      const next = createExpression(name);
+      next.order = target.expressions.length;
+      target.expressions.push(next);
+      target.defaultExpressionId ??= next.id;
+      setExpressionId(next.id);
+    }));
+  }
+  if (!props.profile) {
+    return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+      /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Asset direction", title: "Library", description: "Build visual profiles for the active character." }),
+      /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(EmptyState, { icon: "actors", title: "No character selected", description: "Open a character or conversation in Lumiverse to begin." }) })
+    ] });
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(
+      ViewHeader,
+      {
+        eyebrow: "Asset direction",
+        title: "Library",
+        description: "Organize actors, outfits, poses, expressions, and media.",
+        actions: /* @__PURE__ */ u2(S, { children: [
+          /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import" }),
+          /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add actor", onClick: addActor })
+        ] })
+      }
+    ),
+    /* @__PURE__ */ u2(Surface, { class: "ls2-library-context", padding: "small", children: [
+      /* @__PURE__ */ u2(ContextAvatar, { name: props.profile.characterName }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("strong", { children: props.profile.characterName }),
+        /* @__PURE__ */ u2("span", { children: [
+          props.profile.actors.length,
+          " actors \xB7 ",
+          allAssets(props.profile).length,
+          " media"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("select", { class: "ls2-select ls2-actor-select", value: actor?.id, "aria-label": "Actor", onChange: (event) => setActorId(event.currentTarget.value), children: props.profile.actors.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls2-folder-section", children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Outfits", description: "Drag to reorder", trailing: /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add outfit", onClick: addOutfit }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-folder-strip", children: actor?.outfits.map((item) => /* @__PURE__ */ u2(
+        FolderButton,
+        {
+          icon: "outfit",
+          label: item.name,
+          count: item.poses.reduce((sum, value) => sum + value.expressions.reduce((total, expression) => total + expression.assets.length, 0), 0),
+          active: item.id === outfit?.id,
+          onClick: () => setOutfitId(item.id),
+          draggable: true,
+          onDragStart: () => setDragged(item.id),
+          onDrop: () => {
+            if (dragged) reorder("outfit", dragged, item.id);
+            setDragged(null);
+          }
+        }
+      )) })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls2-folder-section", children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Poses", trailing: /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add pose", onClick: addPose }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-folder-strip", children: outfit?.poses.map((item) => /* @__PURE__ */ u2(
+        FolderButton,
+        {
+          icon: "pose",
+          label: item.name,
+          count: item.expressions.reduce((sum, expression) => sum + expression.assets.length, 0),
+          active: item.id === pose?.id,
+          onClick: () => setPoseId(item.id),
+          draggable: true,
+          onDragStart: () => setDragged(item.id),
+          onDrop: () => {
+            if (dragged) reorder("pose", dragged, item.id);
+            setDragged(null);
+          }
+        }
+      )) })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { class: "ls2-library-workspace", padding: "none", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-library-toolbar", children: [
+        /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Search names, aliases, tags, cues\u2026" }),
+        /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(Button, { icon: "plus", size: "small", onClick: addExpression, children: "Expression" }),
+          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.setSelected(new Set(pageRows.map((row) => row.asset.id))), disabled: !pageRows.length, children: "Select page" })
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-library-subbar", children: [
+        /* @__PURE__ */ u2("span", { children: [
+          rows.length,
+          " media"
+        ] }),
+        /* @__PURE__ */ u2("span", { children: [
+          props.selected.size,
+          " selected"
+        ] }),
+        /* @__PURE__ */ u2("div", { class: "ls2-pagination", children: [
+          /* @__PURE__ */ u2(IconButton, { icon: "chevronLeft", label: "Previous page", disabled: safePage === 0, onClick: () => setPage(Math.max(0, safePage - 1)) }),
+          /* @__PURE__ */ u2("span", { children: [
+            safePage + 1,
+            " / ",
+            pageCount
+          ] }),
+          /* @__PURE__ */ u2(IconButton, { icon: "chevronRight", label: "Next page", disabled: safePage >= pageCount - 1, onClick: () => setPage(Math.min(pageCount - 1, safePage + 1)) })
+        ] })
+      ] }),
+      pageRows.length ? /* @__PURE__ */ u2("div", { class: "ls2-asset-grid", children: pageRows.map(({ expression, asset }, index) => {
+        const view = backend.assetViews[asset.id];
+        return /* @__PURE__ */ u2("article", { class: "ls2-asset-card", "data-selected": props.selected.has(asset.id), "data-inspected": expression.id === expressionId, children: /* @__PURE__ */ u2("button", { type: "button", class: "ls2-asset-main", onClick: (event) => {
+          select(pageStart + index, asset.id, event.shiftKey);
+          setExpressionId(expression.id);
+        }, children: [
+          /* @__PURE__ */ u2(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: asset.mediaKind, label: expression.name, class: "ls2-asset-media" }),
+          /* @__PURE__ */ u2("span", { class: "ls2-asset-overlay", children: [
+            /* @__PURE__ */ u2("strong", { children: expression.name }),
+            /* @__PURE__ */ u2("small", { children: [
+              asset.mediaKind,
+              " \xB7 P",
+              asset.priority
+            ] })
+          ] }),
+          /* @__PURE__ */ u2("span", { class: "ls2-asset-check", children: /* @__PURE__ */ u2(Icon, { name: props.selected.has(asset.id) ? "check" : "plus", size: 12 }) })
+        ] }) });
+      }) }) : /* @__PURE__ */ u2(EmptyState, { icon: "image", title: "No media in this pose", description: "Import media or create an empty expression to start building this pose.", action: /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import media" }) })
+    ] }),
+    inspectedExpression && actor && outfit && pose && /* @__PURE__ */ u2(Surface, { class: "ls2-inspector", children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Expression inspector", description: `${actor.name} / ${outfit.name} / ${pose.name}`, trailing: /* @__PURE__ */ u2(Status, { tone: inspectedExpression.enabled ? "success" : "neutral", children: inspectedExpression.enabled ? "Enabled" : "Disabled" }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Name", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.name, onChange: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.name = event.currentTarget.value;
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: inspectedExpression.priority, onChange: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.priority = Number(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Aliases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.aliases.join(", "), onChange: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.aliases = cleanList(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Cue phrases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.cues.join(", "), onChange: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.cues = cleanList(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Tags", hint: "Comma separated", class: "ls2-field-wide", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.tags.join(", "), onChange: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.tags = cleanList(event.currentTarget.value);
+        }) }) })
+      ] }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { icon: "check", onClick: () => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id);
+          if (node) node.defaultExpressionId = inspectedExpression.id;
+        }), children: "Set as default" }),
+        /* @__PURE__ */ u2(Button, { icon: inspectedExpression.enabled ? "eyeOff" : "eye", onClick: () => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.enabled = !node.enabled;
+        }), children: inspectedExpression.enabled ? "Disable" : "Enable" })
+      ] })
+    ] }),
+    actor && outfit && pose && /* @__PURE__ */ u2("details", { class: "ls2-disclosure", children: [
+      /* @__PURE__ */ u2("summary", { children: [
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2(Icon, { name: "settings", size: 16 }),
+          "Folder direction"
+        ] }),
+        /* @__PURE__ */ u2(Icon, { name: "chevronDown", size: 15 })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-disclosure-body", children: [
+        /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+          /* @__PURE__ */ u2(Field, { label: "Actor aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: actor.aliases.join(", "), onChange: (event) => props.update((profile) => {
+            const node = profile.actors.find((item) => item.id === actor.id);
+            if (node) node.aliases = cleanList(event.currentTarget.value);
+          }) }) }),
+          /* @__PURE__ */ u2(Field, { label: "Outfit aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.aliases.join(", "), onChange: (event) => props.update((profile) => {
+            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+            if (node) node.aliases = cleanList(event.currentTarget.value);
+          }) }) }),
+          /* @__PURE__ */ u2(Field, { label: "Outfit cues", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.cues.join(", "), onChange: (event) => props.update((profile) => {
+            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+            if (node) node.cues = cleanList(event.currentTarget.value);
+          }) }) }),
+          /* @__PURE__ */ u2(Field, { label: "Pose cues", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: pose.cues.join(", "), onChange: (event) => props.update((profile) => {
+            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
+            if (node) node.cues = cleanList(event.currentTarget.value);
+          }) }) })
+        ] }),
+        /* @__PURE__ */ u2(Toggle, { checked: outfit.allowAutoSwitch, onChange: (value) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.allowAutoSwitch = value;
+        }), label: "Allow automatic outfit switching", hint: "Still requires an explicit cue and the configured confidence threshold." }),
+        /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(Button, { onClick: () => props.update((profile) => {
+            const node = profile.actors.find((item) => item.id === actor.id);
+            if (node) node.defaultOutfitId = outfit.id;
+          }), children: "Default outfit" }),
+          /* @__PURE__ */ u2(Button, { onClick: () => props.update((profile) => {
+            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+            if (node) node.defaultPoseId = pose.id;
+          }), children: "Default pose" })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+function BatchView(props) {
+  const [priority, setPriority] = d2(0);
+  const [tags, setTags] = d2("");
+  const [aliases, setAliases] = d2("");
+  const [find, setFind] = d2("");
+  const [replace, setReplace] = d2("");
+  const [destination, setDestination] = d2("");
+  const profile = props.profile;
+  const selectedExpressions = T2(() => {
+    if (!profile) return [];
+    return [...new Set([...props.selected].map((assetId) => assetLocation(profile, assetId)?.expression.id).filter((id) => !!id))];
+  }, [profile, props.selected]);
+  const destinations = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses.map((pose) => ({ key: `${outfit.id}|${pose.id}`, outfitId: outfit.id, poseId: pose.id, label: `${actor.name} / ${outfit.name} / ${pose.name}` })))) ?? [];
+  const selectedDestination = destinations.find((item) => item.key === destination) ?? null;
+  const preview = profile ? allExpressions(profile).filter((item) => selectedExpressions.includes(item.id)).slice(0, 5).map((item) => ({ before: item.name, after: find ? item.name.split(find).join(replace) : item.name })) : [];
+  const expressionNames = profile ? [...new Set(allExpressions(profile).map((item) => item.name))] : [];
+  const poses = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses)) ?? [];
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Multi-edit workspace", title: "Batch Lab", description: "Make deliberate, reversible changes across selected media.", actions: /* @__PURE__ */ u2(S, { children: [
+      /* @__PURE__ */ u2(IconButton, { icon: "undo", label: "Undo", disabled: !props.canUndo, onClick: props.undo }),
+      /* @__PURE__ */ u2(IconButton, { icon: "redo", label: "Redo", disabled: !props.canRedo, onClick: props.redo })
+    ] }) }),
+    /* @__PURE__ */ u2(Surface, { class: "ls2-selection-hero", tone: props.selected.size ? "accent" : "default", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-selection-icon", children: /* @__PURE__ */ u2(Icon, { name: "batch", size: 22 }) }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("strong", { children: props.selected.size ? `${props.selected.size} media selected` : "No media selected" }),
+        /* @__PURE__ */ u2("span", { children: props.selected.size ? `${selectedExpressions.length} expressions are in scope` : "Select media in Library or choose the full profile." })
+      ] }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { size: "small", onClick: () => profile && props.setSelected(new Set(allAssets(profile).map((asset) => asset.id))), disabled: !profile, children: "Select all" }),
+        /* @__PURE__ */ u2(Button, { size: "small", variant: "ghost", onClick: () => props.setSelected(/* @__PURE__ */ new Set()), disabled: !props.selected.size, children: "Clear" })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls2-action-grid", children: [
+      /* @__PURE__ */ u2(Surface, { children: [
+        /* @__PURE__ */ u2(SectionTitle, { title: "Availability", description: "Control what the resolver may choose." }),
+        /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(Button, { icon: "eye", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true }), children: "Enable" }),
+          /* @__PURE__ */ u2(Button, { icon: "eyeOff", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false }), children: "Disable" })
+        ] })
+      ] }),
+      /* @__PURE__ */ u2(Surface, { children: [
+        /* @__PURE__ */ u2(SectionTitle, { title: "Priority", description: "Higher values win among equivalent media." }),
+        /* @__PURE__ */ u2("div", { class: "ls2-inline-field", children: [
+          /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: priority, onInput: (event) => setPriority(Number(event.currentTarget.value)) }),
+          /* @__PURE__ */ u2(Button, { variant: "primary", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority }), children: "Apply" })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Taxonomy", description: "Add searchable language without replacing existing metadata." }),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Tags", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: tags, onInput: (event) => setTags(event.currentTarget.value), placeholder: "bright, smile, joy" }) }),
+        /* @__PURE__ */ u2(Field, { label: "Aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: aliases, onInput: (event) => setAliases(event.currentTarget.value), placeholder: "grin, cheerful" }) })
+      ] }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { icon: "tag", disabled: !selectedExpressions.length || !tags.trim(), onClick: () => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") }), children: "Add tags" }),
+        /* @__PURE__ */ u2(Button, { icon: "tag", disabled: !selectedExpressions.length || !aliases.trim(), onClick: () => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") }), children: "Add aliases" })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Rename transform", description: "Preview expression names before applying." }),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Find", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: find, onInput: (event) => setFind(event.currentTarget.value) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Replace", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: replace, onInput: (event) => setReplace(event.currentTarget.value) }) })
+      ] }),
+      preview.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-rename-preview", children: preview.map((item) => /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { children: item.before }),
+        /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 13 }),
+        /* @__PURE__ */ u2("strong", { children: item.after })
+      ] })) }),
+      /* @__PURE__ */ u2(Button, { variant: "primary", disabled: !find || !selectedExpressions.length, onClick: () => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace }), children: "Apply rename" })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Reassign and duplicate", description: "Move media while preserving its expression identity." }),
+      /* @__PURE__ */ u2(Field, { label: "Destination pose", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: destination, onChange: (event) => setDestination(event.currentTarget.value), children: [
+        /* @__PURE__ */ u2("option", { value: "", children: "Choose a destination\u2026" }),
+        destinations.map((item) => /* @__PURE__ */ u2("option", { value: item.key, children: item.label }))
+      ] }) }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { icon: "move", disabled: !props.selected.size || !selectedDestination, onClick: () => selectedDestination && props.mutate({ type: "move", assetIds: [...props.selected], outfitId: selectedDestination.outfitId, poseId: selectedDestination.poseId }), children: "Move" }),
+        /* @__PURE__ */ u2(Button, { icon: "copy", disabled: !props.selected.size, onClick: () => props.mutate({ type: "duplicate", assetIds: [...props.selected] }), children: "Duplicate" }),
+        /* @__PURE__ */ u2(Button, { icon: "trash", variant: "danger", disabled: !props.selected.size, onClick: () => props.mutate({ type: "delete", assetIds: [...props.selected] }), children: "Session trash" })
+      ] }),
+      /* @__PURE__ */ u2("p", { class: "ls2-help", children: "Session trash remains recoverable with Undo until the library is saved." })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Completeness matrix", description: "Enabled media coverage across every pose.", trailing: /* @__PURE__ */ u2("span", { class: "ls2-count", children: [
+        poses.length,
+        " poses"
+      ] }) }),
+      poses.length && expressionNames.length ? /* @__PURE__ */ u2("div", { class: "ls2-table-wrap", children: /* @__PURE__ */ u2("table", { class: "ls2-matrix", children: [
+        /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("th", { children: "Pose" }),
+          expressionNames.map((name) => /* @__PURE__ */ u2("th", { children: name }))
+        ] }) }),
+        /* @__PURE__ */ u2("tbody", { children: poses.map((pose) => /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("th", { children: pose.name }),
+          expressionNames.map((name) => {
+            const expression = pose.expressions.find((item) => item.name === name);
+            const complete = !!expression?.assets.some((asset) => asset.enabled);
+            return /* @__PURE__ */ u2("td", { "data-complete": complete, children: complete ? /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) : "\u2014" });
+          })
+        ] })) })
+      ] }) }) : /* @__PURE__ */ u2(EmptyState, { icon: "batch", title: "No coverage data yet", description: "Add poses, expressions, and media to build the matrix." })
+    ] })
+  ] });
+}
+function AutomationView({ client }) {
+  const { backend } = useClientState(client);
+  const [draft, setDraft] = d2(backend.settings);
+  h2(() => setDraft(backend.settings), [backend.settings.revision]);
+  const detection = draft.detection;
+  const missing = [!backend.permissions.generation && "Generation", !backend.permissions.chats && "Chats", !backend.permissions.chatMutation && "Chat History"].filter(Boolean);
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Post-reply direction", title: "Automation", description: "Classify the completed reply once, then resolve it against your catalog.", actions: /* @__PURE__ */ u2(Button, { icon: "check", variant: "primary", onClick: () => void client.saveSettings(draft), children: "Save changes" }) }),
+    missing.length > 0 && /* @__PURE__ */ u2(InlineNotice, { tone: "warning", children: [
+      /* @__PURE__ */ u2("strong", { children: "Automation is paused." }),
+      /* @__PURE__ */ u2("span", { children: [
+        "Grant ",
+        missing.join(", "),
+        " permissions to enable detection."
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(Toggle, { checked: detection.enabled, onChange: (enabled) => setDraft({ ...draft, detection: { ...detection, enabled } }), label: "Automatic stage direction", hint: "Runs only after a successful, saved assistant reply. Stopped or failed generations do not change the stage." }) }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Model routing", description: "Blank values follow Lumiverse\u2019s active connection." }),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Connection profile", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: detection.connectionId ?? "", placeholder: "Active connection", onInput: (event) => setDraft({ ...draft, detection: { ...detection, connectionId: event.currentTarget.value || null } }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Model override", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: detection.model ?? "", placeholder: "Connection default", onInput: (event) => setDraft({ ...draft, detection: { ...detection, model: event.currentTarget.value || null } }) }) })
+      ] }),
+      /* @__PURE__ */ u2(Field, { label: `Conversation context \xB7 ${detection.contextMessages} messages`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "1", max: "20", value: detection.contextMessages, onInput: (event) => setDraft({ ...draft, detection: { ...detection, contextMessages: Number(event.currentTarget.value) } }) }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-locked-value", children: [
+        /* @__PURE__ */ u2(Icon, { name: "lock", size: 14 }),
+        /* @__PURE__ */ u2("span", { children: [
+          "Temperature is fixed at ",
+          /* @__PURE__ */ u2("strong", { children: "0.10" }),
+          " for stable classification."
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Confidence policy", description: "Uncertain predictions preserve the previous stage." }),
+      /* @__PURE__ */ u2("div", { class: "ls2-range-stack", children: [
+        /* @__PURE__ */ u2(Field, { label: `Pose and expression \xB7 ${Math.round(detection.stateConfidence * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".3", max: ".95", step: ".05", value: detection.stateConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Outfit change \xB7 ${Math.round(detection.outfitConfidence * 100)}%`, hint: "Also requires an explicit clothing cue.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".5", max: "1", step: ".05", value: detection.outfitConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } }) }) })
+      ] })
+    ] })
+  ] });
+}
+function AppearanceView({ client }) {
+  const { backend } = useClientState(client);
+  const [chatScoped, setChatScoped] = d2(Boolean(backend.timeline?.layoutOverride));
+  const [draft, setDraft] = d2({ ...backend.settings, appearance: client.effectiveAppearance() });
+  h2(() => {
+    setChatScoped(Boolean(backend.timeline?.layoutOverride));
+    setDraft({ ...backend.settings, appearance: client.effectiveAppearance() });
+  }, [backend.settings.revision, backend.timeline?.revision]);
+  const appearance = draft.appearance;
+  const patch = (value) => setDraft({ ...draft, appearance: { ...appearance, ...value } });
+  async function save() {
+    if (chatScoped) await client.saveChatLayout(appearance);
+    else {
+      if (backend.timeline?.layoutOverride) await client.saveChatLayout(null);
+      await client.saveSettings(draft);
+    }
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Stage presentation", title: "Appearance", description: "LumiStage inherits Lumiverse colors, glass, radii, shadows, font, and UI scaling.", actions: /* @__PURE__ */ u2(Button, { icon: "check", variant: "primary", onClick: () => void save(), children: "Save changes" }) }),
+    /* @__PURE__ */ u2(Surface, { class: "ls2-appearance-preview", padding: "none", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-preview-window", children: [
+        /* @__PURE__ */ u2("div", { class: "ls2-preview-toolbar", children: [
+          /* @__PURE__ */ u2("span", {}),
+          /* @__PURE__ */ u2("span", {}),
+          /* @__PURE__ */ u2("span", {})
+        ] }),
+        /* @__PURE__ */ u2("div", { class: "ls2-preview-actors", children: [
+          /* @__PURE__ */ u2("i", {}),
+          /* @__PURE__ */ u2("i", { "data-focus": true })
+        ] }),
+        /* @__PURE__ */ u2("div", { class: "ls2-preview-caption", children: "Focused actor \xB7 Outfit / Pose / Expression" })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-preview-copy", children: [
+        /* @__PURE__ */ u2("strong", { children: "Live preview language" }),
+        /* @__PURE__ */ u2("span", { children: "Every surface and accent shown here comes from the active Lumiverse theme." })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(Toggle, { checked: chatScoped, disabled: !backend.activeChatId, onChange: setChatScoped, label: "Chat-specific layout", hint: "Store geometry and presentation on this LumiStage timeline instead of the global default." }) }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Motion and composition" }),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Transition", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: appearance.transition, onChange: (event) => patch({ transition: event.currentTarget.value }), children: [
+          /* @__PURE__ */ u2("option", { value: "crossfade", children: "Crossfade" }),
+          /* @__PURE__ */ u2("option", { value: "lift", children: "Lift" }),
+          /* @__PURE__ */ u2("option", { value: "cut", children: "Cut" })
+        ] }) }),
+        /* @__PURE__ */ u2(Field, { label: `Duration \xB7 ${appearance.transitionMs} ms`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "0", max: "1000", step: "20", value: appearance.transitionMs, onInput: (event) => patch({ transitionMs: Number(event.currentTarget.value) }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Focused actor \xB7 ${appearance.focusedScale.toFixed(2)}\xD7`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".8", max: "1.3", step: ".01", value: appearance.focusedScale, onInput: (event) => patch({ focusedScale: Number(event.currentTarget.value) }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Ensemble overlap \xB7 ${Math.round(appearance.ensembleOverlap * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "0", max: ".8", step: ".02", value: appearance.ensembleOverlap, onInput: (event) => patch({ ensembleOverlap: Number(event.currentTarget.value) }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Stage opacity \xB7 ${Math.round(appearance.opacity * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".1", max: "1", step: ".05", value: appearance.opacity, onInput: (event) => patch({ opacity: Number(event.currentTarget.value) }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Background actors \xB7 ${Math.round(appearance.idleOpacity * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".05", max: "1", step: ".05", value: appearance.idleOpacity, onInput: (event) => patch({ idleOpacity: Number(event.currentTarget.value) }) }) })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Stage chrome" }),
+      /* @__PURE__ */ u2(Toggle, { checked: appearance.showChrome, onChange: (showChrome) => patch({ showChrome }), label: "Floating window frame", hint: "Use Lumiverse glass, border, and shadow tokens around the stage." }),
+      /* @__PURE__ */ u2(Toggle, { checked: appearance.showCaptions, onChange: (showCaptions) => patch({ showCaptions }), label: "State captions", hint: "Show actor, outfit, pose, and expression below each sprite." }),
+      /* @__PURE__ */ u2(Toggle, { checked: appearance.visible, onChange: (visible) => patch({ visible }), label: "Stage visible", hint: "The drawer and quick selector remain available while hidden." })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Window size" }),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Width", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", min: "200", max: "1200", value: appearance.width, onInput: (event) => patch({ width: Number(event.currentTarget.value) }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Height", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", min: "240", max: "1000", value: appearance.height, onInput: (event) => patch({ height: Number(event.currentTarget.value) }) }) })
+      ] })
+    ] })
+  ] });
+}
+function DiagnosticsView({ client, profile }) {
+  const { backend } = useClientState(client);
+  const [report, setReport] = d2(null);
+  const issues = profile ? inspectProfile(profile) : [];
+  async function refresh() {
+    try {
+      setReport(await client.diagnostics());
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Diagnostics failed.");
+    }
+  }
+  async function copy() {
+    await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+    client.notify("success", "Privacy-safe diagnostics copied.");
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "System health", title: "Diagnostics", description: "Runtime, catalog, storage, and permission health without transcripts or raw model output.", actions: /* @__PURE__ */ u2(S, { children: [
+      /* @__PURE__ */ u2(Button, { icon: "refresh", onClick: () => void refresh(), children: "Refresh" }),
+      /* @__PURE__ */ u2(Button, { icon: "copy", variant: "primary", disabled: !report, onClick: () => void copy(), children: "Copy report" })
+    ] }) }),
+    /* @__PURE__ */ u2("div", { class: "ls2-health-grid", children: Object.entries(backend.permissions).map(([name, granted]) => /* @__PURE__ */ u2("div", { "data-good": granted, children: [
+      /* @__PURE__ */ u2("span", { children: /* @__PURE__ */ u2(Icon, { name: granted ? "success" : "warning", size: 16 }) }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("strong", { children: name.replace(/([A-Z])/g, " $1") }),
+        /* @__PURE__ */ u2("small", { children: granted ? "Granted" : "Unavailable" })
+      ] })
+    ] })) }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Catalog integrity", description: issues.length ? `${issues.length} finding${issues.length === 1 ? "" : "s"} need review.` : "No structural issues found.", trailing: /* @__PURE__ */ u2(Status, { tone: issues.some((item) => item.severity === "error") ? "danger" : issues.length ? "warning" : "success", children: issues.length ? "Review" : "Healthy" }) }),
+      issues.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-issue-list", children: issues.slice(0, 40).map((issue) => /* @__PURE__ */ u2("div", { "data-tone": issue.severity, children: [
+        /* @__PURE__ */ u2(Icon, { name: issue.severity === "error" ? "warning" : "info", size: 15 }),
+        /* @__PURE__ */ u2("span", { children: issue.message })
+      ] })) })
+    ] }),
+    /* @__PURE__ */ u2(InlineNotice, { tone: "success", children: [
+      /* @__PURE__ */ u2("strong", { children: "Privacy boundary active." }),
+      /* @__PURE__ */ u2("span", { children: "Generated reports exclude transcript content and raw provider responses." })
+    ] }),
+    report && /* @__PURE__ */ u2("pre", { class: "ls2-diagnostic-output", children: JSON.stringify(report, null, 2) })
+  ] });
+}
+function Studio({ client }) {
+  const state = useClientState(client);
+  const [view, setView] = d2("stage");
+  const [draft, setDraft] = d2(state.backend.profile);
+  const [dirty, setDirty] = d2(false);
+  const [selected, setSelected] = d2(/* @__PURE__ */ new Set());
+  const undoRef = A2([]);
+  const redoRef = A2([]);
+  const [, renderHistory] = d2(0);
+  h2(() => {
+    if (!dirty || state.backend.profile?.revision !== draft?.revision) {
+      setDraft(state.backend.profile ? structuredClone(state.backend.profile) : null);
+      setDirty(false);
+      undoRef.current = [];
+      redoRef.current = [];
+      renderHistory((value) => value + 1);
+    }
+  }, [state.backend.profile?.revision]);
+  function update(mutator) {
+    if (!draft) return;
+    const next = structuredClone(draft);
+    mutator(next);
+    undoRef.current.push(structuredClone(draft));
+    if (undoRef.current.length > 50) undoRef.current.shift();
+    redoRef.current = [];
+    next.updatedAt = Date.now();
+    setDraft(next);
+    setDirty(true);
+    renderHistory((value) => value + 1);
+  }
+  function mutate(mutation) {
+    if (!draft) return;
+    undoRef.current.push(structuredClone(draft));
+    redoRef.current = [];
+    setDraft(applyBatchMutation(draft, mutation));
+    setDirty(true);
+    renderHistory((value) => value + 1);
+  }
+  function undo() {
+    const previous = undoRef.current.pop();
+    if (!previous || !draft) return;
+    redoRef.current.push(structuredClone(draft));
+    setDraft(previous);
+    setDirty(true);
+    renderHistory((value) => value + 1);
+  }
+  function redo() {
+    const next = redoRef.current.pop();
+    if (!next || !draft) return;
+    undoRef.current.push(structuredClone(draft));
+    setDraft(next);
+    setDirty(true);
+    renderHistory((value) => value + 1);
+  }
+  async function save() {
+    if (!draft) return;
+    try {
+      await client.saveProfile(draft);
+      setDirty(false);
+      client.notify("success", "LumiStage library saved.");
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Save failed.");
+    }
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls2-root", children: /* @__PURE__ */ u2("div", { class: "ls2-drawer", children: [
+    /* @__PURE__ */ u2("header", { class: "ls2-appbar", children: [
+      /* @__PURE__ */ u2("div", { class: "ls2-brand-mark", children: /* @__PURE__ */ u2(Icon, { name: "stage", size: 21 }) }),
+      /* @__PURE__ */ u2("div", { class: "ls2-brand-copy", children: [
+        /* @__PURE__ */ u2("strong", { children: "LumiStage" }),
+        /* @__PURE__ */ u2("span", { children: state.backend.activeCharacterName ?? "Independent expression studio" })
+      ] }),
+      /* @__PURE__ */ u2(Status, { tone: state.backend.lastDetection.status === "error" ? "danger" : state.backend.lastDetection.status === "running" ? "accent" : "success", children: state.backend.lastDetection.status === "running" ? "Working" : state.backend.lastDetection.status === "error" ? "Attention" : "Ready" })
+    ] }),
+    /* @__PURE__ */ u2("nav", { class: "ls2-nav", "aria-label": "LumiStage workspace", children: NAV.map((item) => /* @__PURE__ */ u2("button", { type: "button", "data-active": view === item.id, "aria-current": view === item.id ? "page" : void 0, onClick: () => setView(item.id), children: [
+      /* @__PURE__ */ u2(Icon, { name: item.icon, size: 16 }),
+      /* @__PURE__ */ u2("span", { children: item.label })
+    ] })) }),
+    /* @__PURE__ */ u2(ProgressNotice, { client }),
+    /* @__PURE__ */ u2("main", { class: "ls2-content", children: [
+      view === "stage" && /* @__PURE__ */ u2(LiveView, { client, openLibrary: () => setView("library") }),
+      view === "library" && /* @__PURE__ */ u2(LibraryView, { client, profile: draft, update, selected, setSelected }),
+      view === "batch" && /* @__PURE__ */ u2(BatchView, { profile: draft, selected, setSelected, mutate, undo, redo, canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 }),
+      view === "automation" && /* @__PURE__ */ u2(AutomationView, { client }),
+      view === "appearance" && /* @__PURE__ */ u2(AppearanceView, { client }),
+      view === "diagnostics" && /* @__PURE__ */ u2(DiagnosticsView, { client, profile: draft })
+    ] }),
+    (dirty || view === "library" || view === "batch") && /* @__PURE__ */ u2("div", { class: "ls2-savebar", "data-dirty": dirty, children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { class: "ls2-save-dot" }),
+        /* @__PURE__ */ u2("span", { children: dirty ? "Unsaved library changes" : "Library is up to date" })
+      ] }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { size: "small", variant: "ghost", disabled: !dirty, onClick: () => {
+          setDraft(state.backend.profile ? structuredClone(state.backend.profile) : null);
+          setDirty(false);
+        }, children: "Revert" }),
+        /* @__PURE__ */ u2(Button, { size: "small", variant: "primary", icon: "check", disabled: !dirty || state.busy, onClick: () => void save(), children: "Save" })
+      ] })
+    ] })
+  ] }) });
+}
+function CharacterSetup({ client, characterId, onOpenStudio }) {
+  const { backend } = useClientState(client);
+  const profile = backend.profile?.characterId === characterId ? backend.profile : null;
+  h2(() => client.send({ type: "character-editor", characterId }), [characterId]);
+  if (!profile) return /* @__PURE__ */ u2("div", { class: "ls2-root ls2-character-panel", children: /* @__PURE__ */ u2("div", { class: "ls2-loading", children: [
+    /* @__PURE__ */ u2("span", {}),
+    /* @__PURE__ */ u2("strong", { children: "Loading LumiStage profile\u2026" })
+  ] }) });
+  const assets = allAssets(profile);
+  const outfits = profile.actors.reduce((sum, actor) => sum + actor.outfits.length, 0);
+  return /* @__PURE__ */ u2("div", { class: "ls2-root ls2-character-panel", children: [
+    /* @__PURE__ */ u2("div", { class: "ls2-character-hero", children: [
+      /* @__PURE__ */ u2(ContextAvatar, { name: profile.characterName }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Independent visual profile" }),
+        /* @__PURE__ */ u2("h2", { children: profile.characterName }),
+        /* @__PURE__ */ u2("p", { children: "Actor, outfit, pose, and expression direction owned entirely by LumiStage." })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls2-metric-grid", children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "actors", size: 18 }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: profile.actors.length }),
+          "Actors"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "outfit", size: 18 }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: outfits }),
+          "Outfits"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "image", size: 18 }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: assets.length }),
+          "Media"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ u2(Surface, { children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Manage this profile", description: "Open the full studio for visual libraries, batch operations, automation, archives, and diagnostics." }),
+      /* @__PURE__ */ u2(Toolbar, { children: [
+        /* @__PURE__ */ u2(Button, { icon: "stage", variant: "primary", onClick: onOpenStudio, children: "Open LumiStage" }),
+        /* @__PURE__ */ u2(Button, { icon: "upload", onClick: () => showImportModal(client, profile), children: "Import media" })
+      ] })
+    ] })
+  ] });
+}
+
 // src/ui/styles.ts
-var LUMI_STAGE_CSS = String.raw`
-.ls-root, .ls-stage-root, .ls-modal-root {
-  --ls-ink: var(--lumiverse-text, #edf4ff);
-  --ls-muted: var(--lumiverse-text-dim, #8794a8);
-  --ls-border: color-mix(in srgb, var(--lumiverse-border, #526070) 72%, rgba(86, 217, 232, .2));
-  --ls-panel: color-mix(in srgb, var(--lumiverse-bg, #0d1420) 90%, #102635);
-  --ls-panel-2: color-mix(in srgb, var(--lumiverse-fill-subtle, #152130) 84%, #0b2730);
-  --ls-well: color-mix(in srgb, var(--lumiverse-bg-dark, #080d15) 92%, #0b1e29);
-  --ls-cyan: #63dce7;
-  --ls-amber: #f0b65b;
-  --ls-green: #75d6a3;
-  --ls-red: #ed7d87;
-  --ls-radius: 14px;
-  box-sizing: border-box;
-  color: var(--ls-ink);
+var LUMI_STAGE_CSS = `
+.ls2-root, .ls2-modal, .ls2-stage-root {
+  --ls2-text: var(--lumiverse-text, #ececf2);
+  --ls2-muted: var(--lumiverse-text-muted, #a3a5b4);
+  --ls2-dim: var(--lumiverse-text-dim, #747788);
+  --ls2-hint: var(--lumiverse-text-hint, var(--ls2-dim));
+  --ls2-canvas: var(--lumiverse-bg-deep, var(--lumiverse-bg, #101116));
+  --ls2-panel: var(--lumiverse-bg-elevated, var(--lumiverse-surface, #191a21));
+  --ls2-raised: var(--lumiverse-surface-raised, var(--lumiverse-bg-hover, #22232b));
+  --ls2-fill: var(--lumiverse-fill-subtle, rgba(255,255,255,.045));
+  --ls2-fill-hover: var(--lumiverse-fill-hover, rgba(255,255,255,.075));
+  --ls2-fill-strong: var(--lumiverse-fill-strong, rgba(255,255,255,.12));
+  --ls2-input: var(--lumiverse-input-bg, var(--ls2-fill));
+  --ls2-line: var(--lumiverse-border, rgba(255,255,255,.1));
+  --ls2-line-subtle: var(--lumiverse-border-subtle, var(--ls2-line));
+  --ls2-line-hover: var(--lumiverse-border-hover, rgba(255,255,255,.18));
+  --ls2-accent: var(--lumiverse-primary, var(--lumiverse-accent, #8b7cf6));
+  --ls2-accent-hover: var(--lumiverse-primary-hover, var(--lumiverse-accent, #9b8eff));
+  --ls2-accent-fg: var(--lumiverse-primary-contrast, var(--lumiverse-on-primary, #fff));
+  --ls2-accent-soft: var(--lumiverse-primary-010, var(--lumiverse-primary-muted, rgba(139,124,246,.1)));
+  --ls2-accent-medium: var(--lumiverse-primary-020, var(--lumiverse-primary-light, rgba(139,124,246,.18)));
+  --ls2-success: var(--lumiverse-success, #69c79f);
+  --ls2-warning: var(--lumiverse-warning, #e1a75c);
+  --ls2-danger: var(--lumiverse-danger, var(--lumiverse-error, #e17078));
+  --ls2-glass: var(--lcs-glass-bg, var(--lumiverse-bg-panel, var(--ls2-panel)));
+  --ls2-glass-border: var(--lcs-glass-border, var(--ls2-line));
+  --ls2-glass-blur: var(--lcs-glass-blur, 16px);
+  --ls2-radius-xs: var(--lcs-radius-xs, var(--lumiverse-radius-sm, 6px));
+  --ls2-radius-sm: var(--lcs-radius-sm, var(--lumiverse-radius-md, 9px));
+  --ls2-radius: var(--lcs-radius, var(--lumiverse-radius-lg, 13px));
+  --ls2-radius-lg: var(--lumiverse-radius-xl, 18px);
+  --ls2-shadow-sm: var(--lumiverse-shadow-sm, 0 4px 16px rgba(0,0,0,.14));
+  --ls2-shadow: var(--lumiverse-shadow-md, 0 12px 35px rgba(0,0,0,.2));
+  --ls2-transition: var(--lcs-transition-fast, var(--lumiverse-transition-fast, 150ms ease));
+  color: var(--ls2-text);
   font-family: var(--lumiverse-font-family, Inter, ui-sans-serif, system-ui, sans-serif);
-  font-size: calc(13px * var(--lumiverse-font-scale, 1));
+  font-size: calc(14px * var(--lumiverse-font-scale, 1));
+  line-height: 1.45;
 }
-.ls-root *, .ls-stage-root *, .ls-modal-root * { box-sizing: border-box; }
-.ls-root button, .ls-root input, .ls-root select, .ls-root textarea,
-.ls-stage-root button, .ls-stage-root input, .ls-modal-root button, .ls-modal-root input, .ls-modal-root select {
-  font: inherit;
-}
-.ls-root :focus-visible, .ls-stage-root :focus-visible, .ls-modal-root :focus-visible {
-  outline: 2px solid var(--ls-cyan);
-  outline-offset: 2px;
-}
-.ls-root {
+.ls2-root *, .ls2-root *::before, .ls2-root *::after,
+.ls2-modal *, .ls2-modal *::before, .ls2-modal *::after,
+.ls2-stage-root *, .ls2-stage-root *::before, .ls2-stage-root *::after { box-sizing: border-box; }
+.ls2-root :is(h1,h2,h3,p,figure), .ls2-modal :is(h1,h2,h3,p,figure), .ls2-stage-root :is(h1,h2,h3,p,figure) { margin: 0; }
+.ls2-root :is(button,input,select,textarea), .ls2-modal :is(button,input,select,textarea), .ls2-stage-root button { font: inherit; }
+.ls2-root button, .ls2-modal button, .ls2-stage-root button { color: inherit; }
+.ls2-root :focus-visible, .ls2-modal :focus-visible, .ls2-stage-root :focus-visible { outline: 2px solid var(--ls2-accent); outline-offset: 2px; }
+.ls2-root svg, .ls2-modal svg, .ls2-stage-root svg { display: block; flex: 0 0 auto; }
+
+.ls2-root { min-height: 100%; background: transparent; }
+.ls2-drawer {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
   background:
-    radial-gradient(circle at 85% 2%, rgba(99, 220, 231, .08), transparent 26rem),
-    linear-gradient(180deg, color-mix(in srgb, var(--ls-panel) 94%, transparent), var(--ls-well));
+    radial-gradient(circle at 94% 0, color-mix(in srgb, var(--ls2-accent) 7%, transparent), transparent 25rem),
+    transparent;
 }
-.ls-shell { min-height: 100%; display: flex; flex-direction: column; }
-.ls-mast {
-  position: relative;
-  padding: calc(18px + env(safe-area-inset-top)) 16px 14px;
-  border-bottom: 1px solid var(--ls-border);
-  background: linear-gradient(145deg, rgba(240, 182, 91, .09), transparent 44%);
-  overflow: hidden;
+.ls2-appbar {
+  position: sticky; top: 0; z-index: 20;
+  min-height: 62px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 10px;
+  padding: calc(11px + env(safe-area-inset-top)) 14px 11px;
+  border-bottom: 1px solid var(--ls2-glass-border);
+  background: var(--ls2-glass);
+  backdrop-filter: blur(var(--ls2-glass-blur));
 }
-.ls-mast::before, .ls-mast::after {
-  content: "";
-  position: absolute;
-  width: 54px;
-  height: 1px;
-  top: 12px;
-  background: linear-gradient(90deg, transparent, var(--ls-amber));
-  opacity: .75;
-}
-.ls-mast::before { left: 0; }
-.ls-mast::after { right: 0; transform: scaleX(-1); }
-.ls-brand { display: flex; align-items: center; gap: 11px; }
-.ls-mark {
+.ls2-brand-mark {
   width: 38px; height: 38px; display: grid; place-items: center;
-  border: 1px solid color-mix(in srgb, var(--ls-amber) 65%, var(--ls-border));
-  border-radius: 11px 11px 18px 18px;
-  color: var(--ls-amber);
-  background: rgba(240, 182, 91, .06);
-  box-shadow: inset 0 0 18px rgba(240, 182, 91, .06);
+  border: 1px solid color-mix(in srgb, var(--ls2-accent) 30%, var(--ls2-line));
+  border-radius: var(--ls2-radius);
+  color: var(--ls2-accent);
+  background: linear-gradient(145deg, var(--ls2-accent-medium), var(--ls2-fill));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ls2-text) 8%, transparent), var(--ls2-shadow-sm);
 }
-.ls-mark svg { width: 23px; height: 23px; }
-.ls-brand-copy { min-width: 0; }
-.ls-eyebrow {
-  margin: 0 0 2px; color: var(--ls-cyan); font-size: 9px; font-weight: 800;
-  letter-spacing: .18em; text-transform: uppercase;
-}
-.ls-title { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 500; letter-spacing: .01em; }
-.ls-subtitle { margin: 5px 0 0; color: var(--ls-muted); font-size: 11px; line-height: 1.45; }
-.ls-nav {
-  display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none;
-  padding: 9px 10px; border-bottom: 1px solid var(--ls-border);
-  background: color-mix(in srgb, var(--ls-well) 90%, transparent);
-}
-.ls-nav::-webkit-scrollbar { display: none; }
-.ls-nav-btn {
-  flex: 0 0 auto; min-height: 32px; padding: 6px 10px;
-  border: 1px solid transparent; border-radius: 9px; color: var(--ls-muted);
-  background: transparent; cursor: pointer; font-size: 11px; font-weight: 700;
-}
-.ls-nav-btn:hover { color: var(--ls-ink); background: rgba(255,255,255,.04); }
-.ls-nav-btn[aria-selected="true"] {
-  color: var(--ls-ink); border-color: var(--ls-border);
-  background: linear-gradient(180deg, rgba(99,220,231,.12), rgba(99,220,231,.035));
-  box-shadow: inset 0 -2px 0 rgba(99,220,231,.45);
-}
-.ls-main { flex: 1; min-height: 0; padding: 13px; }
-.ls-section { display: grid; gap: 11px; animation: ls-enter .2s ease-out; }
-.ls-section-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
-.ls-section-title { margin: 0; font-size: 14px; letter-spacing: .01em; }
-.ls-section-note { margin: 3px 0 0; color: var(--ls-muted); font-size: 10.5px; line-height: 1.45; }
-.ls-card {
-  position: relative; padding: 12px; border: 1px solid var(--ls-border); border-radius: var(--ls-radius);
-  background: linear-gradient(150deg, color-mix(in srgb, var(--ls-panel-2) 92%, transparent), color-mix(in srgb, var(--ls-panel) 94%, transparent));
-  box-shadow: 0 10px 28px rgba(0,0,0,.12);
-}
-.ls-card::before {
-  content: ""; position: absolute; left: 10px; right: 10px; top: -1px; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(99,220,231,.45), transparent);
-}
-.ls-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
-.ls-card-title { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: color-mix(in srgb, var(--ls-ink) 85%, var(--ls-cyan)); }
-.ls-badge {
-  display: inline-flex; align-items: center; min-height: 20px; padding: 2px 7px;
-  border: 1px solid var(--ls-border); border-radius: 999px; color: var(--ls-muted);
-  background: rgba(0,0,0,.14); font-size: 9.5px; font-weight: 700;
-}
-.ls-badge[data-tone="success"] { color: var(--ls-green); border-color: color-mix(in srgb, var(--ls-green) 45%, transparent); }
-.ls-badge[data-tone="warning"] { color: var(--ls-amber); border-color: color-mix(in srgb, var(--ls-amber) 45%, transparent); }
-.ls-badge[data-tone="error"] { color: var(--ls-red); border-color: color-mix(in srgb, var(--ls-red) 45%, transparent); }
-.ls-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
-.ls-button {
-  min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 6px 10px; border: 1px solid var(--ls-border); border-radius: 9px;
-  color: var(--ls-ink); background: rgba(255,255,255,.035); cursor: pointer; font-weight: 700; font-size: 10.5px;
-}
-.ls-button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ls-cyan) 55%, var(--ls-border)); background: rgba(99,220,231,.08); }
-.ls-button:disabled { opacity: .42; cursor: not-allowed; }
-.ls-button-primary { border-color: color-mix(in srgb, var(--ls-cyan) 58%, var(--ls-border)); background: linear-gradient(180deg, rgba(99,220,231,.18), rgba(99,220,231,.075)); }
-.ls-button-warm { border-color: color-mix(in srgb, var(--ls-amber) 58%, var(--ls-border)); background: rgba(240,182,91,.1); }
-.ls-button-danger { color: var(--ls-red); }
-.ls-icon-btn {
-  width: 30px; min-width: 30px; height: 30px; padding: 0; border: 1px solid var(--ls-border);
-  border-radius: 9px; color: var(--ls-muted); background: rgba(0,0,0,.12); cursor: pointer;
-}
-.ls-icon-btn:hover { color: var(--ls-ink); border-color: var(--ls-cyan); }
-.ls-field { display: grid; gap: 5px; }
-.ls-field-label { color: var(--ls-muted); font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
-.ls-input, .ls-select, .ls-textarea {
-  width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid var(--ls-border); border-radius: 9px;
-  background: color-mix(in srgb, var(--ls-well) 88%, transparent); color: var(--ls-ink); outline: none;
-}
-.ls-input:focus, .ls-select:focus, .ls-textarea:focus { border-color: var(--ls-cyan); box-shadow: 0 0 0 3px rgba(99,220,231,.09); }
-.ls-textarea { resize: vertical; min-height: 72px; }
-.ls-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
-.ls-switch-copy strong { display: block; font-size: 11px; }
-.ls-switch-copy span { color: var(--ls-muted); font-size: 9.5px; line-height: 1.35; }
-.ls-switch {
-  width: 38px; height: 22px; padding: 2px; border: 1px solid var(--ls-border); border-radius: 999px;
-  background: rgba(0,0,0,.22); cursor: pointer;
-}
-.ls-switch::after { content: ""; display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--ls-muted); transition: transform .18s ease, background .18s ease; }
-.ls-switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--ls-cyan); }
-.ls-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-.ls-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.ls-stat { padding: 9px; border: 1px solid var(--ls-border); border-radius: 10px; background: rgba(0,0,0,.12); }
-.ls-stat strong { display: block; font-size: 17px; font-weight: 500; font-family: Georgia, serif; color: var(--ls-amber); }
-.ls-stat span { color: var(--ls-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
-.ls-empty {
-  min-height: 140px; display: grid; place-items: center; text-align: center;
-  border: 1px dashed var(--ls-border); border-radius: 13px; padding: 18px; color: var(--ls-muted);
-  background: linear-gradient(135deg, rgba(99,220,231,.025), rgba(240,182,91,.025));
-}
-.ls-empty strong { color: var(--ls-ink); display: block; margin-bottom: 4px; }
-.ls-live-list { display: grid; gap: 7px; }
-.ls-live-row {
-  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 9px;
-  padding: 8px; border: 1px solid var(--ls-border); border-radius: 11px; background: rgba(0,0,0,.12);
-}
-.ls-live-avatar { width: 38px; height: 38px; border-radius: 9px; object-fit: contain; object-position: bottom; background: var(--ls-well); }
-.ls-live-avatar-fallback { display: grid; place-items: center; color: var(--ls-cyan); font-weight: 800; border: 1px solid var(--ls-border); }
-.ls-live-name { font-size: 11px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ls-live-state { color: var(--ls-muted); font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ls-tree { display: grid; gap: 7px; }
-.ls-tree-row { display: flex; align-items: center; gap: 6px; }
-.ls-tree-btn {
-  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  min-height: 34px; padding: 7px 9px; border: 1px solid transparent; border-radius: 9px;
-  color: var(--ls-muted); background: transparent; cursor: pointer; text-align: left;
-}
-.ls-tree-btn:hover { background: rgba(255,255,255,.035); color: var(--ls-ink); }
-.ls-tree-btn[data-active="true"] { border-color: var(--ls-border); background: rgba(99,220,231,.075); color: var(--ls-ink); }
-.ls-tree-count { color: var(--ls-muted); font-size: 9px; }
-.ls-library-layout { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 9px; align-items: start; }
-.ls-library-tree { position: sticky; top: 0; max-height: 66vh; overflow: auto; }
-.ls-asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.ls-asset {
-  position: relative; min-width: 0; border: 1px solid var(--ls-border); border-radius: 11px;
-  overflow: hidden; background: var(--ls-well); cursor: pointer;
-}
-.ls-asset[data-selected="true"] { border-color: var(--ls-cyan); box-shadow: 0 0 0 2px rgba(99,220,231,.15); }
-.ls-asset-media { width: 100%; aspect-ratio: 3 / 4; display: block; object-fit: contain; object-position: bottom center; background: radial-gradient(circle at 50% 88%, rgba(99,220,231,.08), transparent 58%); }
-.ls-asset-meta { padding: 7px; border-top: 1px solid var(--ls-border); }
-.ls-asset-name { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ls-asset-kind { color: var(--ls-muted); font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em; }
-.ls-asset-check { position: absolute; top: 6px; left: 6px; accent-color: var(--ls-cyan); }
-.ls-selectbar { position: sticky; bottom: 8px; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border: 1px solid var(--ls-border); border-radius: 12px; background: color-mix(in srgb, var(--ls-panel) 92%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,.28); }
-.ls-matrix { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 9px; }
-.ls-matrix th { color: var(--ls-muted); font-weight: 700; padding: 4px; }
-.ls-matrix td { text-align: center; padding: 7px 4px; border: 1px solid var(--ls-border); border-radius: 6px; }
-.ls-matrix td[data-complete="true"] { color: var(--ls-green); background: rgba(117,214,163,.07); }
-.ls-matrix td[data-complete="false"] { color: var(--ls-amber); background: rgba(240,182,91,.05); }
-.ls-range { width: 100%; accent-color: var(--ls-cyan); }
-.ls-progress { height: 5px; border-radius: 999px; background: rgba(0,0,0,.25); overflow: hidden; }
-.ls-progress-bar { height: 100%; background: linear-gradient(90deg, var(--ls-cyan), var(--ls-amber)); transition: width .15s ease; }
-.ls-notice {
-  position: sticky; top: 8px; z-index: 8; margin: 0 10px 8px; padding: 9px 11px;
-  border: 1px solid var(--ls-border); border-left: 3px solid var(--ls-cyan); border-radius: 9px;
-  background: var(--ls-panel); box-shadow: 0 10px 26px rgba(0,0,0,.24); font-size: 10.5px;
-}
-.ls-notice[data-tone="success"] { border-left-color: var(--ls-green); }
-.ls-notice[data-tone="warning"] { border-left-color: var(--ls-amber); }
-.ls-notice[data-tone="error"] { border-left-color: var(--ls-red); }
-.ls-diagnostic { margin: 0; padding: 10px; max-height: 50vh; overflow: auto; white-space: pre-wrap; word-break: break-word; color: var(--ls-muted); background: var(--ls-well); border: 1px solid var(--ls-border); border-radius: 10px; font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.ls-footer { padding: 9px 13px calc(9px + env(safe-area-inset-bottom)); border-top: 1px solid var(--ls-border); display: flex; justify-content: space-between; gap: 8px; color: var(--ls-muted); font-size: 9px; }
+.ls2-brand-copy { min-width: 0; display: flex; flex-direction: column; }
+.ls2-brand-copy strong { font-size: 15px; letter-spacing: -.012em; }
+.ls2-brand-copy span { overflow: hidden; color: var(--ls2-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
-.ls-stage-root { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 16px; touch-action: none; }
-.ls-stage {
-  position: relative; width: 100%; height: 100%; display: flex; align-items: flex-end; justify-content: center;
-  opacity: var(--ls-stage-opacity, 1);
-  background: radial-gradient(ellipse at 50% 105%, rgba(99,220,231,.09), transparent 54%);
+.ls2-nav {
+  position: sticky; top: calc(62px + env(safe-area-inset-top)); z-index: 19;
+  display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 3px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--ls2-line-subtle);
+  background: color-mix(in srgb, var(--ls2-glass) 92%, transparent);
+  backdrop-filter: blur(var(--ls2-glass-blur));
 }
-.ls-stage[data-chrome="true"] { border: 1px solid var(--ls-border); background: linear-gradient(180deg, rgba(7,12,19,.25), rgba(7,12,19,.74)); box-shadow: 0 20px 55px rgba(0,0,0,.32); }
-.ls-stage-rig { position: absolute; inset: 0; pointer-events: none; opacity: .55; }
-.ls-stage-rig::before { content: ""; position: absolute; left: 8%; right: 8%; top: 16px; height: 1px; background: linear-gradient(90deg, transparent, rgba(240,182,91,.55), transparent); }
-.ls-stage-rig::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 60%; height: 15%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(99,220,231,.12), transparent 70%); }
-.ls-stage-ensemble { position: absolute; inset: 28px 4px 0; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
-.ls-sprite {
-  position: relative; height: 100%; min-width: 0; flex: 0 1 76%; margin-left: calc(var(--ls-overlap, .34) * -45%);
-  filter: brightness(.72) saturate(.8); opacity: var(--ls-idle-opacity, .46); transform: scale(.96);
-  transform-origin: bottom center; transition: opacity var(--ls-transition-ms, 280ms) ease, filter var(--ls-transition-ms, 280ms) ease, transform var(--ls-transition-ms, 280ms) cubic-bezier(.16,1,.3,1);
+.ls2-nav button {
+  appearance: none; min-width: 0; min-height: 43px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  padding: 5px 2px; border: 1px solid transparent; border-radius: var(--ls2-radius-sm);
+  color: var(--ls2-dim); background: transparent; cursor: pointer; transition: all var(--ls2-transition);
 }
-.ls-sprite:first-child { margin-left: 0; }
-.ls-sprite[data-focused="true"] { z-index: 3; filter: none; opacity: 1; transform: scale(var(--ls-focused-scale, 1.035)); }
-.ls-sprite-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom center; pointer-events: none; user-select: none; }
-.ls-sprite[data-transition="lift"] .ls-sprite-media { animation: ls-sprite-lift var(--ls-transition-ms, 280ms) cubic-bezier(.16,1,.3,1); }
-.ls-sprite[data-transition="crossfade"] .ls-sprite-media { animation: ls-sprite-fade var(--ls-transition-ms, 280ms) ease; }
-.ls-sprite-caption {
-  position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); z-index: 5;
-  max-width: calc(100% - 12px); padding: 3px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
-  background: rgba(6,10,16,.72); color: #f4f7fb; font-size: 9px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  backdrop-filter: blur(8px);
+.ls2-nav button span { overflow: hidden; max-width: 100%; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-nav button:hover { color: var(--ls2-text); background: var(--ls2-fill-hover); }
+.ls2-nav button[data-active="true"] {
+  color: var(--ls2-accent);
+  border-color: color-mix(in srgb, var(--ls2-accent) 20%, var(--ls2-line));
+  background: var(--ls2-accent-soft);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--ls2-accent) 72%, transparent);
 }
-.ls-stage-toolbar {
-  position: absolute; z-index: 8; top: 6px; left: 6px; right: 6px; min-height: 28px;
-  display: flex; align-items: center; gap: 5px; padding: 3px 5px;
-  border: 1px solid rgba(255,255,255,.09); border-radius: 10px;
-  background: rgba(7,12,19,.65); backdrop-filter: blur(9px);
-  opacity: 0; transform: translateY(-4px); transition: .16s ease;
-}
-.ls-stage-root:hover .ls-stage-toolbar, .ls-stage-root:focus-within .ls-stage-toolbar { opacity: 1; transform: none; }
-.ls-stage-title { flex: 1; min-width: 0; color: #eaf0f7; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ls-stage-btn { width: 24px; height: 22px; border: 0; border-radius: 7px; color: #c4cedb; background: transparent; cursor: pointer; }
-.ls-stage-btn:hover { color: #fff; background: rgba(99,220,231,.14); }
-.ls-stage-resize {
-  position: absolute; right: 1px; bottom: 1px; width: 22px; height: 22px; z-index: 8;
-  border: 0; background: transparent; cursor: nwse-resize; touch-action: none;
-}
-.ls-stage-resize::before, .ls-stage-resize::after {
-  content: ""; position: absolute; right: 5px; bottom: 5px; width: 8px; height: 1px;
-  background: rgba(99,220,231,.68); transform: rotate(-45deg); transform-origin: right center;
-}
-.ls-stage-resize::after { width: 4px; right: 4px; bottom: 8px; }
-.ls-stage-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; color: rgba(224,234,245,.58); font-size: 10px; line-height: 1.5; }
+.ls2-content { flex: 1; min-height: 0; padding: 18px 14px 90px; }
+.ls2-view { display: flex; flex-direction: column; gap: 14px; min-width: 0; animation: ls2-enter .18s ease-out; }
 
-.ls-modal-root { display: grid; gap: 12px; }
-.ls-modal-actions { display: flex; justify-content: flex-end; gap: 7px; padding-top: 4px; }
-.ls-file-drop { min-height: 120px; display: grid; place-items: center; text-align: center; border: 1px dashed var(--ls-border); border-radius: 12px; background: rgba(99,220,231,.025); cursor: pointer; }
-.ls-file-drop:hover { border-color: var(--ls-cyan); }
-.ls-file-drop input { display: none; }
+.ls2-view-header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 12px; padding: 2px 1px 3px; }
+.ls2-view-heading { min-width: 0; }
+.ls2-eyebrow { display: block; color: var(--ls2-accent); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.ls2-view-heading h2 { margin-top: 3px; font-size: 21px; line-height: 1.18; letter-spacing: -.025em; }
+.ls2-view-heading p { max-width: 520px; margin-top: 5px; color: var(--ls2-muted); font-size: 13px; line-height: 1.5; }
+.ls2-view-actions, .ls2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 
-@keyframes ls-enter { from { opacity: 0; transform: translateY(3px); } }
-@keyframes ls-sprite-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ls-sprite-lift { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+.ls2-surface {
+  min-width: 0; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius);
+  background: var(--ls2-panel); box-shadow: var(--ls2-shadow-sm);
+}
+.ls2-surface[data-padding="default"] { padding: 14px; }
+.ls2-surface[data-padding="small"] { padding: 9px 11px; }
+.ls2-surface[data-padding="none"] { padding: 0; overflow: hidden; }
+.ls2-surface[data-tone="accent"] { border-color: color-mix(in srgb, var(--ls2-accent) 32%, var(--ls2-line)); background: linear-gradient(135deg, var(--ls2-accent-soft), var(--ls2-panel)); }
+.ls2-surface[data-tone="danger"] { border-color: color-mix(in srgb, var(--ls2-danger) 36%, var(--ls2-line)); }
+.ls2-section-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.ls2-section-title h3 { font-size: 13px; line-height: 1.3; letter-spacing: -.005em; }
+.ls2-section-title p { margin-top: 3px; color: var(--ls2-muted); font-size: 12px; line-height: 1.45; }
+.ls2-section-trailing { flex: 0 0 auto; }
 
+.ls2-button, .ls2-icon-button {
+  appearance: none; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
+  color: var(--ls2-text); background: var(--ls2-fill); cursor: pointer; transition: all var(--ls2-transition);
+}
+.ls2-button {
+  min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 11px; font-size: 13px; font-weight: 700;
+}
+.ls2-button-small { min-height: 31px; padding: 5px 8px; font-size: 12px; }
+.ls2-button:hover:not(:disabled), .ls2-icon-button:hover:not(:disabled) { border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); transform: translateY(-1px); }
+.ls2-button-primary { color: var(--ls2-accent-fg); border-color: color-mix(in srgb, var(--ls2-accent) 75%, var(--ls2-line)); background: var(--ls2-accent); box-shadow: 0 5px 15px color-mix(in srgb, var(--ls2-accent) 18%, transparent); }
+.ls2-button-primary:hover:not(:disabled) { border-color: var(--ls2-accent-hover); background: var(--ls2-accent-hover); }
+.ls2-button-ghost { border-color: transparent; background: transparent; color: var(--ls2-muted); }
+.ls2-button-danger { color: var(--ls2-danger); border-color: color-mix(in srgb, var(--ls2-danger) 25%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-danger) 7%, transparent); }
+.ls2-button:disabled, .ls2-icon-button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.ls2-icon-button { width: 32px; height: 32px; display: inline-grid; place-items: center; padding: 0; }
+.ls2-icon-button[data-active="true"] { color: var(--ls2-accent); border-color: color-mix(in srgb, var(--ls2-accent) 28%, var(--ls2-line)); background: var(--ls2-accent-soft); }
+.ls2-icon-button[data-danger="true"]:hover { color: var(--ls2-danger); border-color: color-mix(in srgb, var(--ls2-danger) 28%, var(--ls2-line)); }
+
+.ls2-status {
+  min-height: 23px; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
+  border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-muted); background: var(--ls2-fill);
+  font-size: 11px; font-weight: 750; white-space: nowrap; text-transform: capitalize;
+}
+.ls2-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ls2-dim); }
+.ls2-status[data-tone="accent"] { color: var(--ls2-accent); border-color: color-mix(in srgb, var(--ls2-accent) 30%, var(--ls2-line)); background: var(--ls2-accent-soft); }
+.ls2-status[data-tone="accent"] .ls2-status-dot { background: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
+.ls2-status[data-tone="success"] { color: var(--ls2-success); border-color: color-mix(in srgb, var(--ls2-success) 30%, var(--ls2-line)); }
+.ls2-status[data-tone="success"] .ls2-status-dot { background: var(--ls2-success); }
+.ls2-status[data-tone="warning"] { color: var(--ls2-warning); border-color: color-mix(in srgb, var(--ls2-warning) 30%, var(--ls2-line)); }
+.ls2-status[data-tone="warning"] .ls2-status-dot { background: var(--ls2-warning); }
+.ls2-status[data-tone="danger"] { color: var(--ls2-danger); border-color: color-mix(in srgb, var(--ls2-danger) 30%, var(--ls2-line)); }
+.ls2-status[data-tone="danger"] .ls2-status-dot { background: var(--ls2-danger); }
+
+.ls2-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ls2-field-label { color: var(--ls2-muted); font-size: 12px; font-weight: 700; }
+.ls2-field-hint, .ls2-help { color: var(--ls2-dim); font-size: 11px; line-height: 1.45; }
+.ls2-input, .ls2-select {
+  width: 100%; min-height: 35px; padding: 7px 9px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
+  outline: none; color: var(--ls2-text); background: var(--ls2-input); transition: all var(--ls2-transition);
+  font-size: 13px;
+}
+.ls2-input:hover, .ls2-select:hover { border-color: var(--ls2-line-hover); }
+.ls2-input:focus, .ls2-select:focus { border-color: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
+.ls2-input::placeholder { color: var(--ls2-hint); }
+.ls2-select option { color: var(--ls2-text); background: var(--ls2-panel); }
+.ls2-range { width: 100%; accent-color: var(--ls2-accent); }
+.ls2-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+.ls2-field-wide { grid-column: 1/-1; }
+.ls2-inline-field { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
+.ls2-range-stack { display: grid; gap: 16px; }
+.ls2-locked-value { display: flex; align-items: center; gap: 7px; margin-top: 12px; padding: 8px 9px; border-radius: var(--ls2-radius-sm); color: var(--ls2-muted); background: var(--ls2-fill); font-size: 12px; }
+
+.ls2-toggle-row {
+  position: relative; min-height: 48px; display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 10px;
+  padding: 8px 0; border-top: 1px solid var(--ls2-line-subtle); cursor: pointer;
+}
+.ls2-toggle-row:first-child { border-top: 0; padding-top: 0; }
+.ls2-toggle-row:last-child { padding-bottom: 0; }
+.ls2-toggle-row[data-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.ls2-toggle-copy { min-width: 0; display: flex; flex-direction: column; }
+.ls2-toggle-copy strong { font-size: 13px; }
+.ls2-toggle-copy small { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; line-height: 1.4; }
+.ls2-toggle-row input { position: absolute; opacity: 0; pointer-events: none; }
+.ls2-toggle-track { width: 34px; height: 20px; display: block; padding: 2px; border: 1px solid var(--ls2-line-hover); border-radius: 999px; background: var(--ls2-fill); transition: all var(--ls2-transition); }
+.ls2-toggle-track span { width: 14px; height: 14px; display: block; border-radius: 50%; background: var(--ls2-muted); transition: all var(--ls2-transition); }
+.ls2-toggle-row input:checked + .ls2-toggle-track { border-color: var(--ls2-accent); background: var(--ls2-accent); }
+.ls2-toggle-row input:checked + .ls2-toggle-track span { transform: translateX(14px); background: var(--ls2-accent-fg); }
+
+.ls2-segmented { min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
+.ls2-segmented button { min-width: 0; min-height: 33px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 8px; border: 0; border-radius: calc(var(--ls2-radius-sm) - 3px); color: var(--ls2-muted); background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; }
+.ls2-segmented button:hover { color: var(--ls2-text); }
+.ls2-segmented button[data-active="true"] { color: var(--ls2-text); background: var(--ls2-raised); box-shadow: var(--ls2-shadow-sm), inset 0 1px 0 color-mix(in srgb, var(--ls2-text) 6%, transparent); }
+
+.ls2-search { min-width: 0; flex: 1; min-height: 35px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); color: var(--ls2-dim); background: var(--ls2-input); transition: all var(--ls2-transition); }
+.ls2-search:focus-within { color: var(--ls2-accent); border-color: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
+.ls2-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--ls2-text); background: transparent; font-size: 13px; }
+.ls2-search input::placeholder { color: var(--ls2-hint); }
+.ls2-search button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; color: var(--ls2-dim); background: transparent; cursor: pointer; }
+
+.ls2-notice, .ls2-safe-note {
+  display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 9px; padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--ls2-accent) 22%, var(--ls2-line)); border-radius: var(--ls2-radius-sm);
+  color: var(--ls2-muted); background: var(--ls2-accent-soft); font-size: 12px;
+}
+.ls2-notice > div { display: flex; flex-direction: column; gap: 2px; }
+.ls2-notice strong { color: var(--ls2-text); }
+.ls2-notice[data-tone="success"], .ls2-safe-note { border-color: color-mix(in srgb, var(--ls2-success) 25%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-success) 7%, transparent); }
+.ls2-notice[data-tone="warning"] { border-color: color-mix(in srgb, var(--ls2-warning) 30%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-warning) 8%, transparent); }
+.ls2-notice[data-tone="danger"] { border-color: color-mix(in srgb, var(--ls2-danger) 30%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-danger) 8%, transparent); }
+.ls2-global-notice { position: sticky; top: 112px; z-index: 18; margin: 8px 10px 0; overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow-sm); }
+.ls2-global-notice-copy { padding: 8px 10px; color: var(--ls2-muted); font-size: 12px; }
+.ls2-progress { height: 2px; background: var(--ls2-fill); }
+.ls2-progress span { height: 100%; display: block; background: var(--ls2-accent); transition: width .2s ease; }
+
+.ls2-empty { min-height: 175px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 22px; text-align: center; }
+.ls2-empty-icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 11px; border: 1px solid color-mix(in srgb, var(--ls2-accent) 28%, var(--ls2-line)); border-radius: var(--ls2-radius-lg); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-empty strong { font-size: 15px; }
+.ls2-empty p { max-width: 390px; margin-top: 5px; color: var(--ls2-muted); font-size: 12px; line-height: 1.5; }
+.ls2-empty-action { margin-top: 14px; }
+
+.ls2-detector-strip { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; }
+.ls2-detector-state { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 9px; }
+.ls2-detector-state > div { min-width: 0; display: flex; flex-direction: column; }
+.ls2-detector-state strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-detector-state span { color: var(--ls2-dim); font-size: 11px; }
+
+.ls2-scene { position: relative; }
+.ls2-scene-head { display: flex; align-items: end; justify-content: space-between; gap: 10px; padding: 14px 15px 10px; }
+.ls2-scene-head h3 { margin-top: 2px; font-size: 17px; }
+.ls2-scene-head > span { color: var(--ls2-muted); font-size: 12px; }
+.ls2-scene-cast { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 1px; border-top: 1px solid var(--ls2-line); background: var(--ls2-line); }
+.ls2-scene-actor { min-width: 0; background: var(--ls2-panel); }
+.ls2-scene-media { position: relative; height: 235px; overflow: hidden; background: var(--lumiverse-card-image-bg, var(--ls2-canvas)); }
+.ls2-scene-media-file { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+.ls2-scene-actor[data-focused="true"] .ls2-scene-media { box-shadow: inset 0 -3px 0 var(--ls2-accent); }
+.ls2-focus-flag { position: absolute; top: 9px; left: 9px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--ls2-accent) 35%, var(--ls2-line)); border-radius: 999px; color: var(--ls2-accent); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.ls2-scene-actor-copy { min-width: 0; padding: 10px 11px 12px; }
+.ls2-scene-actor-copy strong, .ls2-scene-actor-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-scene-actor-copy strong { font-size: 13px; }
+.ls2-scene-actor-copy span { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; }
+
+.ls2-metric-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.ls2-metric-grid > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); color: var(--ls2-accent); background: var(--ls2-fill); }
+.ls2-metric-grid span { min-width: 0; color: var(--ls2-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.ls2-metric-grid strong { display: block; color: var(--ls2-text); font-size: 15px; line-height: 1.1; }
+
+.ls2-library-context { display: grid; grid-template-columns: auto minmax(0,1fr) minmax(120px,auto); align-items: center; gap: 9px; }
+.ls2-context-avatar { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ls2-accent) 25%, var(--ls2-line)); border-radius: 11px; color: var(--ls2-accent); background: var(--ls2-accent-soft); font-size: 12px; font-weight: 800; }
+.ls2-library-context > div { min-width: 0; display: flex; flex-direction: column; }
+.ls2-library-context strong, .ls2-library-context span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-library-context strong { font-size: 13px; }
+.ls2-library-context span { color: var(--ls2-muted); font-size: 11px; }
+.ls2-actor-select { min-width: 120px; width: auto; }
+.ls2-folder-section { min-width: 0; }
+.ls2-folder-section .ls2-section-title { align-items: center; margin-bottom: 7px; padding: 0 2px; }
+.ls2-folder-strip { display: flex; gap: 7px; padding: 1px 1px 5px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--lcs-scrollbar-thumb,var(--ls2-line)) transparent; }
+.ls2-folder-button {
+  flex: 0 0 auto; min-width: 130px; max-width: 190px; display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 8px;
+  padding: 7px 9px 7px 7px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius);
+  color: var(--ls2-muted); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition);
+}
+.ls2-folder-button:hover { color: var(--ls2-text); border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); }
+.ls2-folder-button[data-active="true"] { color: var(--ls2-text); border-color: color-mix(in srgb, var(--ls2-accent) 35%, var(--ls2-line)); background: var(--ls2-accent-soft); box-shadow: inset 0 -2px 0 var(--ls2-accent); }
+.ls2-folder-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--ls2-accent); background: var(--ls2-panel); }
+.ls2-folder-button > span:last-child { min-width: 0; display: flex; flex-direction: column; }
+.ls2-folder-button strong, .ls2-folder-button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-folder-button strong { font-size: 12px; }
+.ls2-folder-button small { color: var(--ls2-dim); font-size: 10px; }
+
+.ls2-library-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--ls2-line); background: var(--ls2-fill); }
+.ls2-library-subbar { min-height: 34px; display: flex; align-items: center; gap: 12px; padding: 5px 10px; border-bottom: 1px solid var(--ls2-line); color: var(--ls2-muted); font-size: 11px; }
+.ls2-pagination { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.ls2-pagination .ls2-icon-button { width: 25px; height: 25px; border-color: transparent; }
+.ls2-pagination span { min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
+.ls2-asset-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(118px,1fr)); gap: 8px; padding: 10px; }
+.ls2-asset-card { min-width: 0; overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); background: var(--ls2-fill); transition: all var(--ls2-transition); }
+.ls2-asset-card:hover { border-color: var(--ls2-line-hover); transform: translateY(-1px); box-shadow: var(--ls2-shadow-sm); }
+.ls2-asset-card[data-selected="true"] { border-color: var(--ls2-accent); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
+.ls2-asset-card[data-inspected="true"] { box-shadow: inset 0 -2px 0 var(--ls2-accent); }
+.ls2-asset-main { position: relative; width: 100%; height: 152px; display: block; padding: 0; border: 0; background: var(--lumiverse-card-image-bg, var(--ls2-canvas)); cursor: pointer; overflow: hidden; }
+.ls2-asset-media, .ls2-expression-choice-media { width: 100%; height: 100%; object-fit: cover; }
+.ls2-asset-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 8px 7px; background: linear-gradient(transparent, var(--lumiverse-scene-text-scrim, color-mix(in srgb,var(--ls2-canvas) 88%,transparent))); text-align: left; }
+.ls2-asset-overlay strong, .ls2-asset-overlay small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-asset-overlay strong { color: var(--ls2-text); font-size: 12px; }
+.ls2-asset-overlay small { color: color-mix(in srgb, var(--ls2-text) 72%, transparent); font-size: 10px; }
+.ls2-asset-check { position: absolute; top: 7px; right: 7px; width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid var(--ls2-glass-border); border-radius: 7px; color: var(--ls2-muted); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); }
+.ls2-asset-card[data-selected="true"] .ls2-asset-check { color: var(--ls2-accent-fg); border-color: var(--ls2-accent); background: var(--ls2-accent); }
+.ls2-media-fallback { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--ls2-dim); background: var(--ls2-fill); font-size: 10px; }
+
+.ls2-inspector { border-color: color-mix(in srgb, var(--ls2-accent) 25%, var(--ls2-line)); }
+.ls2-disclosure { overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); background: var(--ls2-panel); }
+.ls2-disclosure summary { min-height: 43px; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; color: var(--ls2-muted); cursor: pointer; list-style: none; font-size: 12px; font-weight: 700; }
+.ls2-disclosure summary::-webkit-details-marker { display: none; }
+.ls2-disclosure summary > span { display: flex; align-items: center; gap: 7px; }
+.ls2-disclosure[open] summary { color: var(--ls2-text); border-bottom: 1px solid var(--ls2-line); }
+.ls2-disclosure[open] summary > svg { transform: rotate(180deg); }
+.ls2-disclosure-body { display: grid; gap: 12px; padding: 13px; }
+
+.ls2-selection-hero { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; }
+.ls2-selection-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: var(--ls2-radius); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-selection-hero > div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.ls2-selection-hero strong { font-size: 13px; }
+.ls2-selection-hero span { color: var(--ls2-muted); font-size: 11px; }
+.ls2-action-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.ls2-rename-preview { display: grid; gap: 4px; margin: 0 0 11px; padding: 8px; border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
+.ls2-rename-preview > div { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 7px; font-size: 11px; }
+.ls2-rename-preview span, .ls2-rename-preview strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-rename-preview span { color: var(--ls2-muted); text-decoration: line-through; }
+.ls2-table-wrap { overflow: auto; }
+.ls2-matrix { min-width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 11px; }
+.ls2-matrix th { padding: 5px 6px; color: var(--ls2-muted); font-weight: 700; text-align: left; white-space: nowrap; }
+.ls2-matrix td { min-width: 40px; height: 30px; padding: 4px; border-radius: 6px; color: var(--ls2-dim); background: var(--ls2-fill); text-align: center; }
+.ls2-matrix td[data-complete="true"] { color: var(--ls2-success); background: color-mix(in srgb, var(--ls2-success) 9%, var(--ls2-fill)); }
+.ls2-matrix td svg { margin: auto; }
+.ls2-count { color: var(--ls2-muted); font-size: 11px; }
+
+.ls2-appearance-preview { display: grid; grid-template-columns: minmax(190px,1.25fr) minmax(130px,.75fr); align-items: center; }
+.ls2-preview-window { position: relative; min-height: 190px; overflow: hidden; border-right: 1px solid var(--ls2-line); background: var(--lumiverse-card-image-bg,var(--ls2-canvas)); }
+.ls2-preview-toolbar { height: 27px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--ls2-glass-border); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); }
+.ls2-preview-toolbar span { width: 6px; height: 6px; border-radius: 50%; background: var(--ls2-line-hover); }
+.ls2-preview-actors { position: absolute; inset: 40px 15px 25px; display: flex; align-items: flex-end; justify-content: center; }
+.ls2-preview-actors i { width: 42%; height: 78%; margin-right: -12%; border: 1px solid var(--ls2-line); border-radius: 50% 50% 14px 14px; opacity: .45; background: linear-gradient(160deg,var(--ls2-accent-soft),var(--ls2-raised)); transform: scale(.95); }
+.ls2-preview-actors i[data-focus] { z-index: 1; height: 92%; opacity: 1; border-color: var(--ls2-accent); transform: scale(1.04); }
+.ls2-preview-caption { position: absolute; left: 10px; right: 10px; bottom: 8px; overflow: hidden; color: var(--ls2-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.ls2-preview-copy { padding: 15px; }
+.ls2-preview-copy strong { display: block; font-size: 12px; }
+.ls2-preview-copy span { display: block; margin-top: 4px; color: var(--ls2-muted); font-size: 11px; line-height: 1.5; }
+
+.ls2-health-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.ls2-health-grid > div { min-width: 0; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 7px; padding: 8px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
+.ls2-health-grid > div > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--ls2-warning); background: color-mix(in srgb, var(--ls2-warning) 8%, transparent); }
+.ls2-health-grid > div[data-good="true"] > span { color: var(--ls2-success); background: color-mix(in srgb, var(--ls2-success) 8%, transparent); }
+.ls2-health-grid strong, .ls2-health-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
+.ls2-health-grid strong { font-size: 11px; }
+.ls2-health-grid small { color: var(--ls2-dim); font-size: 10px; }
+.ls2-issue-list { display: grid; gap: 5px; }
+.ls2-issue-list > div { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 8px; padding: 8px; border-radius: var(--ls2-radius-sm); color: var(--ls2-muted); background: var(--ls2-fill); font-size: 11px; }
+.ls2-issue-list > div[data-tone="error"] { color: var(--ls2-danger); }
+.ls2-diagnostic-output { max-height: 500px; margin: 0; padding: 13px; overflow: auto; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); color: var(--ls2-muted); background: var(--ls2-canvas); font: 10px/1.55 var(--lumiverse-font-mono,ui-monospace,monospace); white-space: pre; }
+
+.ls2-savebar {
+  position: sticky; bottom: 0; z-index: 21; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 9px;
+  padding: 9px 12px calc(9px + env(safe-area-inset-bottom)); border-top: 1px solid var(--ls2-glass-border);
+  background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: 0 -8px 25px color-mix(in srgb,var(--ls2-canvas) 25%,transparent);
+}
+.ls2-savebar > div:first-child { display: flex; align-items: center; gap: 7px; color: var(--ls2-muted); font-size: 11px; }
+.ls2-save-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ls2-success); }
+.ls2-savebar[data-dirty="true"] .ls2-save-dot { background: var(--ls2-warning); box-shadow: 0 0 0 3px color-mix(in srgb,var(--ls2-warning) 12%,transparent); }
+
+.ls2-modal { display: flex; flex-direction: column; gap: 14px; color: var(--ls2-text); }
+.ls2-modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 2px; }
+.ls2-modal-section-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.ls2-modal-section-head > div { display: flex; flex-direction: column; }
+.ls2-modal-section-head strong { font-size: 12px; }
+.ls2-modal-section-head span { color: var(--ls2-muted); font-size: 11px; }
+.ls2-dropzone { position: relative; min-height: 185px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border: 1px dashed var(--ls2-line-hover); border-radius: var(--ls2-radius); text-align: center; background: var(--ls2-fill); transition: all var(--ls2-transition); }
+.ls2-dropzone:hover, .ls2-dropzone[data-dragging="true"] { border-color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.ls2-dropzone .ls2-button { pointer-events: none; }
+.ls2-dropzone-icon { width: 47px; height: 47px; display: grid; place-items: center; margin-bottom: 10px; border: 1px solid color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); border-radius: var(--ls2-radius-lg); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-dropzone strong { font-size: 14px; }
+.ls2-dropzone p { margin: 4px 0 12px; color: var(--ls2-muted); font-size: 11px; }
+.ls2-mapping-preview { display: grid; gap: 4px; margin-top: 10px; padding: 8px; border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
+.ls2-mapping-preview > div { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 6px; color: var(--ls2-muted); font-size: 11px; }
+.ls2-mapping-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-mapping-preview small { color: var(--ls2-dim); font-size: 10px; }
+
+.ls2-picker-context { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
+.ls2-picker-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); gap: 8px; max-height: 410px; overflow: auto; padding: 2px; }
+.ls2-expression-choice { position: relative; min-width: 0; overflow: hidden; display: grid; grid-template-rows: 128px auto; padding: 0; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); color: var(--ls2-text); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition); }
+.ls2-expression-choice:hover { border-color: var(--ls2-line-hover); transform: translateY(-1px); }
+.ls2-expression-choice[data-selected="true"] { border-color: var(--ls2-accent); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
+.ls2-expression-choice > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; padding: 8px 9px; }
+.ls2-expression-choice strong, .ls2-expression-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-expression-choice strong { font-size: 12px; }
+.ls2-expression-choice small { color: var(--ls2-muted); font-size: 10px; }
+.ls2-choice-check { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: var(--ls2-accent-fg); background: var(--ls2-accent); box-shadow: var(--ls2-shadow-sm); }
+.ls2-picker-footer { display: grid; grid-template-columns: minmax(220px,1fr) auto; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--ls2-line); }
+
+.ls2-character-panel { min-height: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.ls2-character-hero { display: grid; grid-template-columns: 50px minmax(0,1fr); align-items: center; gap: 12px; }
+.ls2-character-hero .ls2-context-avatar { width: 50px; height: 50px; border-radius: 15px; font-size: 13px; }
+.ls2-character-hero h2 { margin-top: 3px; font-size: 20px; }
+.ls2-character-hero p { margin-top: 4px; color: var(--ls2-muted); font-size: 12px; }
+.ls2-loading { min-height: 190px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--ls2-muted); font-size: 13px; }
+.ls2-loading span { width: 16px; height: 16px; border: 2px solid var(--ls2-line); border-top-color: var(--ls2-accent); border-radius: 50%; animation: ls2-spin .8s linear infinite; }
+
+.ls2-stage-root { width: 100%; height: 100%; position: relative; overflow: hidden; opacity: var(--ls2-stage-opacity,1); touch-action: none; }
+.ls2-stage-chrome { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: var(--ls2-radius-lg); }
+.ls2-stage-root[data-chrome="true"] .ls2-stage-chrome { border: 1px solid var(--ls2-glass-border); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow); }
+.ls2-stage-grab { position: absolute; top: 0; left: 0; right: 0; z-index: 5; min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; opacity: 0; transform: translateY(-4px); transition: all var(--ls2-transition); }
+.ls2-stage-root:hover .ls2-stage-grab, .ls2-stage-root:focus-within .ls2-stage-grab { opacity: 1; transform: none; }
+.ls2-stage-live { display: inline-flex; align-items: center; gap: 6px; color: var(--ls2-muted); font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.ls2-stage-live > span { width: 6px; height: 6px; border-radius: 50%; background: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
+.ls2-stage-actions { margin-left: auto; display: flex; gap: 2px; }
+.ls2-stage-actions button { width: 26px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; color: var(--ls2-muted); background: transparent; cursor: pointer; }
+.ls2-stage-actions button:hover { color: var(--ls2-text); background: var(--ls2-fill-hover); }
+.ls2-stage-ensemble { position: absolute; inset: 28px 4px 2px; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+.ls2-stage-actor { position: relative; flex: 1 1 0; height: 100%; min-width: 0; margin-left: calc(var(--ls2-stage-overlap, .34) * -18%); opacity: var(--ls2-stage-idle-opacity,.46); transform: scale(.96); transform-origin: center bottom; filter: saturate(.78); transition: opacity var(--ls2-stage-transition),transform var(--ls2-stage-transition),filter var(--ls2-stage-transition); }
+.ls2-stage-actor:first-child { margin-left: 0; }
+.ls2-stage-actor[data-focused="true"] { z-index: 2; opacity: 1; transform: scale(var(--ls2-stage-focus-scale,1.035)); filter: none; }
+.ls2-stage-actor-frame { width: 100%; height: 100%; }
+.ls2-stage-actor-frame :is(img,video) { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+.ls2-stage-root[data-transition="crossfade"] .ls2-stage-actor-frame :is(img,video) { animation: ls2-fade var(--ls2-stage-transition) ease-out; }
+.ls2-stage-root[data-transition="lift"] .ls2-stage-actor-frame :is(img,video) { animation: ls2-lift var(--ls2-stage-transition) ease-out; }
+.ls2-stage-actor figcaption { position: absolute; left: 6px; right: 6px; bottom: 7px; z-index: 3; min-width: 0; padding: 7px 8px; border: 1px solid var(--ls2-glass-border); border-radius: var(--ls2-radius-sm); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow-sm); text-align: center; }
+.ls2-stage-actor figcaption strong, .ls2-stage-actor figcaption span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls2-stage-actor figcaption strong { font-size: 11px; }
+.ls2-stage-actor figcaption span { margin-top: 1px; color: var(--ls2-muted); font-size: 10px; }
+.ls2-stage-waiting { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--ls2-muted); text-align: center; }
+.ls2-stage-waiting > div { width: 44px; height: 44px; display: grid; place-items: center; margin-bottom: 8px; border: 1px solid color-mix(in srgb,var(--ls2-accent) 25%,var(--ls2-line)); border-radius: 14px; color: var(--ls2-accent); background: var(--ls2-accent-soft); }
+.ls2-stage-waiting strong { color: var(--ls2-text); font-size: 13px; }
+.ls2-stage-waiting span { margin-top: 2px; font-size: 10px; }
+.ls2-stage-resize { position: absolute; right: 1px; bottom: 1px; z-index: 7; width: 23px; height: 23px; padding: 0; border: 0; background: transparent; cursor: nwse-resize; touch-action: none; }
+.ls2-stage-resize span, .ls2-stage-resize::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 9px; height: 1px; background: var(--ls2-accent); transform: rotate(-45deg); transform-origin: right center; opacity: .7; }
+.ls2-stage-resize::after { width: 5px; right: 4px; bottom: 9px; }
+
+@keyframes ls2-enter { from { opacity: 0; transform: translateY(3px); } }
+@keyframes ls2-spin { to { transform: rotate(360deg); } }
+@keyframes ls2-fade { from { opacity: 0; } }
+@keyframes ls2-lift { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+
+@media (min-width: 700px) {
+  .ls2-content { padding: 20px 18px 92px; }
+  .ls2-asset-grid { grid-template-columns: repeat(auto-fill,minmax(135px,1fr)); }
+}
 @media (max-width: 520px) {
-  .ls-main { padding: 10px; }
-  .ls-library-layout { grid-template-columns: 1fr; }
-  .ls-library-tree { position: static; display: flex; overflow-x: auto; max-height: none; padding-bottom: 3px; }
-  .ls-tree { display: flex; }
-  .ls-tree-row { flex: 0 0 auto; }
-  .ls-tree-btn { min-width: 110px; }
-  .ls-asset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .ls-grid-2 { grid-template-columns: 1fr; }
-  .ls-stage-toolbar { opacity: 1; transform: none; min-height: 34px; }
-  .ls-stage-ensemble { top: 34px; }
-  .ls-sprite { flex-basis: 88%; }
+  .ls2-nav { grid-template-columns: repeat(3,1fr); top: calc(62px + env(safe-area-inset-top)); }
+  .ls2-nav button { min-height: 37px; flex-direction: row; }
+  .ls2-global-notice { top: 145px; }
+  .ls2-content { padding: 15px 10px 90px; }
+  .ls2-view-header { grid-template-columns: 1fr; align-items: start; }
+  .ls2-view-actions { justify-content: flex-start; }
+  .ls2-form-grid, .ls2-action-grid, .ls2-picker-context, .ls2-appearance-preview { grid-template-columns: 1fr; }
+  .ls2-preview-window { border-right: 0; border-bottom: 1px solid var(--ls2-line); }
+  .ls2-library-context { grid-template-columns: auto minmax(0,1fr); }
+  .ls2-actor-select { grid-column: 1/-1; width: 100%; }
+  .ls2-library-toolbar { align-items: stretch; flex-direction: column; }
+  .ls2-library-toolbar .ls2-toolbar { justify-content: space-between; }
+  .ls2-asset-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; padding: 7px; }
+  .ls2-asset-main { height: 135px; }
+  .ls2-selection-hero { grid-template-columns: auto minmax(0,1fr); }
+  .ls2-selection-hero > .ls2-toolbar { grid-column: 1/-1; }
+  .ls2-health-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .ls2-picker-footer { grid-template-columns: 1fr; }
 }
 @media (max-width: 390px) {
-  .ls-mast { padding: 15px 12px 12px; }
-  .ls-subtitle { display: none; }
-  .ls-asset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ls-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ls2-appbar { grid-template-columns: 34px minmax(0,1fr) auto; padding-inline: 10px; }
+  .ls2-brand-mark { width: 34px; height: 34px; }
+  .ls2-appbar .ls2-status { padding-inline: 6px; }
+  .ls2-appbar .ls2-status .ls2-status-dot { display: none; }
+  .ls2-view-heading h2 { font-size: 19px; }
+  .ls2-asset-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .ls2-metric-grid { gap: 5px; }
+  .ls2-metric-grid > div { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 8px 4px; }
+  .ls2-folder-button { min-width: 118px; }
+  .ls2-scene-cast { grid-template-columns: 1fr; }
+  .ls2-scene-media { height: 280px; }
+  .ls2-picker-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ls-section, .ls-sprite-media { animation: none !important; }
-  .ls-sprite, .ls-switch::after, .ls-stage-toolbar, .ls-progress-bar { transition: none !important; }
+  .ls2-root *, .ls2-modal *, .ls2-stage-root * { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
 `;
 
 // src/frontend.tsx
-var ICON = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
-       xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="M4 4h16M6 4v5m12-5v5M5 20h14"/>
-    <path d="M8 8.5c1.4 1 2.7 1.5 4 1.5s2.6-.5 4-1.5V18H8z"/>
-    <path d="M10 14c.8.7 3.2.7 4 0"/>
-  </svg>`;
 function initialPosition(width, height, x2, y3) {
   const inset = 18;
   return {
@@ -6059,9 +6738,9 @@ function setup(ctx) {
     headerTitle: "LumiStage",
     description: "Independent expression direction, media libraries, automation, and ensemble staging.",
     keywords: ["expressions", "sprites", "outfits", "poses", "stage", "batch"],
-    iconSvg: ICON
+    iconSvg: LUMI_STAGE_ICON
   });
-  R(/* @__PURE__ */ u3(Studio, { client }), drawer.root);
+  R(/* @__PURE__ */ u2(Studio, { client }), drawer.root);
   let characterTab = null;
   let inputAction = null;
   let floatWidget = null;
@@ -6084,7 +6763,7 @@ function setup(ctx) {
     if (characterId === renderedCharacterId) return;
     renderedCharacterId = characterId;
     R(
-      characterId ? /* @__PURE__ */ u3(CharacterSetup, { client, characterId, onOpenStudio: () => drawer.activate() }) : null,
+      characterId ? /* @__PURE__ */ u2(CharacterSetup, { client, characterId, onOpenStudio: () => drawer.activate() }) : null,
       characterTab.root
     );
   };
@@ -6105,7 +6784,7 @@ function setup(ctx) {
         id: "quick-select",
         label: "LumiStage",
         subtitle: "Choose outfit, pose, expression, or lock",
-        iconSvg: ICON,
+        iconSvg: LUMI_STAGE_ICON,
         enabled: true
       });
       unsubscribeInput = inputAction.onClick(() => showQuickPicker(client));
@@ -6116,7 +6795,7 @@ function setup(ctx) {
   const renderStage = () => {
     if (!floatWidget) return;
     R(
-      /* @__PURE__ */ u3(
+      /* @__PURE__ */ u2(
         Stage,
         {
           client,

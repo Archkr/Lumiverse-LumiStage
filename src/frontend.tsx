@@ -6,18 +6,12 @@ import type {
   SpindleFrontendContext,
   SpindleInputBarActionHandle,
 } from "lumiverse-spindle-types";
-import { CharacterSetup, showQuickPicker, Stage, Studio } from "./ui/components";
 import { LumiStageClient } from "./ui/client";
+import { LUMI_STAGE_ICON } from "./ui/icons";
+import { showQuickPicker } from "./ui/modals";
+import { Stage } from "./ui/stage";
+import { CharacterSetup, Studio } from "./ui/studio";
 import { LUMI_STAGE_CSS } from "./ui/styles";
-
-const ICON = `
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
-       xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="M4 4h16M6 4v5m12-5v5M5 20h14"/>
-    <path d="M8 8.5c1.4 1 2.7 1.5 4 1.5s2.6-.5 4-1.5V18H8z"/>
-    <path d="M10 14c.8.7 3.2.7 4 0"/>
-  </svg>`;
 
 function initialPosition(width: number, height: number, x: number, y: number) {
   const inset = 18;
@@ -39,7 +33,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     headerTitle: "LumiStage",
     description: "Independent expression direction, media libraries, automation, and ensemble staging.",
     keywords: ["expressions", "sprites", "outfits", "poses", "stage", "batch"],
-    iconSvg: ICON,
+    iconSvg: LUMI_STAGE_ICON,
   });
   render(<Studio client={client} />, drawer.root);
 
@@ -92,7 +86,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
         id: "quick-select",
         label: "LumiStage",
         subtitle: "Choose outfit, pose, expression, or lock",
-        iconSvg: ICON,
+        iconSvg: LUMI_STAGE_ICON,
         enabled: true,
       });
       unsubscribeInput = inputAction.onClick(() => showQuickPicker(client));
