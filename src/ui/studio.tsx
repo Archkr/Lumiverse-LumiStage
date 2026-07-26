@@ -50,6 +50,8 @@ const NAV: Array<{ id: StudioView; label: string; icon: IconName }> = [
   { id: "appearance", label: "Appearance", icon: "appearance" },
   { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" },
 ];
+const PRIMARY_NAV = NAV.slice(0, 3);
+const SECONDARY_NAV = NAV.slice(3);
 
 function activeNodes(profile: CharacterProfileV1 | null, actorId?: string, outfitId?: string, poseId?: string) {
   const actor = profile?.actors.find((item) => item.id === actorId) ?? profile?.actors[0] ?? null;
@@ -79,9 +81,79 @@ function ContextAvatar({ name }: { name: string }) {
   return <span class="ls2-context-avatar">{initials || "LS"}</span>;
 }
 
-function LiveView({ client, openLibrary }: { client: LumiStageClient; openLibrary: () => void }) {
+function StageOnboarding({
+  client,
+  navigate,
+  actorCount,
+  mediaCount,
+}: {
+  client: LumiStageClient;
+  navigate: (view: StudioView) => void;
+  actorCount: number;
+  mediaCount: number;
+}) {
+  const { backend } = useClientState(client);
+  const hasCharacter = Boolean(backend.activeCharacterId);
+  const automationReady = backend.settings.detection.enabled && backend.permissions.generation && backend.permissions.chats;
+  const steps = [
+    { icon: "actors" as IconName, title: "Choose the cast", detail: hasCharacter ? backend.activeCharacterName ?? "Character linked" : "Open a character or conversation", done: hasCharacter, action: () => navigate("library") },
+    { icon: "image" as IconName, title: "Build the visual library", detail: mediaCount ? `${mediaCount} media across ${actorCount} actor${actorCount === 1 ? "" : "s"}` : "Import a folder or add states manually", done: mediaCount > 0, action: () => navigate("library") },
+    { icon: "automation" as IconName, title: "Set the cue logic", detail: automationReady ? "Automatic direction is armed" : "Choose how replies change the stage", done: automationReady, action: () => navigate("automation") },
+  ];
+  const completed = steps.filter((step) => step.done).length;
+
+  return (
+    <div class="ls2-onboarding">
+      <section class="ls2-onboarding-stage">
+        <div class="ls2-rig" aria-hidden="true">
+          <span class="ls2-rig-bar" />
+          <i class="ls2-rig-lamp ls2-rig-lamp-left" />
+          <i class="ls2-rig-lamp ls2-rig-lamp-center" />
+          <i class="ls2-rig-lamp ls2-rig-lamp-right" />
+          <span class="ls2-rig-beam ls2-rig-beam-left" />
+          <span class="ls2-rig-beam ls2-rig-beam-center" />
+          <span class="ls2-rig-beam ls2-rig-beam-right" />
+          <span class="ls2-rig-mark"><Icon name="stage" size={22} /></span>
+          <span class="ls2-rig-floor" />
+        </div>
+        <div class="ls2-onboarding-copy">
+          <span class="ls2-kicker"><span />Stage uncast</span>
+          <h3>Give every reply a visual performance.</h3>
+          <p>Build a private cast library, then direct it yourself or let LumiStage resolve outfits, poses, and expressions after each reply.</p>
+          <div class="ls2-onboarding-actions">
+            <Button icon="upload" variant="primary" onClick={() => showImportModal(client, backend.profile)}>Import a folder</Button>
+            <Button icon="library" onClick={() => navigate("library")}>Build manually</Button>
+          </div>
+        </div>
+      </section>
+
+      <section class="ls2-cue-sheet">
+        <div class="ls2-cue-sheet-head">
+          <div><span class="ls2-eyebrow">Opening cues</span><strong>Ready the stage</strong></div>
+          <span>{completed} / {steps.length}</span>
+        </div>
+        <div class="ls2-cue-progress"><span style={{ width: `${completed / steps.length * 100}%` }} /></div>
+        <div class="ls2-cue-steps">
+          {steps.map((step, index) => (
+            <button type="button" data-done={step.done} onClick={step.action}>
+              <span class="ls2-cue-index">{step.done ? <Icon name="check" size={14} /> : String(index + 1).padStart(2, "0")}</span>
+              <span class="ls2-cue-icon"><Icon name={step.icon} size={17} /></span>
+              <span class="ls2-cue-copy"><strong>{step.title}</strong><small>{step.detail}</small></span>
+              <Icon name="chevronRight" size={16} />
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function LiveView({ client, navigate }: { client: LumiStageClient; navigate: (view: StudioView) => void }) {
   const { backend } = useClientState(client);
   const actors = Object.values(backend.snapshot?.actors ?? {}).sort((a, b) => Number(b.focused) - Number(a.focused));
+  const actorCount = backend.stageProfiles.reduce((sum, profile) => sum + profile.actors.length, 0);
+  const mediaCount = backend.stageProfiles.reduce((sum, profile) => sum + allAssets(profile).length, 0);
+  const lockCount = Object.keys(backend.timeline?.manualOverrides ?? {}).length;
   const statusTone = backend.lastDetection.status === "error" ? "danger" : backend.lastDetection.status === "success" ? "success" : backend.lastDetection.status === "running" ? "accent" : "neutral";
   return (
     <div class="ls2-view">
@@ -89,16 +161,17 @@ function LiveView({ client, openLibrary }: { client: LumiStageClient; openLibrar
         eyebrow="Live direction"
         title="Live Stage"
         description="The resolved visual state for this conversation."
-        actions={<><Button icon="sparkles" onClick={() => showQuickPicker(client)} disabled={!backend.activeChatId}>Direct</Button><Button icon="play" variant="primary" onClick={() => client.analyzeNow()} disabled={!backend.activeChatId}>Analyze</Button></>}
+        actions={backend.activeChatId ? <><Button icon="sparkles" onClick={() => showQuickPicker(client)}>Direct</Button><Button icon="play" variant="primary" onClick={() => client.analyzeNow()}>Run cue</Button></> : undefined}
       />
 
-      <Surface class="ls2-detector-strip" padding="small">
+      <section class="ls2-cue-monitor" data-tone={statusTone}>
+        <span class="ls2-cue-monitor-light" />
         <div class="ls2-detector-state">
-          <Status tone={statusTone}>{backend.lastDetection.status}</Status>
-          <div><strong>{backend.lastDetection.message}</strong><span>{backend.queueDepth ? `${backend.queueDepth} task${backend.queueDepth === 1 ? "" : "s"} queued` : "Post-reply automation"}</span></div>
+          <div><span class="ls2-cue-monitor-label">Cue monitor · {backend.lastDetection.status}</span><strong>{backend.lastDetection.message}</strong></div>
         </div>
-        <IconButton icon="refresh" label="Analyze latest reply" onClick={() => client.analyzeNow()} disabled={!backend.activeChatId} />
-      </Surface>
+        <span class="ls2-cue-monitor-meta">{backend.queueDepth ? `${backend.queueDepth} queued` : backend.activeChatId ? "Watching replies" : "Awaiting chat"}</span>
+        {backend.activeChatId && <IconButton icon="refresh" label="Analyze latest reply" onClick={() => client.analyzeNow()} />}
+      </section>
 
       {actors.length ? (
         <Surface padding="none" class="ls2-scene">
@@ -123,20 +196,13 @@ function LiveView({ client, openLibrary }: { client: LumiStageClient; openLibrar
           </div>
         </Surface>
       ) : (
-        <Surface>
-          <EmptyState
-            icon="stage"
-            title="Build your first scene"
-            description="Add media to a character, then direct the stage manually or let automation respond to the next completed reply."
-            action={<Toolbar><Button icon="library" variant="primary" onClick={openLibrary}>Open library</Button><Button icon="sparkles" onClick={() => showQuickPicker(client)}>Direct stage</Button></Toolbar>}
-          />
-        </Surface>
+        <StageOnboarding client={client} navigate={navigate} actorCount={actorCount} mediaCount={mediaCount} />
       )}
 
       <div class="ls2-metric-grid">
-        <div><Icon name="actors" size={18} /><span><strong>{backend.stageProfiles.reduce((sum, profile) => sum + profile.actors.length, 0)}</strong>Actors</span></div>
-        <div><Icon name="image" size={18} /><span><strong>{backend.stageProfiles.reduce((sum, profile) => sum + allAssets(profile).length, 0)}</strong>Media</span></div>
-        <div><Icon name="lock" size={18} /><span><strong>{Object.keys(backend.timeline?.manualOverrides ?? {}).length}</strong>Locks</span></div>
+        <div><Icon name="actors" size={18} /><span><strong>{actorCount}</strong>Actors</span></div>
+        <div><Icon name="image" size={18} /><span><strong>{mediaCount}</strong>Media</span></div>
+        <div><Icon name="lock" size={18} /><span><strong>{lockCount}</strong>Locks</span></div>
       </div>
     </div>
   );
@@ -622,6 +688,7 @@ function DiagnosticsView({ client, profile }: { client: LumiStageClient; profile
 export function Studio({ client }: { client: LumiStageClient }) {
   const state = useClientState(client);
   const [view, setView] = useState<StudioView>("stage");
+  const [moreOpen, setMoreOpen] = useState(false);
   const [draft, setDraft] = useState<CharacterProfileV1 | null>(state.backend.profile);
   const [dirty, setDirty] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -638,6 +705,14 @@ export function Studio({ client }: { client: LumiStageClient }) {
       renderHistory((value) => value + 1);
     }
   }, [state.backend.profile?.revision]);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const closeMenu = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("keydown", closeMenu);
+    return () => window.removeEventListener("keydown", closeMenu);
+  }, [moreOpen]);
 
   function update(mutator: (profile: CharacterProfileV1) => void) {
     if (!draft) return;
@@ -689,19 +764,28 @@ export function Studio({ client }: { client: LumiStageClient }) {
   return (
     <div class="ls2-root">
       <div class="ls2-drawer">
-        <header class="ls2-appbar">
-          <div class="ls2-brand-mark"><Icon name="stage" size={21} /></div>
-          <div class="ls2-brand-copy"><strong>LumiStage</strong><span>{state.backend.activeCharacterName ?? "Independent expression studio"}</span></div>
-          <Status tone={state.backend.lastDetection.status === "error" ? "danger" : state.backend.lastDetection.status === "running" ? "accent" : "success"}>{state.backend.lastDetection.status === "running" ? "Working" : state.backend.lastDetection.status === "error" ? "Attention" : "Ready"}</Status>
-        </header>
-
         <nav class="ls2-nav" aria-label="LumiStage workspace">
-          {NAV.map((item) => <button type="button" data-active={view === item.id} aria-current={view === item.id ? "page" : undefined} onClick={() => setView(item.id)}><Icon name={item.icon} size={16} /><span>{item.label}</span></button>)}
+          <div class="ls2-nav-primary">
+            {PRIMARY_NAV.map((item) => <button type="button" data-active={view === item.id} aria-current={view === item.id ? "page" : undefined} onClick={() => { setView(item.id); setMoreOpen(false); }}><Icon name={item.icon} size={17} /><span>{item.label}</span></button>)}
+            <button type="button" data-active={SECONDARY_NAV.some((item) => item.id === view)} aria-expanded={moreOpen} aria-haspopup="menu" onClick={() => setMoreOpen((value) => !value)}><Icon name="menu" size={17} /><span>More</span></button>
+          </div>
+          {moreOpen && (
+            <div class="ls2-nav-menu" role="menu">
+              <div class="ls2-nav-menu-head"><span>Workspace</span><IconButton icon="close" label="Close menu" onClick={() => setMoreOpen(false)} /></div>
+              {SECONDARY_NAV.map((item) => (
+                <button type="button" role="menuitem" data-active={view === item.id} aria-current={view === item.id ? "page" : undefined} onClick={() => { setView(item.id); setMoreOpen(false); }}>
+                  <span class="ls2-nav-menu-icon"><Icon name={item.icon} size={18} /></span>
+                  <span><strong>{item.label}</strong><small>{item.id === "automation" ? "Detection and confidence" : item.id === "appearance" ? "Stage layout and motion" : "Health and privacy report"}</small></span>
+                  <Icon name="chevronRight" size={16} />
+                </button>
+              ))}
+            </div>
+          )}
         </nav>
 
         <ProgressNotice client={client} />
         <main class="ls2-content">
-          {view === "stage" && <LiveView client={client} openLibrary={() => setView("library")} />}
+          {view === "stage" && <LiveView client={client} navigate={setView} />}
           {view === "library" && <LibraryView client={client} profile={draft} update={update} selected={selected} setSelected={setSelected} />}
           {view === "batch" && <BatchView profile={draft} selected={selected} setSelected={setSelected} mutate={mutate} undo={undo} redo={redo} canUndo={undoRef.current.length > 0} canRedo={redoRef.current.length > 0} />}
           {view === "automation" && <AutomationView client={client} />}

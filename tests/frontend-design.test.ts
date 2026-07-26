@@ -22,8 +22,9 @@ describe("frontend design contract", () => {
   });
 
   it("keeps the studio responsive and accessible", () => {
-    expect(styles).toContain("env(safe-area-inset-top)");
-    expect(styles).toContain("@media (max-width: 390px)");
+    expect(styles).toContain("env(safe-area-inset-bottom)");
+    expect(styles).toContain("container: lumi-stage / inline-size");
+    expect(styles).toContain("@container lumi-stage (max-width: 390px)");
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toContain(":focus-visible");
     expect(studio).toContain('aria-label="LumiStage workspace"');
@@ -37,6 +38,9 @@ describe("frontend design contract", () => {
     expect(frontend).toContain('from "./ui/modals"');
     expect(frontend).toMatch(/export\s+function\s+setup\s*\(/);
     expect(studio).not.toContain("window.prompt");
+    expect(studio).not.toContain("ls2-appbar");
+    expect(studio).toContain("ls2-onboarding-stage");
+    expect(studio).toContain("ls2-cue-sheet");
     for (const view of ["Stage", "Library", "Batch", "Automation", "Appearance", "Diagnostics"]) {
       expect(studio).toContain(`label: "${view}"`);
     }
