@@ -57,7 +57,6 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       title: "LumiStage — Expression Studio",
       width: 1440,
       maxHeight: 980,
-      persistent: true,
     });
     render(<StudioWorkspace client={client} />, studioModal.root);
     studioModal.onDismiss(() => {

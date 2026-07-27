@@ -7788,8 +7788,7 @@ function setup(ctx) {
     studioModal = ctx.ui.showModal({
       title: "LumiStage \u2014 Expression Studio",
       width: 1440,
-      maxHeight: 980,
-      persistent: true
+      maxHeight: 980
     });
     R(/* @__PURE__ */ u2(StudioWorkspace, { client }), studioModal.root);
     studioModal.onDismiss(() => {

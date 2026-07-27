@@ -204,6 +204,9 @@ describe("frontend host lifecycle", () => {
       width: 1440,
       maxHeight: 980,
     }));
+    expect(mock.context.ui.showModal).not.toHaveBeenCalledWith(
+      expect.objectContaining({ persistent: true }),
+    );
 
     mock.editorState.open = true;
     mock.editorState.characterId = "character-a";
