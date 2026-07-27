@@ -40,7 +40,6 @@ describe("message/swipe decision cache", () => {
     const b = record("b", 0, "hb", {
       actorId: "actor-b",
       outfitId: "outfit-b",
-      poseId: "pose-b",
       expressionId: "expression-b",
     });
     b.decision.focusedActorIds = ["actor-b"];
@@ -79,4 +78,3 @@ describe("group chat composition", () => {
     });
   });
 });
-

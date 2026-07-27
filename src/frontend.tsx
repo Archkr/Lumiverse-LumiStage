@@ -32,7 +32,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     shortName: "Stage",
     headerTitle: "LumiStage",
     description: "Independent expression direction, media libraries, automation, and ensemble staging.",
-    keywords: ["expressions", "sprites", "outfits", "poses", "stage", "batch"],
+    keywords: ["expressions", "sprites", "outfits", "stage", "batch"],
     iconSvg: LUMI_STAGE_ICON,
   });
   render(<Studio client={client} />, drawer.root);
@@ -85,7 +85,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       inputAction = ctx.ui.registerInputBarAction({
         id: "quick-select",
         label: "LumiStage",
-        subtitle: "Choose outfit, pose, expression, or lock",
+        subtitle: "Choose outfit, expression, or lock",
         iconSvg: LUMI_STAGE_ICON,
         enabled: true,
       });

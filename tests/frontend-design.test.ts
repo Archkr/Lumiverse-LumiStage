@@ -44,8 +44,11 @@ describe("frontend design contract", () => {
     expect(studio).toContain("ls2-cue-sheet");
     expect(studio).toContain("function SettingsView");
     expect(studio).toContain('type: "open-connections"');
-    for (const view of ["Stage", "Library", "Batch", "Automation", "Appearance", "Settings", "Diagnostics"]) {
+    for (const view of ["Stage", "Library", "Automation", "Appearance", "Settings", "Diagnostics"]) {
       expect(studio).toContain(`label: "${view}"`);
     }
+    expect(studio).not.toContain('id: "batch", label: "Batch"');
+    expect(studio).toContain('class="ls2-batch-bar"');
+    expect(studio).toContain("Batch edit {props.selected.size} media");
   });
 });

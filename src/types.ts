@@ -3,7 +3,7 @@ export const LUMI_STAGE_ID = "lumi_stage";
 
 export type MediaKind = "image" | "video";
 export type TransitionStyle = "crossfade" | "lift" | "cut";
-export type StudioView = "stage" | "library" | "batch" | "automation" | "appearance" | "settings" | "diagnostics";
+export type StudioView = "stage" | "library" | "automation" | "appearance" | "settings" | "diagnostics";
 
 export interface StageAsset {
   id: string;
@@ -29,31 +29,17 @@ export interface ExpressionState {
   assets: StageAsset[];
 }
 
-export interface PoseState {
-  id: string;
-  name: string;
-  aliases: string[];
-  cues: string[];
-  tags: string[];
-  enabled: boolean;
-  priority: number;
-  order: number;
-  defaultExpressionId: string | null;
-  expressions: ExpressionState[];
-}
-
 export interface OutfitFolder {
   id: string;
   name: string;
   aliases: string[];
-  cues: string[];
   tags: string[];
   enabled: boolean;
   priority: number;
   order: number;
   allowAutoSwitch: boolean;
-  defaultPoseId: string | null;
-  poses: PoseState[];
+  defaultExpressionId: string | null;
+  expressions: ExpressionState[];
 }
 
 export interface ActorProfile {
@@ -117,7 +103,6 @@ export interface ActorStageState {
   actorId: string;
   characterId: string;
   outfitId: string | null;
-  poseId: string | null;
   expressionId: string | null;
   assetId: string | null;
   imageId: string | null;
@@ -138,10 +123,8 @@ export interface StageSnapshotV1 {
 export interface DetectionActorDecision {
   actorId: string;
   outfitId: string | null;
-  poseId: string | null;
   expressionId: string | null;
   confidence: number;
-  explicitOutfitCue: boolean;
 }
 
 export interface DetectionDecisionV1 {
@@ -165,7 +148,6 @@ export type OverrideScope = "once" | "locked";
 export interface ManualOverride {
   actorId: string;
   outfitId?: string | null;
-  poseId?: string | null;
   expressionId?: string | null;
   scope: OverrideScope;
   createdAt: number;
@@ -187,7 +169,6 @@ export interface ArchiveAssetEntry {
   characterId: string;
   actorId: string;
   outfitId: string;
-  poseId: string;
   expressionId: string;
   asset: StageAsset;
 }
@@ -249,11 +230,11 @@ export type BatchMutation =
   | { type: "add-tags"; expressionIds: string[]; tags: string[] }
   | { type: "add-aliases"; expressionIds: string[]; aliases: string[] }
   | { type: "rename"; expressionIds: string[]; find: string; replace: string }
-  | { type: "move"; assetIds: string[]; outfitId: string; poseId: string }
+  | { type: "move"; assetIds: string[]; outfitId: string }
   | { type: "duplicate"; assetIds: string[] }
   | { type: "delete"; assetIds: string[] };
 
-export type ImportLayout = "outfit-pose-expression" | "actor-outfit-pose-expression";
+export type ImportLayout = "outfit-expression" | "actor-outfit-expression";
 
 export interface ImportRequest {
   requestId: string;

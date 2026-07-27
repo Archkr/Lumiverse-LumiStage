@@ -28,10 +28,8 @@ function normalizeActorDecision(value: unknown): DetectionActorDecision | null {
   return {
     actorId,
     outfitId: nullableString(raw.outfitId),
-    poseId: nullableString(raw.poseId),
     expressionId: nullableString(raw.expressionId),
     confidence: confidence(raw.confidence),
-    explicitOutfitCue: raw.explicitOutfitCue === true,
   };
 }
 
@@ -78,19 +76,17 @@ function nodeSummary(entry: CatalogEntry): Record<string, unknown> {
       outfitId: outfit.id,
       name: outfit.name,
       aliases: outfit.aliases,
-      cues: outfit.cues,
       allowAutoSwitch: outfit.allowAutoSwitch,
-      poses: outfit.poses.filter((pose) => pose.enabled).map((pose) => ({
-        poseId: pose.id,
-        name: pose.name,
-        aliases: pose.aliases,
-        cues: pose.cues,
-        expressions: pose.expressions.filter((expression) => expression.enabled).map((expression) => ({
-          expressionId: expression.id,
-          name: expression.name,
-          aliases: expression.aliases,
-          cues: expression.cues,
-          tags: expression.tags,
+      expressions: outfit.expressions.filter((expression) => expression.enabled).map((expression) => ({
+        expressionId: expression.id,
+        name: expression.name,
+        aliases: expression.aliases,
+        cues: expression.cues,
+        tags: expression.tags,
+        sprites: expression.assets.map((asset) => ({
+          fileName: asset.fileName,
+          mediaKind: asset.mediaKind,
+          enabled: asset.enabled,
         })),
       })),
     })),
@@ -100,7 +96,7 @@ function nodeSummary(entry: CatalogEntry): Record<string, unknown> {
 export function buildDetectorRequest(
   catalog: CatalogEntry[],
   recentMessages: Array<{ role: string; content: string }>,
-  currentStates: Record<string, { outfitId: string | null; poseId: string | null; expressionId: string | null }>,
+  currentStates: Record<string, { outfitId: string | null; expressionId: string | null }>,
   settings: LumiStageSettingsV1,
 ): Record<string, unknown> {
   const catalogJson = JSON.stringify(catalog.map(nodeSummary));
@@ -109,8 +105,10 @@ export function buildDetectorRequest(
     "You direct a character sprite stage after a completed roleplay reply.",
     "Choose only IDs present in the supplied catalog. Never invent IDs.",
     "Identify every actor whose visible state materially changes and which actors are the visual focus.",
-    "Expression means visible face/emotion; pose means body position/action; outfit means clothing set.",
-    "Set explicitOutfitCue only when the latest assistant reply explicitly shows a clothing change or clearly describes a different listed outfit.",
+    "The complete wardrobe is supplied in this single catalog: every enabled outfit folder, every enabled expression, and every sprite filename inside each expression.",
+    "Use outfit folder names, aliases, expression names, aliases, cues, tags, and sprite filenames together to choose the closest visible state.",
+    "An outfit is an ordinary selectable state. Return its ID whenever the scene best matches it; no separate outfit-change cue exists.",
+    "Expression means the complete sprite state inside the selected outfit, including facial emotion, body position, and action.",
     "If a dimension is not supported by the text, return null so the current stage state remains sticky.",
     "Confidence is 0..1 for the combined visible-state match.",
     `Catalog: ${catalogJson}`,
@@ -142,14 +140,12 @@ export function buildDetectorRequest(
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["actorId", "outfitId", "poseId", "expressionId", "confidence", "explicitOutfitCue"],
+              required: ["actorId", "outfitId", "expressionId", "confidence"],
               properties: {
                 actorId: { type: "string" },
                 outfitId: { type: ["string", "null"] },
-                poseId: { type: ["string", "null"] },
                 expressionId: { type: ["string", "null"] },
                 confidence: { type: "number", minimum: 0, maximum: 1 },
-                explicitOutfitCue: { type: "boolean" },
               },
             },
           },
@@ -166,17 +162,13 @@ export function validateDecision(decision: DetectionDecisionV1, catalog: Catalog
     const actor = actors.get(item.actorId);
     if (!actor) continue;
     const outfit = item.outfitId ? actor.outfits.find((candidate) => candidate.id === item.outfitId && candidate.enabled) : null;
-    const pose = item.poseId
-      ? (outfit?.poses ?? actor.outfits.flatMap((candidate) => candidate.poses)).find((candidate) => candidate.id === item.poseId && candidate.enabled)
-      : null;
     const expression = item.expressionId
-      ? (pose?.expressions ?? actor.outfits.flatMap((candidate) => candidate.poses.flatMap((value) => value.expressions)))
+      ? (outfit?.expressions ?? actor.outfits.flatMap((candidate) => candidate.expressions))
         .find((candidate) => candidate.id === item.expressionId && candidate.enabled)
       : null;
     validActors.push({
       ...item,
       outfitId: outfit?.id ?? null,
-      poseId: pose?.id ?? null,
       expressionId: expression?.id ?? null,
     });
   }

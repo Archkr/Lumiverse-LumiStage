@@ -84,11 +84,10 @@ describe("private user storage repository", () => {
       actorId: "actor",
       characterId: "character",
       outfitId: "outfit",
-      poseId: "pose",
       expressionId: "expression",
       assetId: "asset",
       imageId: "image",
-      label: "Actor · Outfit · Pose · Expression",
+      label: "Actor · Outfit · Expression",
       focused: true,
       confidence: 0.9,
     };

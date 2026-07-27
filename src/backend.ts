@@ -316,7 +316,7 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
   if (!record) {
     const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.actors).map(([actorId, state]) => [
       actorId,
-      { outfitId: state.outfitId, poseId: state.poseId, expressionId: state.expressionId },
+      { outfitId: state.outfitId, expressionId: state.expressionId },
     ]));
     const request = buildDetectorRequest(
       set.catalog,
@@ -477,15 +477,14 @@ async function importAssets(userId: string, message: Extract<FrontendToBackend, 
 
 function archiveForProfile(profile: CharacterProfileV1): LumiStageArchiveV1 {
   const assets: ArchiveAssetEntry[] = [];
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) for (const asset of expression.assets) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) for (const asset of expression.assets) {
       const extension = asset.fileName.includes(".") ? asset.fileName.split(".").pop() : asset.mimeType.split("/").pop();
       assets.push({
         path: `assets/${asset.contentHash}.${extension || "bin"}`,
         characterId: profile.characterId,
         actorId: actor.id,
         outfitId: outfit.id,
-        poseId: pose.id,
         expressionId: expression.id,
         asset,
       });

@@ -27,27 +27,25 @@ describe("safe import mapping", () => {
 
   it("fills explicit Default levels for shallower layouts", () => {
     const direct = directCandidate("Happy.png", new Uint8Array([1]));
-    expect(importTarget(direct, "outfit-pose-expression", "Aster")).toEqual({
+    expect(importTarget(direct, "outfit-expression", "Aster")).toEqual({
       actorName: "Aster",
       outfitName: "Default",
-      poseName: "Default",
       expressionName: "Happy",
     });
-    const nested = directCandidate("Bryn/Formal/Standing/Smile.webp", new Uint8Array([1]));
-    expect(importTarget(nested, "actor-outfit-pose-expression", "Aster")).toEqual({
+    const nested = directCandidate("Bryn/Formal/Smile.webp", new Uint8Array([1]));
+    expect(importTarget(nested, "actor-outfit-expression", "Aster")).toEqual({
       actorName: "Bryn",
       outfitName: "Formal",
-      poseName: "Standing",
       expressionName: "Smile",
     });
   });
 
   it("detects case-folded filename and destination collisions before upload", () => {
     const candidates = [
-      directCandidate("Casual/Standing/Happy.png", new Uint8Array([1])),
-      directCandidate("casual/standing/HAPPY.PNG", new Uint8Array([2])),
+      directCandidate("Casual/Happy.png", new Uint8Array([1])),
+      directCandidate("casual/HAPPY.PNG", new Uint8Array([2])),
     ];
-    expect(() => assertUnambiguousCandidates(candidates, "outfit-pose-expression", "Aster"))
+    expect(() => assertUnambiguousCandidates(candidates, "outfit-expression", "Aster"))
       .toThrow(/ambiguous import collisions/i);
   });
 
@@ -77,13 +75,13 @@ describe("safe import mapping", () => {
 
   it("reports partial host upload failures per file and commits successful items only", () => {
     const prepared = [
-      { candidate: directCandidate("Casual/Standing/Happy.png", new Uint8Array([1])), hash: "one" },
-      { candidate: directCandidate("Casual/Standing/Sad.png", new Uint8Array([2])), hash: "two" },
+      { candidate: directCandidate("Casual/Happy.png", new Uint8Array([1])), hash: "one" },
+      { candidate: directCandidate("Casual/Sad.png", new Uint8Array([2])), hash: "two" },
     ];
-    const settled = settleHostUploads(prepared, [{ id: "image-one" }, { error: "codec rejected" }], "outfit-pose-expression", "Aster");
+    const settled = settleHostUploads(prepared, [{ id: "image-one" }, { error: "codec rejected" }], "outfit-expression", "Aster");
     expect(settled.imported).toHaveLength(1);
     expect(settled.uploadedByPath.get(prepared[0].candidate.path)?.imageId).toBe("image-one");
-    expect(settled.errors).toEqual(["Casual/Standing/Sad.png: codec rejected"]);
+    expect(settled.errors).toEqual(["Casual/Sad.png: codec rejected"]);
   });
 
   it("only selects image IDs that became unreferenced across every profile", () => {

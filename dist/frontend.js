@@ -4135,35 +4135,19 @@ function createExpression(name = "Neutral", now = Date.now()) {
     assets: []
   };
 }
-function createPose(name = "Default", now = Date.now()) {
-  const expression = createExpression("Neutral", now);
-  return {
-    id: createId("pose"),
-    name: cleanName(name),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    defaultExpressionId: expression.id,
-    expressions: [expression]
-  };
-}
 function createOutfit(name = "Default", now = Date.now()) {
-  const pose = createPose("Default", now);
+  const expression = createExpression("Neutral", now);
   return {
     id: createId("outfit"),
     name: cleanName(name),
     aliases: [],
-    cues: [],
     tags: [],
     enabled: true,
     priority: 0,
     order: 0,
     allowAutoSwitch: true,
-    defaultPoseId: pose.id,
-    poses: [pose]
+    defaultExpressionId: expression.id,
+    expressions: [expression]
   };
 }
 function createActor(name, now = Date.now()) {
@@ -4208,14 +4192,12 @@ function createTimeline(chatId, now = Date.now()) {
 }
 function allAssets(profile) {
   return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap(
-      (outfit) => outfit.poses.flatMap((pose) => pose.expressions.flatMap((expression) => expression.assets))
-    )
+    (actor) => actor.outfits.flatMap((outfit) => outfit.expressions.flatMap((expression) => expression.assets))
   );
 }
 function allExpressions(profile) {
   return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap((outfit) => outfit.poses.flatMap((pose) => pose.expressions))
+    (actor) => actor.outfits.flatMap((outfit) => outfit.expressions)
   );
 }
 function mutateExpressions(profile, ids, mutate) {
@@ -4225,10 +4207,7 @@ function mutateExpressions(profile, ids, mutate) {
       ...actor,
       outfits: actor.outfits.map((outfit) => ({
         ...outfit,
-        poses: outfit.poses.map((pose) => ({
-          ...pose,
-          expressions: pose.expressions.map((expression) => ids.has(expression.id) ? mutate(expression) : expression)
-        }))
+        expressions: outfit.expressions.map((expression) => ids.has(expression.id) ? mutate(expression) : expression)
       }))
     }))
   };
@@ -4237,8 +4216,8 @@ function applyBatchMutation(profile, mutation, now = Date.now()) {
   let next = structuredClone(profile);
   if (mutation.type === "set-enabled" || mutation.type === "set-priority" || mutation.type === "delete") {
     const ids = new Set(mutation.assetIds);
-    for (const actor of next.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-      for (const expression of pose.expressions) {
+    for (const actor of next.actors) for (const outfit of actor.outfits) {
+      for (const expression of outfit.expressions) {
         if (mutation.type === "delete") expression.assets = expression.assets.filter((asset) => !ids.has(asset.id));
         else expression.assets = expression.assets.map((asset) => {
           if (!ids.has(asset.id)) return asset;
@@ -4274,16 +4253,15 @@ function applyBatchMutation(profile, mutation, now = Date.now()) {
     }
     for (const actor of next.actors) {
       const outfit = actor.outfits.find((item) => item.id === mutation.outfitId);
-      const pose = outfit?.poses.find((item) => item.id === mutation.poseId);
-      if (pose) {
+      if (outfit) {
         for (const item of moving) {
-          const match = pose.expressions.find((expression) => normalizedKey(expression.name) === normalizedKey(item.expression.name));
+          const match = outfit.expressions.find((expression) => normalizedKey(expression.name) === normalizedKey(item.expression.name));
           if (match) match.assets.push(...item.assets);
-          else pose.expressions.push({
+          else outfit.expressions.push({
             ...structuredClone(item.expression),
             id: createId("expression"),
             assets: item.assets,
-            order: pose.expressions.length
+            order: outfit.expressions.length
           });
         }
       }
@@ -4311,8 +4289,8 @@ function inspectProfile(profile) {
     if (!actor.outfits.some((item) => item.enabled)) issues.push({ severity: "error", code: "actor-no-outfit", message: `${actor.name} has no enabled outfit.` });
     const aliases = actor.aliases.map(normalizedKey);
     if (new Set(aliases).size !== aliases.length) issues.push({ severity: "warning", code: "duplicate-alias", message: `${actor.name} contains duplicate aliases.` });
-    for (const outfit of actor.outfits) for (const pose of outfit.poses) for (const expression of pose.expressions) {
-      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${pose.name} / ${expression.name} has no media.` });
+    for (const outfit of actor.outfits) for (const expression of outfit.expressions) {
+      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${expression.name} has no media.` });
       for (const asset of expression.assets) hashes.set(asset.contentHash, (hashes.get(asset.contentHash) ?? 0) + 1);
     }
   }
@@ -4753,10 +4731,6 @@ var paths = {
     /* @__PURE__ */ u2("path", { d: "M15 15a4.5 4.5 0 0 1 5.5 4.4" })
   ] }),
   outfit: /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("path", { d: "M8 4 5 7l3 3v10h8V10l3-3-3-3c-.8 1.3-2.1 2-4 2S8.8 5.3 8 4Z" }) }),
-  pose: /* @__PURE__ */ u2(S, { children: [
-    /* @__PURE__ */ u2("circle", { cx: "12", cy: "5", r: "2" }),
-    /* @__PURE__ */ u2("path", { d: "m8 21 2-7-3-3m9 10-2-7 3-3M7 11l5-3 5 3M12 8v6" })
-  ] }),
   expression: /* @__PURE__ */ u2(S, { children: [
     /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "9" }),
     /* @__PURE__ */ u2("path", { d: "M8.5 10h.1m6.8 0h.1M8 15c1.2 1.3 2.5 2 4 2s2.8-.7 4-2" })
@@ -5125,17 +5099,17 @@ function showImportModal(client, profile) {
   const modal = client.ctx.ui.showModal({ title: "Import media", width: 660, maxHeight: 760, persistent: true });
   function Importer() {
     const [files, setFiles] = d2([]);
-    const [layout, setLayout] = d2("outfit-pose-expression");
+    const [layout, setLayout] = d2("outfit-expression");
     const [dragging, setDragging] = d2(false);
     const [busy, setBusy] = d2(false);
     const preview = T2(() => files.slice(0, 8).map((file) => {
       const parts = file.webkitRelativePath?.split("/").filter(Boolean) ?? [file.name];
       const leaf = parts.pop() ?? file.name;
       const expression = leaf.replace(/\.[^.]+$/, "");
-      if (layout === "actor-outfit-pose-expression") {
-        return `${parts[0] ?? "Default actor"} / ${parts[1] ?? "Default"} / ${parts[2] ?? "Default"} / ${expression}`;
+      if (layout === "actor-outfit-expression") {
+        return `${parts[0] ?? "Default actor"} / ${parts[1] ?? "Default"} / ${expression}`;
       }
-      return `${profile?.characterName ?? "Current actor"} / ${parts[0] ?? "Default"} / ${parts[1] ?? "Default"} / ${expression}`;
+      return `${profile?.characterName ?? "Current actor"} / ${parts[0] ?? "Default"} / ${expression}`;
     }), [files, layout]);
     async function start() {
       if (!files.length || busy) return;
@@ -5189,8 +5163,8 @@ function showImportModal(client, profile) {
             value: layout,
             onChange: setLayout,
             options: [
-              { value: "outfit-pose-expression", label: "Outfit / Pose / Expression" },
-              { value: "actor-outfit-pose-expression", label: "Actor / Outfit / Pose / Expression" }
+              { value: "outfit-expression", label: "Outfit / Expression" },
+              { value: "actor-outfit-expression", label: "Actor / Outfit / Expression" }
             ]
           }
         ),
@@ -5229,21 +5203,18 @@ function showQuickPicker(client) {
     const current = entry ? backend.snapshot?.actors[entry.actor.id] : null;
     const [outfitId, setOutfitId] = d2(current?.outfitId ?? entry?.actor.defaultOutfitId ?? entry?.actor.outfits[0]?.id ?? "");
     const outfit = entry?.actor.outfits.find((item) => item.id === outfitId) ?? entry?.actor.outfits[0] ?? null;
-    const [poseId, setPoseId] = d2(current?.poseId ?? outfit?.defaultPoseId ?? outfit?.poses[0]?.id ?? "");
-    const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
-    const [expressionId, setExpressionId] = d2(current?.expressionId ?? pose?.defaultExpressionId ?? pose?.expressions[0]?.id ?? "");
+    const [expressionId, setExpressionId] = d2(current?.expressionId ?? outfit?.defaultExpressionId ?? outfit?.expressions[0]?.id ?? "");
     const [scope, setScope] = d2("once");
     const [query, setQuery] = d2("");
-    const expressions = (pose?.expressions ?? []).filter(
+    const expressions = (outfit?.expressions ?? []).filter(
       (expression) => !query.trim() || [expression.name, ...expression.aliases, ...expression.tags].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
     );
     const locked = entry ? backend.timeline?.manualOverrides[entry.actor.id]?.scope === "locked" : false;
     async function apply() {
-      if (!entry || !outfit || !pose || !expressionId) return;
+      if (!entry || !outfit || !expressionId) return;
       const override = {
         actorId: entry.actor.id,
         outfitId: outfit.id,
-        poseId: pose.id,
         expressionId,
         scope,
         createdAt: Date.now()
@@ -5265,25 +5236,15 @@ function showQuickPicker(client) {
           setActorId(id);
           const next = actors.find((item) => item.actor.id === id);
           const nextOutfit = next?.actor.outfits.find((item) => item.id === next.actor.defaultOutfitId) ?? next?.actor.outfits[0];
-          const nextPose = nextOutfit?.poses.find((item) => item.id === nextOutfit.defaultPoseId) ?? nextOutfit?.poses[0];
           setOutfitId(nextOutfit?.id ?? "");
-          setPoseId(nextPose?.id ?? "");
-          setExpressionId(nextPose?.defaultExpressionId ?? nextPose?.expressions[0]?.id ?? "");
+          setExpressionId(nextOutfit?.defaultExpressionId ?? nextOutfit?.expressions[0]?.id ?? "");
         }, children: actors.map((item) => /* @__PURE__ */ u2("option", { value: item.actor.id, children: item.actor.name })) }) }),
         /* @__PURE__ */ u2(Field, { label: "Outfit", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: outfit?.id, onChange: (event) => {
           const id = event.currentTarget.value;
           setOutfitId(id);
           const next = entry?.actor.outfits.find((item) => item.id === id);
-          const nextPose = next?.poses.find((item) => item.id === next.defaultPoseId) ?? next?.poses[0];
-          setPoseId(nextPose?.id ?? "");
-          setExpressionId(nextPose?.defaultExpressionId ?? nextPose?.expressions[0]?.id ?? "");
-        }, children: entry?.actor.outfits.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Pose", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: pose?.id, onChange: (event) => {
-          const id = event.currentTarget.value;
-          setPoseId(id);
-          const next = outfit?.poses.find((item) => item.id === id);
           setExpressionId(next?.defaultExpressionId ?? next?.expressions[0]?.id ?? "");
-        }, children: outfit?.poses.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) }) })
+        }, children: entry?.actor.outfits.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) }) })
       ] }),
       /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Find an expression\u2026" }),
       /* @__PURE__ */ u2("div", { class: "ls2-picker-grid", children: expressions.map((expression) => {
@@ -5387,25 +5348,23 @@ function Stage(props) {
 var NAV = [
   { id: "stage", label: "Stage", icon: "stage" },
   { id: "library", label: "Library", icon: "library" },
-  { id: "batch", label: "Batch", icon: "batch" },
   { id: "automation", label: "Automation", icon: "automation" },
   { id: "appearance", label: "Appearance", icon: "appearance" },
   { id: "settings", label: "Settings", icon: "settings" },
   { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" }
 ];
-var PRIMARY_NAV = NAV.slice(0, 3);
-var SECONDARY_NAV = NAV.slice(3);
-function activeNodes(profile, actorId, outfitId, poseId) {
+var PRIMARY_NAV = NAV.slice(0, 2);
+var SECONDARY_NAV = NAV.slice(2);
+function activeNodes(profile, actorId, outfitId) {
   const actor = profile?.actors.find((item) => item.id === actorId) ?? profile?.actors[0] ?? null;
   const outfit = actor?.outfits.find((item) => item.id === outfitId) ?? actor?.outfits[0] ?? null;
-  const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
-  return { actor, outfit, pose };
+  return { actor, outfit };
 }
 function assetLocation(profile, assetId) {
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) {
       const asset = expression.assets.find((item) => item.id === assetId);
-      if (asset) return { actor, outfit, pose, expression, asset };
+      if (asset) return { actor, outfit, expression, asset };
     }
   }
   return null;
@@ -5448,7 +5407,7 @@ function StageOnboarding({
           "Stage uncast"
         ] }),
         /* @__PURE__ */ u2("h3", { children: "Give every reply a visual performance." }),
-        /* @__PURE__ */ u2("p", { children: "Build a private cast library, then direct it yourself or let LumiStage resolve outfits, poses, and expressions after each reply." }),
+        /* @__PURE__ */ u2("p", { children: "Build a private cast library, then direct it yourself or let LumiStage resolve outfits and expression sprites after each reply." }),
         /* @__PURE__ */ u2("div", { class: "ls2-onboarding-actions", children: [
           /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(client, backend.profile), children: "Import a folder" }),
           /* @__PURE__ */ u2(Button, { icon: "library", onClick: () => navigate("library"), children: "Build manually" })
@@ -5593,71 +5552,76 @@ function LibraryView(props) {
   const { backend } = useClientState(props.client);
   const [actorId, setActorId] = d2(props.profile?.defaultActorId ?? props.profile?.actors[0]?.id ?? "");
   const [outfitId, setOutfitId] = d2("");
-  const [poseId, setPoseId] = d2("");
   const [expressionId, setExpressionId] = d2("");
   const [query, setQuery] = d2("");
   const [page, setPage] = d2(0);
   const [dragged, setDragged] = d2(null);
+  const [priority, setPriority] = d2(0);
+  const [tags, setTags] = d2("");
+  const [aliases, setAliases] = d2("");
+  const [find, setFind] = d2("");
+  const [replace, setReplace] = d2("");
+  const [destination, setDestination] = d2("");
   const lastIndex = A2(null);
-  const { actor, outfit, pose } = activeNodes(props.profile, actorId, outfitId, poseId);
+  const { actor, outfit } = activeNodes(props.profile, actorId, outfitId);
   h2(() => {
     if (props.profile && !props.profile.actors.some((item) => item.id === actorId)) setActorId(props.profile.defaultActorId ?? props.profile.actors[0]?.id ?? "");
   }, [props.profile?.revision, actorId]);
   h2(() => {
     if (actor && !actor.outfits.some((item) => item.id === outfitId)) setOutfitId(actor.defaultOutfitId ?? actor.outfits[0]?.id ?? "");
   }, [actor?.id, outfitId]);
-  h2(() => {
-    if (outfit && !outfit.poses.some((item) => item.id === poseId)) setPoseId(outfit.defaultPoseId ?? outfit.poses[0]?.id ?? "");
-  }, [outfit?.id, poseId]);
   const rows = T2(() => {
-    if (!pose) return [];
+    if (!outfit) return [];
     const needle = query.trim().toLocaleLowerCase();
-    return pose.expressions.flatMap((expression) => expression.assets.map((asset) => ({ expression, asset }))).filter(({ expression, asset }) => !needle || [expression.name, asset.fileName, ...expression.tags, ...expression.aliases, ...expression.cues].join(" ").toLocaleLowerCase().includes(needle));
-  }, [pose, query]);
+    return outfit.expressions.flatMap((expression) => expression.assets.length ? expression.assets.map((asset) => ({ expression, asset })) : [{ expression, asset: null }]).filter(({ expression, asset }) => !needle || [expression.name, asset?.fileName ?? "", ...expression.tags, ...expression.aliases, ...expression.cues].join(" ").toLocaleLowerCase().includes(needle));
+  }, [outfit, query]);
   const pageSize = 72;
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const pageStart = safePage * pageSize;
   const pageRows = rows.slice(pageStart, pageStart + pageSize);
-  const inspectedExpression = pose?.expressions.find((item) => item.id === expressionId) ?? null;
-  h2(() => setPage(0), [actor?.id, outfit?.id, pose?.id, query]);
+  const inspectedExpression = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
+  const selectedExpressions = T2(() => {
+    if (!props.profile) return [];
+    return [...new Set([...props.selected].map((assetId) => assetLocation(props.profile, assetId)?.expression.id).filter((id) => !!id))];
+  }, [props.profile, props.selected]);
+  const destinations = props.profile?.actors.flatMap((profileActor) => profileActor.outfits.map((profileOutfit) => ({
+    id: profileOutfit.id,
+    label: `${profileActor.name} / ${profileOutfit.name}`
+  }))) ?? [];
+  const renamePreview = props.profile ? allExpressions(props.profile).filter((item) => selectedExpressions.includes(item.id)).slice(0, 4).map((item) => ({
+    before: item.name,
+    after: find ? item.name.split(find).join(replace) : item.name
+  })) : [];
+  h2(() => setPage(0), [actor?.id, outfit?.id, query]);
   function select(index, assetId, shift) {
+    if (!assetId) return;
     const next = new Set(props.selected);
     if (shift && lastIndex.current !== null) {
       const [start, end] = [lastIndex.current, index].sort((a3, b2) => a3 - b2);
-      for (let cursor = start; cursor <= end; cursor += 1) next.add(rows[cursor].asset.id);
+      for (let cursor = start; cursor <= end; cursor += 1) {
+        const asset = rows[cursor]?.asset;
+        if (asset) next.add(asset.id);
+      }
     } else if (next.has(assetId)) next.delete(assetId);
     else next.add(assetId);
     lastIndex.current = index;
     props.setSelected(next);
   }
-  function reorder(kind, sourceId, targetId) {
+  function reorder(sourceId, targetId) {
     if (!actor || sourceId === targetId) return;
     props.update((profile) => {
       const targetActor = profile.actors.find((item) => item.id === actor.id);
-      if (kind === "outfit") {
-        const list = targetActor?.outfits;
-        if (!list) return;
-        const from = list.findIndex((item) => item.id === sourceId);
-        const to = list.findIndex((item) => item.id === targetId);
-        if (from < 0 || to < 0) return;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        list.forEach((item, index) => {
-          item.order = index;
-        });
-      } else {
-        const list = targetActor?.outfits.find((item) => item.id === outfit?.id)?.poses;
-        if (!list) return;
-        const from = list.findIndex((item) => item.id === sourceId);
-        const to = list.findIndex((item) => item.id === targetId);
-        if (from < 0 || to < 0) return;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        list.forEach((item, index) => {
-          item.order = index;
-        });
-      }
+      const list = targetActor?.outfits;
+      if (!list) return;
+      const from = list.findIndex((item) => item.id === sourceId);
+      const to = list.findIndex((item) => item.id === targetId);
+      if (from < 0 || to < 0) return;
+      const [moved] = list.splice(from, 1);
+      list.splice(to, 0, moved);
+      list.forEach((item, index) => {
+        item.order = index;
+      });
     });
   }
   function addActor() {
@@ -5681,22 +5645,10 @@ function LibraryView(props) {
       setOutfitId(next.id);
     }));
   }
-  function addPose() {
-    if (!actor || !outfit) return;
-    showTextPrompt(props.client, { title: "New pose folder", label: "Pose name", placeholder: "e.g. Seated" }, (name) => props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-      if (!target) return;
-      const next = createPose(name);
-      next.order = target.poses.length;
-      target.poses.push(next);
-      target.defaultPoseId ??= next.id;
-      setPoseId(next.id);
-    }));
-  }
   function addExpression() {
-    if (!actor || !outfit || !pose) return;
+    if (!actor || !outfit) return;
     showTextPrompt(props.client, { title: "New expression", label: "Expression name", placeholder: "e.g. Relieved" }, (name) => props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
+      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
       if (!target) return;
       const next = createExpression(name);
       next.order = target.expressions.length;
@@ -5717,7 +5669,7 @@ function LibraryView(props) {
       {
         eyebrow: "Asset direction",
         title: "Library",
-        description: "Organize actors, outfits, poses, expressions, and media.",
+        description: "Organize actors, editable outfit folders, expressions, and sprites.",
         actions: /* @__PURE__ */ u2(S, { children: [
           /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import" }),
           /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add actor", onClick: addActor })
@@ -5744,49 +5696,82 @@ function LibraryView(props) {
         {
           icon: "outfit",
           label: item.name,
-          count: item.poses.reduce((sum, value) => sum + value.expressions.reduce((total, expression) => total + expression.assets.length, 0), 0),
+          count: item.expressions.reduce((sum, expression) => sum + expression.assets.length, 0),
           active: item.id === outfit?.id,
-          onClick: () => setOutfitId(item.id),
+          onClick: () => {
+            setOutfitId(item.id);
+            setExpressionId(item.defaultExpressionId ?? item.expressions[0]?.id ?? "");
+          },
           draggable: true,
           onDragStart: () => setDragged(item.id),
           onDrop: () => {
-            if (dragged) reorder("outfit", dragged, item.id);
+            if (dragged) reorder(dragged, item.id);
             setDragged(null);
           }
         }
       )) })
     ] }),
-    /* @__PURE__ */ u2("div", { class: "ls2-folder-section", children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Poses", trailing: /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add pose", onClick: addPose }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-folder-strip", children: outfit?.poses.map((item) => /* @__PURE__ */ u2(
-        FolderButton,
+    actor && outfit && /* @__PURE__ */ u2(Surface, { class: "ls2-outfit-editor", children: [
+      /* @__PURE__ */ u2(
+        SectionTitle,
         {
-          icon: "pose",
-          label: item.name,
-          count: item.expressions.reduce((sum, expression) => sum + expression.assets.length, 0),
-          active: item.id === pose?.id,
-          onClick: () => setPoseId(item.id),
-          draggable: true,
-          onDragStart: () => setDragged(item.id),
-          onDrop: () => {
-            if (dragged) reorder("pose", dragged, item.id);
-            setDragged(null);
-          }
+          title: "Outfit editor",
+          description: `${actor.name} / ${outfit.name}`,
+          trailing: /* @__PURE__ */ u2(Status, { tone: outfit.enabled ? "success" : "neutral", children: actor.defaultOutfitId === outfit.id ? "Default" : outfit.enabled ? "Enabled" : "Disabled" })
         }
-      )) })
+      ),
+      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
+        /* @__PURE__ */ u2(Field, { label: "Folder name", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.name, onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.name = event.currentTarget.value;
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: outfit.priority, onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.priority = Number(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Aliases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.aliases.join(", "), onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.aliases = cleanList(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Tags", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.tags.join(", "), onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.tags = cleanList(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Actor aliases", hint: "Used for group-chat focus", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: actor.aliases.join(", "), onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id);
+          if (node) node.aliases = cleanList(event.currentTarget.value);
+        }) }) })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls2-toggle-stack", children: [
+        /* @__PURE__ */ u2(Toggle, { checked: outfit.enabled, onChange: (value) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.enabled = value;
+        }), label: "Enable this outfit", hint: "Disabled outfits remain in the Library but automation cannot select them." }),
+        /* @__PURE__ */ u2(Toggle, { checked: outfit.allowAutoSwitch, onChange: (value) => props.update((profile) => {
+          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
+          if (node) node.allowAutoSwitch = value;
+        }), label: "Allow automatic selection", hint: "The detector uses this folder name and every contained sprite filename when resolving the scene." })
+      ] }),
+      /* @__PURE__ */ u2(Toolbar, { children: /* @__PURE__ */ u2(Button, { icon: "check", disabled: actor.defaultOutfitId === outfit.id, onClick: () => props.update((profile) => {
+        const node = profile.actors.find((item) => item.id === actor.id);
+        if (node) node.defaultOutfitId = outfit.id;
+      }), children: "Set as default outfit" }) })
     ] }),
     /* @__PURE__ */ u2(Surface, { class: "ls2-library-workspace", padding: "none", children: [
       /* @__PURE__ */ u2("div", { class: "ls2-library-toolbar", children: [
-        /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Search names, aliases, tags, cues\u2026" }),
+        /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Search expression and sprite names\u2026" }),
         /* @__PURE__ */ u2(Toolbar, { children: [
           /* @__PURE__ */ u2(Button, { icon: "plus", size: "small", onClick: addExpression, children: "Expression" }),
-          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.setSelected(new Set(pageRows.map((row) => row.asset.id))), disabled: !pageRows.length, children: "Select page" })
+          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.setSelected(new Set(pageRows.flatMap((row) => row.asset ? [row.asset.id] : []))), disabled: !pageRows.some((row) => row.asset), children: "Select page" }),
+          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.setSelected(new Set(rows.flatMap((row) => row.asset ? [row.asset.id] : []))), disabled: !rows.some((row) => row.asset), children: "Select filtered" })
         ] })
       ] }),
       /* @__PURE__ */ u2("div", { class: "ls2-library-subbar", children: [
         /* @__PURE__ */ u2("span", { children: [
-          rows.length,
-          " media"
+          rows.filter((row) => row.asset).length,
+          " media \xB7 ",
+          outfit?.expressions.length ?? 0,
+          " expressions"
         ] }),
         /* @__PURE__ */ u2("span", { children: [
           props.selected.size,
@@ -5802,210 +5787,112 @@ function LibraryView(props) {
           /* @__PURE__ */ u2(IconButton, { icon: "chevronRight", label: "Next page", disabled: safePage >= pageCount - 1, onClick: () => setPage(Math.min(pageCount - 1, safePage + 1)) })
         ] })
       ] }),
+      props.selected.size > 0 && /* @__PURE__ */ u2("div", { class: "ls2-batch-bar", role: "toolbar", "aria-label": "Batch actions", children: [
+        /* @__PURE__ */ u2("strong", { children: [
+          props.selected.size,
+          " selected"
+        ] }),
+        /* @__PURE__ */ u2("span", { children: [
+          selectedExpressions.length,
+          " expression",
+          selectedExpressions.length === 1 ? "" : "s"
+        ] }),
+        /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(IconButton, { icon: "undo", label: "Undo", disabled: !props.canUndo, onClick: props.undo }),
+          /* @__PURE__ */ u2(IconButton, { icon: "redo", label: "Redo", disabled: !props.canRedo, onClick: props.redo }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "eye", onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true }), children: "Enable" }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "eyeOff", onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false }), children: "Disable" }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "copy", onClick: () => props.mutate({ type: "duplicate", assetIds: [...props.selected] }), children: "Duplicate" }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "trash", variant: "danger", onClick: () => props.mutate({ type: "delete", assetIds: [...props.selected] }), children: "Trash" }),
+          /* @__PURE__ */ u2(Button, { size: "small", variant: "ghost", onClick: () => props.setSelected(/* @__PURE__ */ new Set()), children: "Clear" })
+        ] })
+      ] }),
       pageRows.length ? /* @__PURE__ */ u2("div", { class: "ls2-asset-grid", children: pageRows.map(({ expression, asset }, index) => {
-        const view = backend.assetViews[asset.id];
-        return /* @__PURE__ */ u2("article", { class: "ls2-asset-card", "data-selected": props.selected.has(asset.id), "data-inspected": expression.id === expressionId, children: /* @__PURE__ */ u2("button", { type: "button", class: "ls2-asset-main", onClick: (event) => {
-          select(pageStart + index, asset.id, event.shiftKey);
+        const view = asset ? backend.assetViews[asset.id] : null;
+        return /* @__PURE__ */ u2("article", { class: "ls2-asset-card", "data-selected": asset ? props.selected.has(asset.id) : false, "data-inspected": expression.id === expressionId, children: /* @__PURE__ */ u2("button", { type: "button", class: "ls2-asset-main", onClick: (event) => {
+          select(pageStart + index, asset?.id ?? null, event.shiftKey);
           setExpressionId(expression.id);
         }, children: [
-          /* @__PURE__ */ u2(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: asset.mediaKind, label: expression.name, class: "ls2-asset-media" }),
+          /* @__PURE__ */ u2(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: asset?.mediaKind ?? "image", label: expression.name, class: "ls2-asset-media" }),
           /* @__PURE__ */ u2("span", { class: "ls2-asset-overlay", children: [
             /* @__PURE__ */ u2("strong", { children: expression.name }),
-            /* @__PURE__ */ u2("small", { children: [
-              asset.mediaKind,
-              " \xB7 P",
-              asset.priority
-            ] })
+            /* @__PURE__ */ u2("small", { children: asset ? `${asset.fileName} \xB7 P${asset.priority}` : "No media yet" })
           ] }),
-          /* @__PURE__ */ u2("span", { class: "ls2-asset-check", children: /* @__PURE__ */ u2(Icon, { name: props.selected.has(asset.id) ? "check" : "plus", size: 12 }) })
+          asset && /* @__PURE__ */ u2("span", { class: "ls2-asset-check", children: /* @__PURE__ */ u2(Icon, { name: props.selected.has(asset.id) ? "check" : "plus", size: 12 }) })
         ] }) });
-      }) }) : /* @__PURE__ */ u2(EmptyState, { icon: "image", title: "No media in this pose", description: "Import media or create an empty expression to start building this pose.", action: /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import media" }) })
+      }) }) : /* @__PURE__ */ u2(EmptyState, { icon: "image", title: "No expressions in this outfit", description: "Import media or create an expression to start building this outfit.", action: /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import media" }) })
     ] }),
-    inspectedExpression && actor && outfit && pose && /* @__PURE__ */ u2(Surface, { class: "ls2-inspector", children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Expression inspector", description: `${actor.name} / ${outfit.name} / ${pose.name}`, trailing: /* @__PURE__ */ u2(Status, { tone: inspectedExpression.enabled ? "success" : "neutral", children: inspectedExpression.enabled ? "Enabled" : "Disabled" }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Name", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.name, onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.name = event.currentTarget.value;
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: inspectedExpression.priority, onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.priority = Number(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Aliases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.aliases.join(", "), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.aliases = cleanList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Cue phrases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.cues.join(", "), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.cues = cleanList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Tags", hint: "Comma separated", class: "ls2-field-wide", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.tags.join(", "), onChange: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.tags = cleanList(event.currentTarget.value);
-        }) }) })
-      ] }),
-      /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { icon: "check", onClick: () => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id);
-          if (node) node.defaultExpressionId = inspectedExpression.id;
-        }), children: "Set as default" }),
-        /* @__PURE__ */ u2(Button, { icon: inspectedExpression.enabled ? "eyeOff" : "eye", onClick: () => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.poses.find((p3) => p3.id === pose.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.enabled = !node.enabled;
-        }), children: inspectedExpression.enabled ? "Disable" : "Enable" })
-      ] })
-    ] }),
-    actor && outfit && pose && /* @__PURE__ */ u2("details", { class: "ls2-disclosure", children: [
+    props.selected.size > 0 && /* @__PURE__ */ u2("details", { class: "ls2-disclosure ls2-batch-panel", children: [
       /* @__PURE__ */ u2("summary", { children: [
         /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2(Icon, { name: "settings", size: 16 }),
-          "Folder direction"
+          /* @__PURE__ */ u2(Icon, { name: "batch", size: 16 }),
+          "Batch edit ",
+          props.selected.size,
+          " media"
         ] }),
         /* @__PURE__ */ u2(Icon, { name: "chevronDown", size: 15 })
       ] }),
       /* @__PURE__ */ u2("div", { class: "ls2-disclosure-body", children: [
         /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-          /* @__PURE__ */ u2(Field, { label: "Actor aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: actor.aliases.join(", "), onChange: (event) => props.update((profile) => {
-            const node = profile.actors.find((item) => item.id === actor.id);
-            if (node) node.aliases = cleanList(event.currentTarget.value);
-          }) }) }),
-          /* @__PURE__ */ u2(Field, { label: "Outfit aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.aliases.join(", "), onChange: (event) => props.update((profile) => {
-            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-            if (node) node.aliases = cleanList(event.currentTarget.value);
-          }) }) }),
-          /* @__PURE__ */ u2(Field, { label: "Outfit cues", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.cues.join(", "), onChange: (event) => props.update((profile) => {
-            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-            if (node) node.cues = cleanList(event.currentTarget.value);
-          }) }) }),
-          /* @__PURE__ */ u2(Field, { label: "Pose cues", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: pose.cues.join(", "), onChange: (event) => props.update((profile) => {
-            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
-            if (node) node.cues = cleanList(event.currentTarget.value);
-          }) }) })
+          /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: priority, onInput: (event) => setPriority(Number(event.currentTarget.value)) }) }),
+          /* @__PURE__ */ u2(Field, { label: "Move to outfit", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: destination, onChange: (event) => setDestination(event.currentTarget.value), children: [
+            /* @__PURE__ */ u2("option", { value: "", children: "Choose an outfit\u2026" }),
+            destinations.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.label }))
+          ] }) }),
+          /* @__PURE__ */ u2(Field, { label: "Add tags", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: tags, onInput: (event) => setTags(event.currentTarget.value), placeholder: "bright, smile, joy" }) }),
+          /* @__PURE__ */ u2(Field, { label: "Add aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: aliases, onInput: (event) => setAliases(event.currentTarget.value), placeholder: "grin, cheerful" }) }),
+          /* @__PURE__ */ u2(Field, { label: "Find in expression names", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: find, onInput: (event) => setFind(event.currentTarget.value) }) }),
+          /* @__PURE__ */ u2(Field, { label: "Replace with", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: replace, onInput: (event) => setReplace(event.currentTarget.value) }) })
         ] }),
-        /* @__PURE__ */ u2(Toggle, { checked: outfit.allowAutoSwitch, onChange: (value) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.allowAutoSwitch = value;
-        }), label: "Allow automatic outfit switching", hint: "Still requires an explicit cue and the configured confidence threshold." }),
+        find && renamePreview.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-rename-preview", children: renamePreview.map((item) => /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { children: item.before }),
+          /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 13 }),
+          /* @__PURE__ */ u2("strong", { children: item.after })
+        ] })) }),
         /* @__PURE__ */ u2(Toolbar, { children: [
-          /* @__PURE__ */ u2(Button, { onClick: () => props.update((profile) => {
-            const node = profile.actors.find((item) => item.id === actor.id);
-            if (node) node.defaultOutfitId = outfit.id;
-          }), children: "Default outfit" }),
-          /* @__PURE__ */ u2(Button, { onClick: () => props.update((profile) => {
-            const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-            if (node) node.defaultPoseId = pose.id;
-          }), children: "Default pose" })
-        ] })
-      ] })
-    ] })
-  ] });
-}
-function BatchView(props) {
-  const [priority, setPriority] = d2(0);
-  const [tags, setTags] = d2("");
-  const [aliases, setAliases] = d2("");
-  const [find, setFind] = d2("");
-  const [replace, setReplace] = d2("");
-  const [destination, setDestination] = d2("");
-  const profile = props.profile;
-  const selectedExpressions = T2(() => {
-    if (!profile) return [];
-    return [...new Set([...props.selected].map((assetId) => assetLocation(profile, assetId)?.expression.id).filter((id) => !!id))];
-  }, [profile, props.selected]);
-  const destinations = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses.map((pose) => ({ key: `${outfit.id}|${pose.id}`, outfitId: outfit.id, poseId: pose.id, label: `${actor.name} / ${outfit.name} / ${pose.name}` })))) ?? [];
-  const selectedDestination = destinations.find((item) => item.key === destination) ?? null;
-  const preview = profile ? allExpressions(profile).filter((item) => selectedExpressions.includes(item.id)).slice(0, 5).map((item) => ({ before: item.name, after: find ? item.name.split(find).join(replace) : item.name })) : [];
-  const expressionNames = profile ? [...new Set(allExpressions(profile).map((item) => item.name))] : [];
-  const poses = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses)) ?? [];
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Multi-edit workspace", title: "Batch Lab", description: "Make deliberate, reversible changes across selected media.", actions: /* @__PURE__ */ u2(S, { children: [
-      /* @__PURE__ */ u2(IconButton, { icon: "undo", label: "Undo", disabled: !props.canUndo, onClick: props.undo }),
-      /* @__PURE__ */ u2(IconButton, { icon: "redo", label: "Redo", disabled: !props.canRedo, onClick: props.redo })
-    ] }) }),
-    /* @__PURE__ */ u2(Surface, { class: "ls2-selection-hero", tone: props.selected.size ? "accent" : "default", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-selection-icon", children: /* @__PURE__ */ u2(Icon, { name: "batch", size: 22 }) }),
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("strong", { children: props.selected.size ? `${props.selected.size} media selected` : "No media selected" }),
-        /* @__PURE__ */ u2("span", { children: props.selected.size ? `${selectedExpressions.length} expressions are in scope` : "Select media in Library or choose the full profile." })
-      ] }),
-      /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { size: "small", onClick: () => profile && props.setSelected(new Set(allAssets(profile).map((asset) => asset.id))), disabled: !profile, children: "Select all" }),
-        /* @__PURE__ */ u2(Button, { size: "small", variant: "ghost", onClick: () => props.setSelected(/* @__PURE__ */ new Set()), disabled: !props.selected.size, children: "Clear" })
+          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority }), children: "Set priority" }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "move", disabled: !destination, onClick: () => props.mutate({ type: "move", assetIds: [...props.selected], outfitId: destination }), children: "Move" }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "tag", disabled: !tags.trim(), onClick: () => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") }), children: "Add tags" }),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "tag", disabled: !aliases.trim(), onClick: () => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") }), children: "Add aliases" }),
+          /* @__PURE__ */ u2(Button, { size: "small", disabled: !find, onClick: () => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace }), children: "Rename" })
+        ] }),
+        /* @__PURE__ */ u2("p", { class: "ls2-help", children: "Changes are reversible with Undo until the Library is saved." })
       ] })
     ] }),
-    /* @__PURE__ */ u2("div", { class: "ls2-action-grid", children: [
-      /* @__PURE__ */ u2(Surface, { children: [
-        /* @__PURE__ */ u2(SectionTitle, { title: "Availability", description: "Control what the resolver may choose." }),
-        /* @__PURE__ */ u2(Toolbar, { children: [
-          /* @__PURE__ */ u2(Button, { icon: "eye", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true }), children: "Enable" }),
-          /* @__PURE__ */ u2(Button, { icon: "eyeOff", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false }), children: "Disable" })
-        ] })
-      ] }),
-      /* @__PURE__ */ u2(Surface, { children: [
-        /* @__PURE__ */ u2(SectionTitle, { title: "Priority", description: "Higher values win among equivalent media." }),
-        /* @__PURE__ */ u2("div", { class: "ls2-inline-field", children: [
-          /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: priority, onInput: (event) => setPriority(Number(event.currentTarget.value)) }),
-          /* @__PURE__ */ u2(Button, { variant: "primary", disabled: !props.selected.size, onClick: () => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority }), children: "Apply" })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Taxonomy", description: "Add searchable language without replacing existing metadata." }),
+    inspectedExpression && actor && outfit && /* @__PURE__ */ u2(Surface, { class: "ls2-inspector", children: [
+      /* @__PURE__ */ u2(SectionTitle, { title: "Expression inspector", description: `${actor.name} / ${outfit.name}`, trailing: /* @__PURE__ */ u2(Status, { tone: inspectedExpression.enabled ? "success" : "neutral", children: inspectedExpression.enabled ? "Enabled" : "Disabled" }) }),
       /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Tags", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: tags, onInput: (event) => setTags(event.currentTarget.value), placeholder: "bright, smile, joy" }) }),
-        /* @__PURE__ */ u2(Field, { label: "Aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: aliases, onInput: (event) => setAliases(event.currentTarget.value), placeholder: "grin, cheerful" }) })
+        /* @__PURE__ */ u2(Field, { label: "Name", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.name, onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.name = event.currentTarget.value;
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: inspectedExpression.priority, onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.priority = Number(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Aliases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.aliases.join(", "), onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.aliases = cleanList(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Cue phrases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.cues.join(", "), onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.cues = cleanList(event.currentTarget.value);
+        }) }) }),
+        /* @__PURE__ */ u2(Field, { label: "Tags", hint: "Comma separated", class: "ls2-field-wide", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.tags.join(", "), onInput: (event) => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.tags = cleanList(event.currentTarget.value);
+        }) }) })
       ] }),
       /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { icon: "tag", disabled: !selectedExpressions.length || !tags.trim(), onClick: () => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") }), children: "Add tags" }),
-        /* @__PURE__ */ u2(Button, { icon: "tag", disabled: !selectedExpressions.length || !aliases.trim(), onClick: () => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") }), children: "Add aliases" })
+        /* @__PURE__ */ u2(Button, { icon: "check", onClick: () => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id);
+          if (node) node.defaultExpressionId = inspectedExpression.id;
+        }), children: "Set as default" }),
+        /* @__PURE__ */ u2(Button, { icon: inspectedExpression.enabled ? "eyeOff" : "eye", onClick: () => props.update((profile) => {
+          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
+          if (node) node.enabled = !node.enabled;
+        }), children: inspectedExpression.enabled ? "Disable" : "Enable" })
       ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Rename transform", description: "Preview expression names before applying." }),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Find", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: find, onInput: (event) => setFind(event.currentTarget.value) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Replace", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: replace, onInput: (event) => setReplace(event.currentTarget.value) }) })
-      ] }),
-      preview.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-rename-preview", children: preview.map((item) => /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("span", { children: item.before }),
-        /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 13 }),
-        /* @__PURE__ */ u2("strong", { children: item.after })
-      ] })) }),
-      /* @__PURE__ */ u2(Button, { variant: "primary", disabled: !find || !selectedExpressions.length, onClick: () => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace }), children: "Apply rename" })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Reassign and duplicate", description: "Move media while preserving its expression identity." }),
-      /* @__PURE__ */ u2(Field, { label: "Destination pose", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: destination, onChange: (event) => setDestination(event.currentTarget.value), children: [
-        /* @__PURE__ */ u2("option", { value: "", children: "Choose a destination\u2026" }),
-        destinations.map((item) => /* @__PURE__ */ u2("option", { value: item.key, children: item.label }))
-      ] }) }),
-      /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { icon: "move", disabled: !props.selected.size || !selectedDestination, onClick: () => selectedDestination && props.mutate({ type: "move", assetIds: [...props.selected], outfitId: selectedDestination.outfitId, poseId: selectedDestination.poseId }), children: "Move" }),
-        /* @__PURE__ */ u2(Button, { icon: "copy", disabled: !props.selected.size, onClick: () => props.mutate({ type: "duplicate", assetIds: [...props.selected] }), children: "Duplicate" }),
-        /* @__PURE__ */ u2(Button, { icon: "trash", variant: "danger", disabled: !props.selected.size, onClick: () => props.mutate({ type: "delete", assetIds: [...props.selected] }), children: "Session trash" })
-      ] }),
-      /* @__PURE__ */ u2("p", { class: "ls2-help", children: "Session trash remains recoverable with Undo until the library is saved." })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Completeness matrix", description: "Enabled media coverage across every pose.", trailing: /* @__PURE__ */ u2("span", { class: "ls2-count", children: [
-        poses.length,
-        " poses"
-      ] }) }),
-      poses.length && expressionNames.length ? /* @__PURE__ */ u2("div", { class: "ls2-table-wrap", children: /* @__PURE__ */ u2("table", { class: "ls2-matrix", children: [
-        /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: [
-          /* @__PURE__ */ u2("th", { children: "Pose" }),
-          expressionNames.map((name) => /* @__PURE__ */ u2("th", { children: name }))
-        ] }) }),
-        /* @__PURE__ */ u2("tbody", { children: poses.map((pose) => /* @__PURE__ */ u2("tr", { children: [
-          /* @__PURE__ */ u2("th", { children: pose.name }),
-          expressionNames.map((name) => {
-            const expression = pose.expressions.find((item) => item.name === name);
-            const complete = !!expression?.assets.some((asset) => asset.enabled);
-            return /* @__PURE__ */ u2("td", { "data-complete": complete, children: complete ? /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) : "\u2014" });
-          })
-        ] })) })
-      ] }) }) : /* @__PURE__ */ u2(EmptyState, { icon: "batch", title: "No coverage data yet", description: "Add poses, expressions, and media to build the matrix." })
     ] })
   ] });
 }
@@ -6038,8 +5925,8 @@ function AutomationView({ client, openSettings }) {
     /* @__PURE__ */ u2(Surface, { children: [
       /* @__PURE__ */ u2(SectionTitle, { title: "Confidence policy", description: "Uncertain predictions preserve the previous stage." }),
       /* @__PURE__ */ u2("div", { class: "ls2-range-stack", children: [
-        /* @__PURE__ */ u2(Field, { label: `Pose and expression \xB7 ${Math.round(detection.stateConfidence * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".3", max: ".95", step: ".05", value: detection.stateConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Outfit change \xB7 ${Math.round(detection.outfitConfidence * 100)}%`, hint: "Also requires an explicit clothing cue.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".5", max: "1", step: ".05", value: detection.outfitConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } }) }) })
+        /* @__PURE__ */ u2(Field, { label: `Expression sprite \xB7 ${Math.round(detection.stateConfidence * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".3", max: ".95", step: ".05", value: detection.stateConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } }) }) }),
+        /* @__PURE__ */ u2(Field, { label: `Outfit selection \xB7 ${Math.round(detection.outfitConfidence * 100)}%`, hint: "Uses outfit folder names and the filenames of every sprite inside them.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".5", max: "1", step: ".05", value: detection.outfitConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } }) }) })
       ] })
     ] })
   ] });
@@ -6176,7 +6063,7 @@ function AppearanceView({ client }) {
           /* @__PURE__ */ u2("i", {}),
           /* @__PURE__ */ u2("i", { "data-focus": true })
         ] }),
-        /* @__PURE__ */ u2("div", { class: "ls2-preview-caption", children: "Focused actor \xB7 Outfit / Pose / Expression" })
+        /* @__PURE__ */ u2("div", { class: "ls2-preview-caption", children: "Focused actor \xB7 Outfit / Expression" })
       ] }),
       /* @__PURE__ */ u2("div", { class: "ls2-preview-copy", children: [
         /* @__PURE__ */ u2("strong", { children: "Live preview language" }),
@@ -6202,7 +6089,7 @@ function AppearanceView({ client }) {
     /* @__PURE__ */ u2(Surface, { children: [
       /* @__PURE__ */ u2(SectionTitle, { title: "Stage chrome" }),
       /* @__PURE__ */ u2(Toggle, { checked: appearance.showChrome, onChange: (showChrome) => patch({ showChrome }), label: "Floating window frame", hint: "Use Lumiverse glass, border, and shadow tokens around the stage." }),
-      /* @__PURE__ */ u2(Toggle, { checked: appearance.showCaptions, onChange: (showCaptions) => patch({ showCaptions }), label: "State captions", hint: "Show actor, outfit, pose, and expression below each sprite." }),
+      /* @__PURE__ */ u2(Toggle, { checked: appearance.showCaptions, onChange: (showCaptions) => patch({ showCaptions }), label: "State captions", hint: "Show actor, outfit, and expression below each sprite." }),
       /* @__PURE__ */ u2(Toggle, { checked: appearance.visible, onChange: (visible) => patch({ visible }), label: "Stage visible", hint: "The drawer and quick selector remain available while hidden." })
     ] }),
     /* @__PURE__ */ u2(Surface, { children: [
@@ -6364,14 +6251,13 @@ function Studio({ client }) {
     /* @__PURE__ */ u2(ProgressNotice, { client }),
     /* @__PURE__ */ u2("main", { class: "ls2-content", children: [
       view === "stage" && /* @__PURE__ */ u2(LiveView, { client, navigate: setView }),
-      view === "library" && /* @__PURE__ */ u2(LibraryView, { client, profile: draft, update, selected, setSelected }),
-      view === "batch" && /* @__PURE__ */ u2(BatchView, { profile: draft, selected, setSelected, mutate, undo, redo, canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 }),
+      view === "library" && /* @__PURE__ */ u2(LibraryView, { client, profile: draft, update, selected, setSelected, mutate, undo, redo, canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 }),
       view === "automation" && /* @__PURE__ */ u2(AutomationView, { client, openSettings: () => setView("settings") }),
       view === "appearance" && /* @__PURE__ */ u2(AppearanceView, { client }),
       view === "settings" && /* @__PURE__ */ u2(SettingsView, { client }),
       view === "diagnostics" && /* @__PURE__ */ u2(DiagnosticsView, { client, profile: draft })
     ] }),
-    (dirty || view === "library" || view === "batch") && /* @__PURE__ */ u2("div", { class: "ls2-savebar", "data-dirty": dirty, children: [
+    (dirty || view === "library") && /* @__PURE__ */ u2("div", { class: "ls2-savebar", "data-dirty": dirty, children: [
       /* @__PURE__ */ u2("div", { children: [
         /* @__PURE__ */ u2("span", { class: "ls2-save-dot" }),
         /* @__PURE__ */ u2("span", { children: dirty ? "Unsaved library changes" : "Library is up to date" })
@@ -6402,7 +6288,7 @@ function CharacterSetup({ client, characterId, onOpenStudio }) {
       /* @__PURE__ */ u2("div", { children: [
         /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Independent visual profile" }),
         /* @__PURE__ */ u2("h2", { children: profile.characterName }),
-        /* @__PURE__ */ u2("p", { children: "Actor, outfit, pose, and expression direction owned entirely by LumiStage." })
+        /* @__PURE__ */ u2("p", { children: "Actor, outfit, expression, and sprite direction owned entirely by LumiStage." })
       ] })
     ] }),
     /* @__PURE__ */ u2("div", { class: "ls2-metric-grid", children: [
@@ -6809,6 +6695,17 @@ var LUMI_STAGE_CSS = `
 .ls2-media-fallback { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--ls2-dim); background: var(--ls2-fill); font-size: 10px; }
 
 .ls2-inspector { border-color: color-mix(in srgb, var(--ls2-accent) 25%, var(--ls2-line)); }
+.ls2-outfit-editor { border-color: color-mix(in srgb, var(--ls2-accent) 18%, var(--ls2-line)); }
+.ls2-toggle-stack { display: grid; gap: 7px; }
+.ls2-batch-bar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ls2-accent) 24%, var(--ls2-line));
+  background: color-mix(in srgb, var(--ls2-accent) 7%, var(--ls2-panel));
+}
+.ls2-batch-bar > strong { flex: 0 0 auto; color: var(--ls2-text); font-size: 12px; }
+.ls2-batch-bar > span { color: var(--ls2-muted); font-size: 10px; }
+.ls2-batch-bar > .ls2-toolbar { margin-left: auto; }
+.ls2-batch-panel { border-color: color-mix(in srgb, var(--ls2-accent) 24%, var(--ls2-line)); }
 .ls2-disclosure { overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); background: var(--ls2-panel); }
 .ls2-disclosure summary { min-height: 43px; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; color: var(--ls2-muted); cursor: pointer; list-style: none; font-size: 12px; font-weight: 700; }
 .ls2-disclosure summary::-webkit-details-marker { display: none; }
@@ -6996,6 +6893,8 @@ var LUMI_STAGE_CSS = `
   .ls2-actor-select { grid-column: 1/-1; width: 100%; }
   .ls2-library-toolbar { align-items: stretch; flex-direction: column; }
   .ls2-library-toolbar .ls2-toolbar { justify-content: space-between; }
+  .ls2-batch-bar { align-items: flex-start; flex-wrap: wrap; }
+  .ls2-batch-bar > .ls2-toolbar { width: 100%; margin-left: 0; }
   .ls2-asset-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; padding: 7px; }
   .ls2-asset-main { height: 135px; }
   .ls2-selection-hero { grid-template-columns: auto minmax(0,1fr); }
@@ -7052,7 +6951,7 @@ function setup(ctx) {
     shortName: "Stage",
     headerTitle: "LumiStage",
     description: "Independent expression direction, media libraries, automation, and ensemble staging.",
-    keywords: ["expressions", "sprites", "outfits", "poses", "stage", "batch"],
+    keywords: ["expressions", "sprites", "outfits", "stage", "batch"],
     iconSvg: LUMI_STAGE_ICON
   });
   R(/* @__PURE__ */ u2(Studio, { client }), drawer.root);
@@ -7098,7 +6997,7 @@ function setup(ctx) {
       inputAction = ctx.ui.registerInputBarAction({
         id: "quick-select",
         label: "LumiStage",
-        subtitle: "Choose outfit, pose, expression, or lock",
+        subtitle: "Choose outfit, expression, or lock",
         iconSvg: LUMI_STAGE_ICON,
         enabled: true
       });

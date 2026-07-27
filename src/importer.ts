@@ -1,13 +1,12 @@
 import { unzipSync } from "fflate";
 import { cleanName, createId, normalizedKey } from "./ids";
-import { allAssets, createActor, createOutfit, createPose, createExpression, normalizeProfile } from "./model";
+import { allAssets, createActor, createOutfit, createExpression, normalizeProfile } from "./model";
 import type {
   ActorProfile,
   CharacterProfileV1,
   ExpressionState,
   ImportLayout,
   OutfitFolder,
-  PoseState,
   StageAsset,
   LumiStageArchiveV1,
 } from "./types";
@@ -48,7 +47,6 @@ export interface ImportCandidate {
 export interface ImportTarget {
   actorName: string;
   outfitName: string;
-  poseName: string;
   expressionName: string;
 }
 
@@ -73,18 +71,16 @@ export function importTarget(
 ): ImportTarget {
   const folders = candidate.segments.map((segment) => cleanName(segment));
   const expression = cleanName(candidate.fileName, "Neutral");
-  if (layout === "actor-outfit-pose-expression") {
+  if (layout === "actor-outfit-expression") {
     return {
       actorName: folders[0] ?? defaultActorName,
       outfitName: folders[1] ?? "Default",
-      poseName: folders[2] ?? "Default",
       expressionName: expression,
     };
   }
   return {
     actorName: defaultActorName,
     outfitName: folders[0] ?? "Default",
-    poseName: folders[1] ?? "Default",
     expressionName: expression,
   };
 }
@@ -107,7 +103,6 @@ export function assertUnambiguousCandidates(
     const destinationKey = [
       target.actorName,
       target.outfitName,
-      target.poseName,
       target.expressionName,
       candidate.fileName,
     ].map(normalizedKey).join("/");
@@ -220,8 +215,8 @@ function findOrCreateOutfit(actor: ActorProfile, name: string): OutfitFolder {
   let outfit = actor.outfits.find((item) => normalizedKey(item.name) === key);
   if (!outfit) {
     outfit = createOutfit(name);
-    outfit.poses = [];
-    outfit.defaultPoseId = null;
+    outfit.expressions = [];
+    outfit.defaultExpressionId = null;
     outfit.order = actor.outfits.length;
     actor.outfits.push(outfit);
     actor.defaultOutfitId ??= outfit.id;
@@ -229,28 +224,14 @@ function findOrCreateOutfit(actor: ActorProfile, name: string): OutfitFolder {
   return outfit;
 }
 
-function findOrCreatePose(outfit: OutfitFolder, name: string): PoseState {
+function findOrCreateExpression(outfit: OutfitFolder, name: string): ExpressionState {
   const key = normalizedKey(name);
-  let pose = outfit.poses.find((item) => normalizedKey(item.name) === key);
-  if (!pose) {
-    pose = createPose(name);
-    pose.expressions = [];
-    pose.defaultExpressionId = null;
-    pose.order = outfit.poses.length;
-    outfit.poses.push(pose);
-    outfit.defaultPoseId ??= pose.id;
-  }
-  return pose;
-}
-
-function findOrCreateExpression(pose: PoseState, name: string): ExpressionState {
-  const key = normalizedKey(name);
-  let expression = pose.expressions.find((item) => normalizedKey(item.name) === key);
+  let expression = outfit.expressions.find((item) => normalizedKey(item.name) === key);
   if (!expression) {
     expression = createExpression(name);
-    expression.order = pose.expressions.length;
-    pose.expressions.push(expression);
-    pose.defaultExpressionId ??= expression.id;
+    expression.order = outfit.expressions.length;
+    outfit.expressions.push(expression);
+    outfit.defaultExpressionId ??= expression.id;
   }
   return expression;
 }
@@ -325,8 +306,7 @@ export function mergeImportedAssets(
     }
     const actor = findOrCreateActor(profile, item.target.actorName);
     const outfit = findOrCreateOutfit(actor, item.target.outfitName);
-    const pose = findOrCreatePose(outfit, item.target.poseName);
-    const expression = findOrCreateExpression(pose, item.target.expressionName);
+    const expression = findOrCreateExpression(outfit, item.target.expressionName);
     const asset: StageAsset = {
       id: createId("asset"),
       imageId: item.imageId,
@@ -361,8 +341,8 @@ export function hydrateArchiveProfile(
     now,
   );
   const pathsByAssetId = new Map(archive.assets.map((entry) => [entry.asset.id, entry.path]));
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) {
       expression.assets = expression.assets.flatMap((asset) => {
         const path = pathsByAssetId.get(asset.id);
         const upload = path ? uploadedByPath.get(path) : null;
@@ -385,8 +365,8 @@ export function hydrateArchiveProfile(
 
 export function removeAssets(profile: CharacterProfileV1, assetIds: Set<string>, now = Date.now()): CharacterProfileV1 {
   const next = structuredClone(profile);
-  for (const actor of next.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
+  for (const actor of next.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
   }
   next.revision += 1;
   next.updatedAt = now;

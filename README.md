@@ -2,19 +2,19 @@
 
 LumiStage is an independent expression and sprite-direction studio for Lumiverse 1.1.0 and newer. It layers each character as:
 
-**Actor → Outfit → Pose → Expression → Media**
+**Actor → Outfit → Expression → Media**
 
 Its profiles, detector decisions, manual locks, chat timelines, archives, and assets are owned by LumiStage. It does not inspect, synchronize with, migrate from, or modify Lumiverse’s built-in expression feature.
 
 ## Highlights
 
-- Cinematic, theme-aware Studio with Live Stage, Library, Batch Lab, Automation, Appearance, and Diagnostics views.
+- Cinematic, theme-aware Studio with Live Stage, Library, Automation, Appearance, Settings, and Diagnostics views.
 - Chromeless floating ensemble stage with focus emphasis, preload-before-swap media, drag, resize, fullscreen, captions, transitions, opacity, scale, overlap, visibility, and persistent per-user placement.
 - PNG, JPEG, WebP, GIF, muted looping WebM, and muted looping MP4 media.
-- Actor/outfit trees, pose folders, aliases, cue phrases, defaults, automatic-outfit switches, search, bounded 96-item media pages, page/range/filter selection, and drag ordering.
-- Reversible batch enable/disable, priority, tags, aliases, rename transforms, duplication, move/reassign, session trash, undo, and redo.
+- Editable actor/outfit trees, aliases, cue phrases, defaults, automatic-outfit switches, search, bounded 72-item media pages, page/range/filter selection, and drag ordering.
+- Contextual Library batch controls for reversible enable/disable, priority, tags, aliases, rename transforms, duplication, move/reassign, session trash, undo, and redo.
 - Manual apply-once states and persistent chat locks. Locks always override automation.
-- One structured, low-temperature detector call after a successful completed generation. It validates every returned ID and uses confidence gates for state changes and sticky outfits.
+- One structured, low-temperature detector call after a successful completed generation. It receives every enabled outfit folder, expression, and contained sprite filename at once, validates every returned ID, and uses confidence gates for state changes.
 - Message/swipe/content-hash decision caching. Swipes restore instantly; edits invalidate only the active stale branch; deletions are removed during replay.
 - Group-chat ensemble composition using public membership metadata while excluding muted characters.
 - Resumable direct/ZIP upload, preflight traversal/collision/codec/size/bomb checks, content-hash deduplication, partial-failure reporting, and extension-ownership verification before permanent deletion.
@@ -33,16 +33,16 @@ The manifest requests only `generation`, `chats`, `chat_mutation`, `characters`,
 ## Using LumiStage
 
 1. Open a character or chat and choose the **LumiStage** drawer.
-2. In **Library**, create or select an actor/outfit/pose hierarchy and import media.
+2. In **Library**, create or select an actor/outfit hierarchy and import media.
 3. Confirm the ZIP mapping layout before upload:
-   - `Outfit/Pose/Expression.ext`
-   - `Actor/Outfit/Pose/Expression.ext`
-4. Use **Batch Lab** for reversible multi-item changes, then save the library.
+   - `Outfit/Expression.ext`
+   - `Actor/Outfit/Expression.ext`
+4. Select media in **Library** to reveal reversible inline batch controls, then save the library.
 5. Use **Automation** to select an optional connection/model and tune confidence.
 6. Use the input-bar action for a manual apply-once state or persistent lock.
 7. Tune and reveal the floating stage under **Appearance**.
 
-Outfits are intentionally sticky. Automation changes them only when the latest completed reply contains an explicit outfit-change cue, confidence reaches the configured outfit threshold, and the destination outfit allows automatic switching.
+Outfits are ordinary catalog states. The detector chooses them from folder names and contained sprite filenames; the configured outfit-confidence threshold and each folder’s automatic-selection toggle prevent weak matches from changing the stage.
 
 ## Data boundaries
 
@@ -72,7 +72,7 @@ Spindle events ──> detector + cache ──> per-chat timeline ──> stage 
                          │
 per-character profile ───┴───────────> layered resolver ───> asset views
         │
-Library / Batch Lab ──> revision queue ──> private user storage
+Library + inline batch controls ──> revision queue ──> private user storage
         │
 ZIP/direct import ──> safety + hash ──> Lumiverse image ownership
 ```
@@ -84,4 +84,3 @@ The Studio uses Lumiverse theme variables and shared interaction conventions whi
 ## License
 
 Lumiverse Community License 2.0. See [LICENSE.md](./LICENSE.md).
-

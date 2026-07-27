@@ -58,5 +58,19 @@ describe("structured detector contract", () => {
     expect(messages[0].content).toContain("actor-a");
     expect(messages[0].content).toContain("actor-b");
   });
-});
 
+  it("sends every outfit folder and contained sprite filename in one catalog without cue-gated outfits", () => {
+    const request = buildDetectorRequest(buildCatalog([profileA()]), [], {}, defaultSettings(1));
+    const messages = request.messages as Array<{ role: string; content: string }>;
+    const system = messages[0].content;
+    expect(system).toContain('"name":"Casual"');
+    expect(system).toContain('"name":"Formal"');
+    expect(system).toContain('"fileName":"asset-expression-happy.png"');
+    expect(system).toContain('"fileName":"asset-expression-formal.png"');
+    expect(system).toContain("no separate outfit-change cue exists");
+    expect(system).not.toContain("explicitOutfitCue");
+    const tool = (request.tools as Array<{ parameters: { properties: { actors: { items: { required: string[]; properties: Record<string, unknown> } } } } }>)[0];
+    expect(tool.parameters.properties.actors.items.required).toEqual(["actorId", "outfitId", "expressionId", "confidence"]);
+    expect(tool.parameters.properties.actors.items.properties).not.toHaveProperty("poseId");
+  });
+});

@@ -6,9 +6,9 @@ describe("bounded large-library behavior", () => {
   it("indexes a 2,000-asset library within an interactive budget", () => {
     const profile = profileA();
     for (const outfit of profile.actors[0].outfits) {
-      for (const pose of outfit.poses) for (const item of pose.expressions) item.assets = [];
+      for (const item of outfit.expressions) item.assets = [];
     }
-    const expression = profile.actors[0].outfits[0].poses[0].expressions[0];
+    const expression = profile.actors[0].outfits[0].expressions[0];
     expression.assets = Array.from({ length: 2000 }, (_, index) => ({
       id: `asset-${index}`,
       imageId: `image-${index}`,
@@ -42,10 +42,8 @@ describe("bounded large-library behavior", () => {
       actors: catalog.map(({ actor }) => ({
         actorId: actor.id,
         outfitId: actor.defaultOutfitId,
-        poseId: actor.outfits[0].defaultPoseId,
-        expressionId: actor.outfits[0].poses[0].defaultExpressionId,
+        expressionId: actor.outfits[0].defaultExpressionId,
         confidence: 0.9,
-        explicitOutfitCue: false,
       })),
     };
     const start = performance.now();

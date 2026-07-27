@@ -5,7 +5,6 @@ import type {
   DetectionActorDecision,
   ExpressionState,
   OutfitFolder,
-  PoseState,
   StageAsset,
 } from "../src/types";
 
@@ -37,44 +36,22 @@ function expression(id: string, name: string, media: StageAsset[] = [asset(`asse
   };
 }
 
-function pose(id: string, name: string, expressions: ExpressionState[]): PoseState {
+function outfit(id: string, name: string, expressions: ExpressionState[]): OutfitFolder {
   return {
     id,
     name,
     aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    defaultExpressionId: expressions[0]?.id ?? null,
-    expressions,
-  };
-}
-
-function outfit(id: string, name: string, poses: PoseState[]): OutfitFolder {
-  return {
-    id,
-    name,
-    aliases: [],
-    cues: [],
     tags: [],
     enabled: true,
     priority: 0,
     order: 0,
     allowAutoSwitch: true,
-    defaultPoseId: poses[0]?.id ?? null,
-    poses,
+    defaultExpressionId: expressions[0]?.id ?? null,
+    expressions,
   };
 }
 
 export function profileA(): CharacterProfileV1 {
-  const standing = pose("pose-standing", "Standing", [
-    expression("expression-neutral", "Neutral"),
-    expression("expression-happy", "Happy"),
-  ]);
-  const sitting = pose("pose-sitting", "Sitting", [expression("expression-soft", "Soft")]);
-  const formalPose = pose("pose-formal", "Formal stance", [expression("expression-formal", "Composed")]);
   const actor: ActorProfile = {
     id: "actor-a",
     name: "Aster",
@@ -83,8 +60,12 @@ export function profileA(): CharacterProfileV1 {
     order: 0,
     defaultOutfitId: "outfit-casual",
     outfits: [
-      outfit("outfit-casual", "Casual", [standing, sitting]),
-      outfit("outfit-formal", "Formal", [formalPose]),
+      outfit("outfit-casual", "Casual", [
+        expression("expression-neutral", "Neutral"),
+        expression("expression-happy", "Happy"),
+        expression("expression-soft", "Sitting softly"),
+      ]),
+      outfit("outfit-formal", "Formal", [expression("expression-formal", "Composed stance")]),
     ],
   };
   return {
@@ -108,9 +89,7 @@ export function profileB(): CharacterProfileV1 {
     order: 0,
     defaultOutfitId: "outfit-b",
     outfits: [
-      outfit("outfit-b", "Default", [
-        pose("pose-b", "Default", [expression("expression-b", "Alert")]),
-      ]),
+      outfit("outfit-b", "Default", [expression("expression-b", "Alert")]),
     ],
   };
   return {
@@ -135,10 +114,8 @@ export function decision(
     actors: [{
       actorId: "actor-a",
       outfitId: "outfit-casual",
-      poseId: "pose-standing",
       expressionId: "expression-happy",
       confidence: 0.9,
-      explicitOutfitCue: false,
       ...actor,
     }],
   };
@@ -160,4 +137,3 @@ export function record(
     createdAt: 100 + swipeId,
   };
 }
-

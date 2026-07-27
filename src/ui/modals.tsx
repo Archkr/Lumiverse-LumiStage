@@ -51,17 +51,17 @@ export function showImportModal(client: LumiStageClient, profile: CharacterProfi
   const modal = client.ctx.ui.showModal({ title: "Import media", width: 660, maxHeight: 760, persistent: true });
   function Importer() {
     const [files, setFiles] = useState<File[]>([]);
-    const [layout, setLayout] = useState<ImportLayout>("outfit-pose-expression");
+    const [layout, setLayout] = useState<ImportLayout>("outfit-expression");
     const [dragging, setDragging] = useState(false);
     const [busy, setBusy] = useState(false);
     const preview = useMemo(() => files.slice(0, 8).map((file) => {
       const parts = file.webkitRelativePath?.split("/").filter(Boolean) ?? [file.name];
       const leaf = parts.pop() ?? file.name;
       const expression = leaf.replace(/\.[^.]+$/, "");
-      if (layout === "actor-outfit-pose-expression") {
-        return `${parts[0] ?? "Default actor"} / ${parts[1] ?? "Default"} / ${parts[2] ?? "Default"} / ${expression}`;
+      if (layout === "actor-outfit-expression") {
+        return `${parts[0] ?? "Default actor"} / ${parts[1] ?? "Default"} / ${expression}`;
       }
-      return `${profile?.characterName ?? "Current actor"} / ${parts[0] ?? "Default"} / ${parts[1] ?? "Default"} / ${expression}`;
+      return `${profile?.characterName ?? "Current actor"} / ${parts[0] ?? "Default"} / ${expression}`;
     }), [files, layout]);
     async function start() {
       if (!files.length || busy) return;
@@ -101,8 +101,8 @@ export function showImportModal(client: LumiStageClient, profile: CharacterProfi
             value={layout}
             onChange={setLayout}
             options={[
-              { value: "outfit-pose-expression", label: "Outfit / Pose / Expression" },
-              { value: "actor-outfit-pose-expression", label: "Actor / Outfit / Pose / Expression" },
+              { value: "outfit-expression", label: "Outfit / Expression" },
+              { value: "actor-outfit-expression", label: "Actor / Outfit / Expression" },
             ]}
           />
           {files.length > 0 && (
@@ -135,22 +135,19 @@ export function showQuickPicker(client: LumiStageClient) {
     const current = entry ? backend.snapshot?.actors[entry.actor.id] : null;
     const [outfitId, setOutfitId] = useState(current?.outfitId ?? entry?.actor.defaultOutfitId ?? entry?.actor.outfits[0]?.id ?? "");
     const outfit = entry?.actor.outfits.find((item) => item.id === outfitId) ?? entry?.actor.outfits[0] ?? null;
-    const [poseId, setPoseId] = useState(current?.poseId ?? outfit?.defaultPoseId ?? outfit?.poses[0]?.id ?? "");
-    const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
-    const [expressionId, setExpressionId] = useState(current?.expressionId ?? pose?.defaultExpressionId ?? pose?.expressions[0]?.id ?? "");
+    const [expressionId, setExpressionId] = useState(current?.expressionId ?? outfit?.defaultExpressionId ?? outfit?.expressions[0]?.id ?? "");
     const [scope, setScope] = useState<"once" | "locked">("once");
     const [query, setQuery] = useState("");
-    const expressions = (pose?.expressions ?? []).filter((expression) =>
+    const expressions = (outfit?.expressions ?? []).filter((expression) =>
       !query.trim() || [expression.name, ...expression.aliases, ...expression.tags].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
     );
     const locked = entry ? backend.timeline?.manualOverrides[entry.actor.id]?.scope === "locked" : false;
 
     async function apply() {
-      if (!entry || !outfit || !pose || !expressionId) return;
+      if (!entry || !outfit || !expressionId) return;
       const override: ManualOverride = {
         actorId: entry.actor.id,
         outfitId: outfit.id,
-        poseId: pose.id,
         expressionId,
         scope,
         createdAt: Date.now(),
@@ -175,10 +172,8 @@ export function showQuickPicker(client: LumiStageClient) {
               setActorId(id);
               const next = actors.find((item) => item.actor.id === id);
               const nextOutfit = next?.actor.outfits.find((item) => item.id === next.actor.defaultOutfitId) ?? next?.actor.outfits[0];
-              const nextPose = nextOutfit?.poses.find((item) => item.id === nextOutfit.defaultPoseId) ?? nextOutfit?.poses[0];
               setOutfitId(nextOutfit?.id ?? "");
-              setPoseId(nextPose?.id ?? "");
-              setExpressionId(nextPose?.defaultExpressionId ?? nextPose?.expressions[0]?.id ?? "");
+              setExpressionId(nextOutfit?.defaultExpressionId ?? nextOutfit?.expressions[0]?.id ?? "");
             }}>{actors.map((item) => <option value={item.actor.id}>{item.actor.name}</option>)}</select>
           </Field>
           <Field label="Outfit">
@@ -186,18 +181,8 @@ export function showQuickPicker(client: LumiStageClient) {
               const id = event.currentTarget.value;
               setOutfitId(id);
               const next = entry?.actor.outfits.find((item) => item.id === id);
-              const nextPose = next?.poses.find((item) => item.id === next.defaultPoseId) ?? next?.poses[0];
-              setPoseId(nextPose?.id ?? "");
-              setExpressionId(nextPose?.defaultExpressionId ?? nextPose?.expressions[0]?.id ?? "");
-            }}>{entry?.actor.outfits.map((item) => <option value={item.id}>{item.name}</option>)}</select>
-          </Field>
-          <Field label="Pose">
-            <select class="ls2-select" value={pose?.id} onChange={(event) => {
-              const id = event.currentTarget.value;
-              setPoseId(id);
-              const next = outfit?.poses.find((item) => item.id === id);
               setExpressionId(next?.defaultExpressionId ?? next?.expressions[0]?.id ?? "");
-            }}>{outfit?.poses.map((item) => <option value={item.id}>{item.name}</option>)}</select>
+            }}>{entry?.actor.outfits.map((item) => <option value={item.id}>{item.name}</option>)}</select>
           </Field>
         </div>
 
@@ -230,4 +215,3 @@ export function showQuickPicker(client: LumiStageClient) {
 }
 
 export { cleanList };
-

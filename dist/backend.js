@@ -117,35 +117,19 @@ function createExpression(name = "Neutral", now = Date.now()) {
     assets: []
   };
 }
-function createPose(name = "Default", now = Date.now()) {
-  const expression = createExpression("Neutral", now);
-  return {
-    id: createId("pose"),
-    name: cleanName(name),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    defaultExpressionId: expression.id,
-    expressions: [expression]
-  };
-}
 function createOutfit(name = "Default", now = Date.now()) {
-  const pose = createPose("Default", now);
+  const expression = createExpression("Neutral", now);
   return {
     id: createId("outfit"),
     name: cleanName(name),
     aliases: [],
-    cues: [],
     tags: [],
     enabled: true,
     priority: 0,
     order: 0,
     allowAutoSwitch: true,
-    defaultPoseId: pose.id,
-    poses: [pose]
+    defaultExpressionId: expression.id,
+    expressions: [expression]
   };
 }
 function createActor(name, now = Date.now()) {
@@ -201,37 +185,42 @@ function normalizeExpression(raw, index) {
     assets: (raw.assets ?? []).map(normalizeAsset).filter((asset) => !!asset)
   };
 }
-function normalizePose(raw, index) {
-  const expressions = (raw.expressions ?? []).map(normalizeExpression);
-  if (expressions.length === 0) expressions.push(createExpression("Neutral"));
-  return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : createId("pose"),
-    name: cleanName(raw.name ?? `Pose ${index + 1}`),
-    aliases: strings(raw.aliases),
-    cues: strings(raw.cues),
-    tags: strings(raw.tags),
-    enabled: raw.enabled !== false,
-    priority: finite(raw.priority, 0, -1e3, 1e3),
-    order: finite(raw.order, index, 0, 1e5),
-    defaultExpressionId: expressions.some((item) => item.id === raw.defaultExpressionId) ? raw.defaultExpressionId ?? null : expressions[0]?.id ?? null,
-    expressions
-  };
+function mergeExpression(target, source) {
+  target.aliases = [.../* @__PURE__ */ new Set([...target.aliases, ...source.aliases])];
+  target.cues = [.../* @__PURE__ */ new Set([...target.cues, ...source.cues])];
+  target.tags = [.../* @__PURE__ */ new Set([...target.tags, ...source.tags])];
+  const assetIds = new Set(target.assets.map((asset) => asset.id));
+  const hashes = new Set(target.assets.map((asset) => asset.contentHash));
+  target.assets.push(...source.assets.filter((asset) => !assetIds.has(asset.id) && !hashes.has(asset.contentHash)));
+  target.enabled ||= source.enabled;
+  target.priority = Math.max(target.priority, source.priority);
 }
 function normalizeOutfit(raw, index) {
-  const poses = (raw.poses ?? []).map(normalizePose);
-  if (poses.length === 0) poses.push(createPose("Default"));
+  const legacyPoses = Array.isArray(raw.poses) ? raw.poses : [];
+  const sourceExpressions = [
+    ...Array.isArray(raw.expressions) ? raw.expressions : [],
+    ...legacyPoses.flatMap((pose) => Array.isArray(pose.expressions) ? pose.expressions : [])
+  ];
+  const expressions = [];
+  sourceExpressions.map(normalizeExpression).forEach((expression) => {
+    const match = expressions.find((item) => normalizedKey(item.name) === normalizedKey(expression.name));
+    if (match) mergeExpression(match, expression);
+    else expressions.push({ ...expression, order: expressions.length });
+  });
+  if (expressions.length === 0) expressions.push(createExpression("Neutral"));
+  const legacyDefault = legacyPoses.find((pose) => pose.id === raw.defaultPoseId)?.defaultExpressionId ?? null;
+  const requestedDefault = raw.defaultExpressionId ?? legacyDefault;
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : createId("outfit"),
     name: cleanName(raw.name ?? `Outfit ${index + 1}`),
     aliases: strings(raw.aliases),
-    cues: strings(raw.cues),
     tags: strings(raw.tags),
     enabled: raw.enabled !== false,
     priority: finite(raw.priority, 0, -1e3, 1e3),
     order: finite(raw.order, index, 0, 1e5),
     allowAutoSwitch: raw.allowAutoSwitch !== false,
-    defaultPoseId: poses.some((item) => item.id === raw.defaultPoseId) ? raw.defaultPoseId ?? null : poses[0]?.id ?? null,
-    poses
+    defaultExpressionId: expressions.some((item) => item.id === requestedDefault) ? requestedDefault ?? null : expressions[0]?.id ?? null,
+    expressions
   };
 }
 function normalizeActor(raw, index) {
@@ -285,9 +274,7 @@ function buildCatalog(profiles) {
 }
 function allAssets(profile) {
   return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap(
-      (outfit) => outfit.poses.flatMap((pose) => pose.expressions.flatMap((expression) => expression.assets))
-    )
+    (actor) => actor.outfits.flatMap((outfit) => outfit.expressions.flatMap((expression) => expression.assets))
   );
 }
 function findActor(catalog, actorId) {
@@ -298,15 +285,10 @@ function enabledOutfit(actor, id) {
   if (requested) return requested;
   return actor.outfits.find((item) => item.id === actor.defaultOutfitId && item.enabled) ?? actor.outfits.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || a.order - b.order)[0] ?? null;
 }
-function enabledPose(outfit, id) {
-  const requested = outfit.poses.find((item) => item.id === id && item.enabled);
+function enabledExpression(outfit, id) {
+  const requested = outfit.expressions.find((item) => item.id === id && item.enabled);
   if (requested) return requested;
-  return outfit.poses.find((item) => item.id === outfit.defaultPoseId && item.enabled) ?? outfit.poses.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || a.order - b.order)[0] ?? null;
-}
-function enabledExpression(pose, id) {
-  const requested = pose.expressions.find((item) => item.id === id && item.enabled);
-  if (requested) return requested;
-  return pose.expressions.find((item) => item.id === pose.defaultExpressionId && item.enabled) ?? pose.expressions.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || a.order - b.order)[0] ?? null;
+  return outfit.expressions.find((item) => item.id === outfit.defaultExpressionId && item.enabled) ?? outfit.expressions.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || a.order - b.order)[0] ?? null;
 }
 function enabledAsset(expression) {
   return expression.assets.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)[0] ?? null;
@@ -314,27 +296,24 @@ function enabledAsset(expression) {
 function resolveActorState(entry, previous, decision, override, settings, focused) {
   const actor = entry.actor;
   const currentOutfitId = override?.outfitId ?? previous?.outfitId ?? actor.defaultOutfitId;
-  const mayChangeOutfit = !!decision && decision.explicitOutfitCue && decision.confidence >= settings.detection.outfitConfidence && actor.outfits.some((item) => item.id === decision.outfitId && item.enabled && item.allowAutoSwitch);
+  const mayChangeOutfit = !!decision && decision.confidence >= settings.detection.outfitConfidence && actor.outfits.some((item) => item.id === decision.outfitId && item.enabled && item.allowAutoSwitch);
   const outfitId = override?.outfitId ?? (mayChangeOutfit ? decision?.outfitId : currentOutfitId);
   const outfit = enabledOutfit(actor, outfitId);
   if (!outfit) return null;
   const stateConfident = !!decision && decision.confidence >= settings.detection.stateConfidence;
-  const poseId = override?.poseId ?? (stateConfident ? decision?.poseId : previous?.poseId);
-  const pose = enabledPose(outfit, poseId);
-  if (!pose) return null;
-  const expressionId = override?.expressionId ?? (stateConfident ? decision?.expressionId : previous?.expressionId);
-  const expression = enabledExpression(pose, expressionId);
+  const detectedExpressionId = stateConfident && outfit.expressions.some((item) => item.id === decision?.expressionId) ? decision?.expressionId : previous?.expressionId;
+  const expressionId = override?.expressionId ?? detectedExpressionId;
+  const expression = enabledExpression(outfit, expressionId);
   if (!expression) return null;
   const asset = enabledAsset(expression);
   return {
     actorId: actor.id,
     characterId: entry.characterId,
     outfitId: outfit.id,
-    poseId: pose.id,
     expressionId: expression.id,
     assetId: asset?.id ?? null,
     imageId: asset?.imageId ?? null,
-    label: `${actor.name} \xB7 ${outfit.name} \xB7 ${pose.name} \xB7 ${expression.name}`,
+    label: `${actor.name} \xB7 ${outfit.name} \xB7 ${expression.name}`,
     focused,
     confidence: decision?.confidence ?? previous?.confidence ?? 1
   };
@@ -394,8 +373,8 @@ function inspectProfile(profile) {
     if (!actor.outfits.some((item) => item.enabled)) issues.push({ severity: "error", code: "actor-no-outfit", message: `${actor.name} has no enabled outfit.` });
     const aliases = actor.aliases.map(normalizedKey);
     if (new Set(aliases).size !== aliases.length) issues.push({ severity: "warning", code: "duplicate-alias", message: `${actor.name} contains duplicate aliases.` });
-    for (const outfit of actor.outfits) for (const pose of outfit.poses) for (const expression of pose.expressions) {
-      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${pose.name} / ${expression.name} has no media.` });
+    for (const outfit of actor.outfits) for (const expression of outfit.expressions) {
+      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${expression.name} has no media.` });
       for (const asset of expression.assets) hashes.set(asset.contentHash, (hashes.get(asset.contentHash) ?? 0) + 1);
     }
   }
@@ -926,18 +905,16 @@ function mimeForName(name) {
 function importTarget(candidate, layout, defaultActorName) {
   const folders = candidate.segments.map((segment) => cleanName(segment));
   const expression = cleanName(candidate.fileName, "Neutral");
-  if (layout === "actor-outfit-pose-expression") {
+  if (layout === "actor-outfit-expression") {
     return {
       actorName: folders[0] ?? defaultActorName,
       outfitName: folders[1] ?? "Default",
-      poseName: folders[2] ?? "Default",
       expressionName: expression
     };
   }
   return {
     actorName: defaultActorName,
     outfitName: folders[0] ?? "Default",
-    poseName: folders[1] ?? "Default",
     expressionName: expression
   };
 }
@@ -954,7 +931,6 @@ function assertUnambiguousCandidates(candidates, layout, defaultActorName) {
     const destinationKey = [
       target.actorName,
       target.outfitName,
-      target.poseName,
       target.expressionName,
       candidate.fileName
     ].map(normalizedKey).join("/");
@@ -1061,35 +1037,22 @@ function findOrCreateOutfit(actor, name) {
   let outfit = actor.outfits.find((item) => normalizedKey(item.name) === key);
   if (!outfit) {
     outfit = createOutfit(name);
-    outfit.poses = [];
-    outfit.defaultPoseId = null;
+    outfit.expressions = [];
+    outfit.defaultExpressionId = null;
     outfit.order = actor.outfits.length;
     actor.outfits.push(outfit);
     actor.defaultOutfitId ??= outfit.id;
   }
   return outfit;
 }
-function findOrCreatePose(outfit, name) {
+function findOrCreateExpression(outfit, name) {
   const key = normalizedKey(name);
-  let pose = outfit.poses.find((item) => normalizedKey(item.name) === key);
-  if (!pose) {
-    pose = createPose(name);
-    pose.expressions = [];
-    pose.defaultExpressionId = null;
-    pose.order = outfit.poses.length;
-    outfit.poses.push(pose);
-    outfit.defaultPoseId ??= pose.id;
-  }
-  return pose;
-}
-function findOrCreateExpression(pose, name) {
-  const key = normalizedKey(name);
-  let expression = pose.expressions.find((item) => normalizedKey(item.name) === key);
+  let expression = outfit.expressions.find((item) => normalizedKey(item.name) === key);
   if (!expression) {
     expression = createExpression(name);
-    expression.order = pose.expressions.length;
-    pose.expressions.push(expression);
-    pose.defaultExpressionId ??= expression.id;
+    expression.order = outfit.expressions.length;
+    outfit.expressions.push(expression);
+    outfit.defaultExpressionId ??= expression.id;
   }
   return expression;
 }
@@ -1130,8 +1093,7 @@ function mergeImportedAssets(source, imported, characterName2, now = Date.now())
     }
     const actor = findOrCreateActor(profile, item.target.actorName);
     const outfit = findOrCreateOutfit(actor, item.target.outfitName);
-    const pose = findOrCreatePose(outfit, item.target.poseName);
-    const expression = findOrCreateExpression(pose, item.target.expressionName);
+    const expression = findOrCreateExpression(outfit, item.target.expressionName);
     const asset = {
       id: createId("asset"),
       imageId: item.imageId,
@@ -1159,8 +1121,8 @@ function hydrateArchiveProfile(archive, characterId, characterName2, uploadedByP
     now
   );
   const pathsByAssetId = new Map(archive.assets.map((entry) => [entry.asset.id, entry.path]));
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) {
       expression.assets = expression.assets.flatMap((asset) => {
         const path = pathsByAssetId.get(asset.id);
         const upload = path ? uploadedByPath.get(path) : null;
@@ -1182,8 +1144,8 @@ function hydrateArchiveProfile(archive, characterId, characterName2, uploadedByP
 }
 function removeAssets(profile, assetIds, now = Date.now()) {
   const next = structuredClone(profile);
-  for (const actor of next.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
+  for (const actor of next.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
   }
   next.revision += 1;
   next.updatedAt = now;
@@ -1214,10 +1176,8 @@ function normalizeActorDecision(value) {
   return {
     actorId,
     outfitId: nullableString(raw.outfitId),
-    poseId: nullableString(raw.poseId),
     expressionId: nullableString(raw.expressionId),
-    confidence: confidence(raw.confidence),
-    explicitOutfitCue: raw.explicitOutfitCue === true
+    confidence: confidence(raw.confidence)
   };
 }
 function normalizeDecision(value) {
@@ -1260,19 +1220,17 @@ function nodeSummary(entry) {
       outfitId: outfit.id,
       name: outfit.name,
       aliases: outfit.aliases,
-      cues: outfit.cues,
       allowAutoSwitch: outfit.allowAutoSwitch,
-      poses: outfit.poses.filter((pose) => pose.enabled).map((pose) => ({
-        poseId: pose.id,
-        name: pose.name,
-        aliases: pose.aliases,
-        cues: pose.cues,
-        expressions: pose.expressions.filter((expression) => expression.enabled).map((expression) => ({
-          expressionId: expression.id,
-          name: expression.name,
-          aliases: expression.aliases,
-          cues: expression.cues,
-          tags: expression.tags
+      expressions: outfit.expressions.filter((expression) => expression.enabled).map((expression) => ({
+        expressionId: expression.id,
+        name: expression.name,
+        aliases: expression.aliases,
+        cues: expression.cues,
+        tags: expression.tags,
+        sprites: expression.assets.map((asset) => ({
+          fileName: asset.fileName,
+          mediaKind: asset.mediaKind,
+          enabled: asset.enabled
         }))
       }))
     }))
@@ -1285,8 +1243,10 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings) 
     "You direct a character sprite stage after a completed roleplay reply.",
     "Choose only IDs present in the supplied catalog. Never invent IDs.",
     "Identify every actor whose visible state materially changes and which actors are the visual focus.",
-    "Expression means visible face/emotion; pose means body position/action; outfit means clothing set.",
-    "Set explicitOutfitCue only when the latest assistant reply explicitly shows a clothing change or clearly describes a different listed outfit.",
+    "The complete wardrobe is supplied in this single catalog: every enabled outfit folder, every enabled expression, and every sprite filename inside each expression.",
+    "Use outfit folder names, aliases, expression names, aliases, cues, tags, and sprite filenames together to choose the closest visible state.",
+    "An outfit is an ordinary selectable state. Return its ID whenever the scene best matches it; no separate outfit-change cue exists.",
+    "Expression means the complete sprite state inside the selected outfit, including facial emotion, body position, and action.",
     "If a dimension is not supported by the text, return null so the current stage state remains sticky.",
     "Confidence is 0..1 for the combined visible-state match.",
     `Catalog: ${catalogJson}`,
@@ -1318,14 +1278,12 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings) 
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["actorId", "outfitId", "poseId", "expressionId", "confidence", "explicitOutfitCue"],
+              required: ["actorId", "outfitId", "expressionId", "confidence"],
               properties: {
                 actorId: { type: "string" },
                 outfitId: { type: ["string", "null"] },
-                poseId: { type: ["string", "null"] },
                 expressionId: { type: ["string", "null"] },
-                confidence: { type: "number", minimum: 0, maximum: 1 },
-                explicitOutfitCue: { type: "boolean" }
+                confidence: { type: "number", minimum: 0, maximum: 1 }
               }
             }
           }
@@ -1341,12 +1299,10 @@ function validateDecision(decision, catalog) {
     const actor = actors.get(item.actorId);
     if (!actor) continue;
     const outfit = item.outfitId ? actor.outfits.find((candidate) => candidate.id === item.outfitId && candidate.enabled) : null;
-    const pose = item.poseId ? (outfit?.poses ?? actor.outfits.flatMap((candidate) => candidate.poses)).find((candidate) => candidate.id === item.poseId && candidate.enabled) : null;
-    const expression = item.expressionId ? (pose?.expressions ?? actor.outfits.flatMap((candidate) => candidate.poses.flatMap((value) => value.expressions))).find((candidate) => candidate.id === item.expressionId && candidate.enabled) : null;
+    const expression = item.expressionId ? (outfit?.expressions ?? actor.outfits.flatMap((candidate) => candidate.expressions)).find((candidate) => candidate.id === item.expressionId && candidate.enabled) : null;
     validActors.push({
       ...item,
       outfitId: outfit?.id ?? null,
-      poseId: pose?.id ?? null,
       expressionId: expression?.id ?? null
     });
   }
@@ -1795,7 +1751,7 @@ async function analyzeLatest(userId, chatId, force = false) {
   if (!record) {
     const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.actors).map(([actorId, state]) => [
       actorId,
-      { outfitId: state.outfitId, poseId: state.poseId, expressionId: state.expressionId }
+      { outfitId: state.outfitId, expressionId: state.expressionId }
     ]));
     const request = buildDetectorRequest(
       set.catalog,
@@ -1939,15 +1895,14 @@ async function importAssets(userId, message) {
 }
 function archiveForProfile(profile) {
   const assets = [];
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) for (const asset of expression.assets) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) for (const asset of expression.assets) {
       const extension = asset.fileName.includes(".") ? asset.fileName.split(".").pop() : asset.mimeType.split("/").pop();
       assets.push({
         path: `assets/${asset.contentHash}.${extension || "bin"}`,
         characterId: profile.characterId,
         actorId: actor.id,
         outfitId: outfit.id,
-        poseId: pose.id,
         expressionId: expression.id,
         asset
       });

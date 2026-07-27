@@ -6,7 +6,6 @@ import {
   createActor,
   createExpression,
   createOutfit,
-  createPose,
   inspectProfile,
 } from "../model";
 import type {
@@ -16,7 +15,6 @@ import type {
   ExpressionState,
   LumiStageSettingsV1,
   OutfitFolder,
-  PoseState,
   StageAsset,
   StudioView,
 } from "../types";
@@ -45,33 +43,30 @@ import {
 const NAV: Array<{ id: StudioView; label: string; icon: IconName }> = [
   { id: "stage", label: "Stage", icon: "stage" },
   { id: "library", label: "Library", icon: "library" },
-  { id: "batch", label: "Batch", icon: "batch" },
   { id: "automation", label: "Automation", icon: "automation" },
   { id: "appearance", label: "Appearance", icon: "appearance" },
   { id: "settings", label: "Settings", icon: "settings" },
   { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" },
 ];
-const PRIMARY_NAV = NAV.slice(0, 3);
-const SECONDARY_NAV = NAV.slice(3);
+const PRIMARY_NAV = NAV.slice(0, 2);
+const SECONDARY_NAV = NAV.slice(2);
 
-function activeNodes(profile: CharacterProfileV1 | null, actorId?: string, outfitId?: string, poseId?: string) {
+function activeNodes(profile: CharacterProfileV1 | null, actorId?: string, outfitId?: string) {
   const actor = profile?.actors.find((item) => item.id === actorId) ?? profile?.actors[0] ?? null;
   const outfit = actor?.outfits.find((item) => item.id === outfitId) ?? actor?.outfits[0] ?? null;
-  const pose = outfit?.poses.find((item) => item.id === poseId) ?? outfit?.poses[0] ?? null;
-  return { actor, outfit, pose };
+  return { actor, outfit };
 }
 
 function assetLocation(profile: CharacterProfileV1, assetId: string): {
   actor: ActorProfile;
   outfit: OutfitFolder;
-  pose: PoseState;
   expression: ExpressionState;
   asset: StageAsset;
 } | null {
-  for (const actor of profile.actors) for (const outfit of actor.outfits) for (const pose of outfit.poses) {
-    for (const expression of pose.expressions) {
+  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+    for (const expression of outfit.expressions) {
       const asset = expression.assets.find((item) => item.id === assetId);
-      if (asset) return { actor, outfit, pose, expression, asset };
+      if (asset) return { actor, outfit, expression, asset };
     }
   }
   return null;
@@ -120,7 +115,7 @@ function StageOnboarding({
         <div class="ls2-onboarding-copy">
           <span class="ls2-kicker"><span />Stage uncast</span>
           <h3>Give every reply a visual performance.</h3>
-          <p>Build a private cast library, then direct it yourself or let LumiStage resolve outfits, poses, and expressions after each reply.</p>
+          <p>Build a private cast library, then direct it yourself or let LumiStage resolve outfits and expression sprites after each reply.</p>
           <div class="ls2-onboarding-actions">
             <Button icon="upload" variant="primary" onClick={() => showImportModal(client, backend.profile)}>Import a folder</Button>
             <Button icon="library" onClick={() => navigate("library")}>Build manually</Button>
@@ -233,17 +228,27 @@ function LibraryView(props: {
   update: (mutator: (draft: CharacterProfileV1) => void) => void;
   selected: Set<string>;
   setSelected: (selection: Set<string>) => void;
+  mutate: (mutation: BatchMutation) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }) {
   const { backend } = useClientState(props.client);
   const [actorId, setActorId] = useState(props.profile?.defaultActorId ?? props.profile?.actors[0]?.id ?? "");
   const [outfitId, setOutfitId] = useState("");
-  const [poseId, setPoseId] = useState("");
   const [expressionId, setExpressionId] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [dragged, setDragged] = useState<string | null>(null);
+  const [priority, setPriority] = useState(0);
+  const [tags, setTags] = useState("");
+  const [aliases, setAliases] = useState("");
+  const [find, setFind] = useState("");
+  const [replace, setReplace] = useState("");
+  const [destination, setDestination] = useState("");
   const lastIndex = useRef<number | null>(null);
-  const { actor, outfit, pose } = activeNodes(props.profile, actorId, outfitId, poseId);
+  const { actor, outfit } = activeNodes(props.profile, actorId, outfitId);
 
   useEffect(() => {
     if (props.profile && !props.profile.actors.some((item) => item.id === actorId)) setActorId(props.profile.defaultActorId ?? props.profile.actors[0]?.id ?? "");
@@ -251,58 +256,64 @@ function LibraryView(props: {
   useEffect(() => {
     if (actor && !actor.outfits.some((item) => item.id === outfitId)) setOutfitId(actor.defaultOutfitId ?? actor.outfits[0]?.id ?? "");
   }, [actor?.id, outfitId]);
-  useEffect(() => {
-    if (outfit && !outfit.poses.some((item) => item.id === poseId)) setPoseId(outfit.defaultPoseId ?? outfit.poses[0]?.id ?? "");
-  }, [outfit?.id, poseId]);
 
   const rows = useMemo(() => {
-    if (!pose) return [];
+    if (!outfit) return [];
     const needle = query.trim().toLocaleLowerCase();
-    return pose.expressions.flatMap((expression) => expression.assets.map((asset) => ({ expression, asset })))
-      .filter(({ expression, asset }) => !needle || [expression.name, asset.fileName, ...expression.tags, ...expression.aliases, ...expression.cues].join(" ").toLocaleLowerCase().includes(needle));
-  }, [pose, query]);
+    return outfit.expressions.flatMap((expression) => expression.assets.length
+      ? expression.assets.map((asset) => ({ expression, asset: asset as StageAsset | null }))
+      : [{ expression, asset: null as StageAsset | null }])
+      .filter(({ expression, asset }) => !needle || [expression.name, asset?.fileName ?? "", ...expression.tags, ...expression.aliases, ...expression.cues].join(" ").toLocaleLowerCase().includes(needle));
+  }, [outfit, query]);
   const pageSize = 72;
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const pageStart = safePage * pageSize;
   const pageRows = rows.slice(pageStart, pageStart + pageSize);
-  const inspectedExpression = pose?.expressions.find((item) => item.id === expressionId) ?? null;
-  useEffect(() => setPage(0), [actor?.id, outfit?.id, pose?.id, query]);
+  const inspectedExpression = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
+  const selectedExpressions = useMemo(() => {
+    if (!props.profile) return [];
+    return [...new Set([...props.selected].map((assetId) => assetLocation(props.profile!, assetId)?.expression.id).filter((id): id is string => !!id))];
+  }, [props.profile, props.selected]);
+  const destinations = props.profile?.actors.flatMap((profileActor) => profileActor.outfits.map((profileOutfit) => ({
+    id: profileOutfit.id,
+    label: `${profileActor.name} / ${profileOutfit.name}`,
+  }))) ?? [];
+  const renamePreview = props.profile
+    ? allExpressions(props.profile).filter((item) => selectedExpressions.includes(item.id)).slice(0, 4).map((item) => ({
+      before: item.name,
+      after: find ? item.name.split(find).join(replace) : item.name,
+    }))
+    : [];
+  useEffect(() => setPage(0), [actor?.id, outfit?.id, query]);
 
-  function select(index: number, assetId: string, shift: boolean) {
+  function select(index: number, assetId: string | null, shift: boolean) {
+    if (!assetId) return;
     const next = new Set(props.selected);
     if (shift && lastIndex.current !== null) {
       const [start, end] = [lastIndex.current, index].sort((a, b) => a - b);
-      for (let cursor = start; cursor <= end; cursor += 1) next.add(rows[cursor].asset.id);
+      for (let cursor = start; cursor <= end; cursor += 1) {
+        const asset = rows[cursor]?.asset;
+        if (asset) next.add(asset.id);
+      }
     } else if (next.has(assetId)) next.delete(assetId);
     else next.add(assetId);
     lastIndex.current = index;
     props.setSelected(next);
   }
 
-  function reorder(kind: "outfit" | "pose", sourceId: string, targetId: string) {
+  function reorder(sourceId: string, targetId: string) {
     if (!actor || sourceId === targetId) return;
     props.update((profile) => {
       const targetActor = profile.actors.find((item) => item.id === actor.id);
-      if (kind === "outfit") {
-        const list = targetActor?.outfits;
-        if (!list) return;
-        const from = list.findIndex((item) => item.id === sourceId);
-        const to = list.findIndex((item) => item.id === targetId);
-        if (from < 0 || to < 0) return;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        list.forEach((item, index) => { item.order = index; });
-      } else {
-        const list = targetActor?.outfits.find((item) => item.id === outfit?.id)?.poses;
-        if (!list) return;
-        const from = list.findIndex((item) => item.id === sourceId);
-        const to = list.findIndex((item) => item.id === targetId);
-        if (from < 0 || to < 0) return;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        list.forEach((item, index) => { item.order = index; });
-      }
+      const list = targetActor?.outfits;
+      if (!list) return;
+      const from = list.findIndex((item) => item.id === sourceId);
+      const to = list.findIndex((item) => item.id === targetId);
+      if (from < 0 || to < 0) return;
+      const [moved] = list.splice(from, 1);
+      list.splice(to, 0, moved);
+      list.forEach((item, index) => { item.order = index; });
     });
   }
 
@@ -327,22 +338,10 @@ function LibraryView(props: {
       setOutfitId(next.id);
     }));
   }
-  function addPose() {
-    if (!actor || !outfit) return;
-    showTextPrompt(props.client, { title: "New pose folder", label: "Pose name", placeholder: "e.g. Seated" }, (name) => props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-      if (!target) return;
-      const next = createPose(name);
-      next.order = target.poses.length;
-      target.poses.push(next);
-      target.defaultPoseId ??= next.id;
-      setPoseId(next.id);
-    }));
-  }
   function addExpression() {
-    if (!actor || !outfit || !pose) return;
+    if (!actor || !outfit) return;
     showTextPrompt(props.client, { title: "New expression", label: "Expression name", placeholder: "e.g. Relieved" }, (name) => props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id);
+      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
       if (!target) return;
       const next = createExpression(name);
       next.order = target.expressions.length;
@@ -361,7 +360,7 @@ function LibraryView(props: {
       <ViewHeader
         eyebrow="Asset direction"
         title="Library"
-        description="Organize actors, outfits, poses, expressions, and media."
+        description="Organize actors, editable outfit folders, expressions, and sprites."
         actions={<><Button icon="upload" variant="primary" onClick={() => showImportModal(props.client, props.profile)}>Import</Button><IconButton icon="plus" label="Add actor" onClick={addActor} /></>}
       />
 
@@ -380,45 +379,50 @@ function LibraryView(props: {
             <FolderButton
               icon="outfit"
               label={item.name}
-              count={item.poses.reduce((sum, value) => sum + value.expressions.reduce((total, expression) => total + expression.assets.length, 0), 0)}
+              count={item.expressions.reduce((sum, expression) => sum + expression.assets.length, 0)}
               active={item.id === outfit?.id}
-              onClick={() => setOutfitId(item.id)}
+              onClick={() => { setOutfitId(item.id); setExpressionId(item.defaultExpressionId ?? item.expressions[0]?.id ?? ""); }}
               draggable
               onDragStart={() => setDragged(item.id)}
-              onDrop={() => { if (dragged) reorder("outfit", dragged, item.id); setDragged(null); }}
+              onDrop={() => { if (dragged) reorder(dragged, item.id); setDragged(null); }}
             />
           ))}
         </div>
       </div>
 
-      <div class="ls2-folder-section">
-        <SectionTitle title="Poses" trailing={<IconButton icon="plus" label="Add pose" onClick={addPose} />} />
-        <div class="ls2-folder-strip">
-          {outfit?.poses.map((item) => (
-            <FolderButton
-              icon="pose"
-              label={item.name}
-              count={item.expressions.reduce((sum, expression) => sum + expression.assets.length, 0)}
-              active={item.id === pose?.id}
-              onClick={() => setPoseId(item.id)}
-              draggable
-              onDragStart={() => setDragged(item.id)}
-              onDrop={() => { if (dragged) reorder("pose", dragged, item.id); setDragged(null); }}
-            />
-          ))}
-        </div>
-      </div>
+      {actor && outfit && (
+        <Surface class="ls2-outfit-editor">
+          <SectionTitle
+            title="Outfit editor"
+            description={`${actor.name} / ${outfit.name}`}
+            trailing={<Status tone={outfit.enabled ? "success" : "neutral"}>{actor.defaultOutfitId === outfit.id ? "Default" : outfit.enabled ? "Enabled" : "Disabled"}</Status>}
+          />
+          <div class="ls2-form-grid">
+            <Field label="Folder name"><input class="ls2-input" value={outfit.name} onInput={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.name = event.currentTarget.value; })} /></Field>
+            <Field label="Priority"><input class="ls2-input" type="number" value={outfit.priority} onInput={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.priority = Number(event.currentTarget.value); })} /></Field>
+            <Field label="Aliases" hint="Comma separated"><input class="ls2-input" value={outfit.aliases.join(", ")} onInput={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.aliases = cleanList(event.currentTarget.value); })} /></Field>
+            <Field label="Tags" hint="Comma separated"><input class="ls2-input" value={outfit.tags.join(", ")} onInput={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.tags = cleanList(event.currentTarget.value); })} /></Field>
+            <Field label="Actor aliases" hint="Used for group-chat focus"><input class="ls2-input" value={actor.aliases.join(", ")} onInput={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id); if (node) node.aliases = cleanList(event.currentTarget.value); })} /></Field>
+          </div>
+          <div class="ls2-toggle-stack">
+            <Toggle checked={outfit.enabled} onChange={(value) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.enabled = value; })} label="Enable this outfit" hint="Disabled outfits remain in the Library but automation cannot select them." />
+            <Toggle checked={outfit.allowAutoSwitch} onChange={(value) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.allowAutoSwitch = value; })} label="Allow automatic selection" hint="The detector uses this folder name and every contained sprite filename when resolving the scene." />
+          </div>
+          <Toolbar><Button icon="check" disabled={actor.defaultOutfitId === outfit.id} onClick={() => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id); if (node) node.defaultOutfitId = outfit.id; })}>Set as default outfit</Button></Toolbar>
+        </Surface>
+      )}
 
       <Surface class="ls2-library-workspace" padding="none">
         <div class="ls2-library-toolbar">
-          <SearchInput value={query} onInput={setQuery} placeholder="Search names, aliases, tags, cues…" />
+          <SearchInput value={query} onInput={setQuery} placeholder="Search expression and sprite names…" />
           <Toolbar>
             <Button icon="plus" size="small" onClick={addExpression}>Expression</Button>
-            <Button size="small" onClick={() => props.setSelected(new Set(pageRows.map((row) => row.asset.id)))} disabled={!pageRows.length}>Select page</Button>
+            <Button size="small" onClick={() => props.setSelected(new Set(pageRows.flatMap((row) => row.asset ? [row.asset.id] : [])))} disabled={!pageRows.some((row) => row.asset)}>Select page</Button>
+            <Button size="small" onClick={() => props.setSelected(new Set(rows.flatMap((row) => row.asset ? [row.asset.id] : [])))} disabled={!rows.some((row) => row.asset)}>Select filtered</Button>
           </Toolbar>
         </div>
         <div class="ls2-library-subbar">
-          <span>{rows.length} media</span>
+          <span>{rows.filter((row) => row.asset).length} media · {outfit?.expressions.length ?? 0} expressions</span>
           <span>{props.selected.size} selected</span>
           <div class="ls2-pagination">
             <IconButton icon="chevronLeft" label="Previous page" disabled={safePage === 0} onClick={() => setPage(Math.max(0, safePage - 1))} />
@@ -426,145 +430,82 @@ function LibraryView(props: {
             <IconButton icon="chevronRight" label="Next page" disabled={safePage >= pageCount - 1} onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))} />
           </div>
         </div>
+        {props.selected.size > 0 && (
+          <div class="ls2-batch-bar" role="toolbar" aria-label="Batch actions">
+            <strong>{props.selected.size} selected</strong>
+            <span>{selectedExpressions.length} expression{selectedExpressions.length === 1 ? "" : "s"}</span>
+            <Toolbar>
+              <IconButton icon="undo" label="Undo" disabled={!props.canUndo} onClick={props.undo} />
+              <IconButton icon="redo" label="Redo" disabled={!props.canRedo} onClick={props.redo} />
+              <Button size="small" icon="eye" onClick={() => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true })}>Enable</Button>
+              <Button size="small" icon="eyeOff" onClick={() => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false })}>Disable</Button>
+              <Button size="small" icon="copy" onClick={() => props.mutate({ type: "duplicate", assetIds: [...props.selected] })}>Duplicate</Button>
+              <Button size="small" icon="trash" variant="danger" onClick={() => props.mutate({ type: "delete", assetIds: [...props.selected] })}>Trash</Button>
+              <Button size="small" variant="ghost" onClick={() => props.setSelected(new Set())}>Clear</Button>
+            </Toolbar>
+          </div>
+        )}
         {pageRows.length ? (
           <div class="ls2-asset-grid">
             {pageRows.map(({ expression, asset }, index) => {
-              const view = backend.assetViews[asset.id];
+              const view = asset ? backend.assetViews[asset.id] : null;
               return (
-                <article class="ls2-asset-card" data-selected={props.selected.has(asset.id)} data-inspected={expression.id === expressionId}>
-                  <button type="button" class="ls2-asset-main" onClick={(event) => { select(pageStart + index, asset.id, event.shiftKey); setExpressionId(expression.id); }}>
-                    <Media src={view?.thumbUrl ?? view?.url ?? null} kind={asset.mediaKind} label={expression.name} class="ls2-asset-media" />
-                    <span class="ls2-asset-overlay"><strong>{expression.name}</strong><small>{asset.mediaKind} · P{asset.priority}</small></span>
-                    <span class="ls2-asset-check"><Icon name={props.selected.has(asset.id) ? "check" : "plus"} size={12} /></span>
+                <article class="ls2-asset-card" data-selected={asset ? props.selected.has(asset.id) : false} data-inspected={expression.id === expressionId}>
+                  <button type="button" class="ls2-asset-main" onClick={(event) => { select(pageStart + index, asset?.id ?? null, event.shiftKey); setExpressionId(expression.id); }}>
+                    <Media src={view?.thumbUrl ?? view?.url ?? null} kind={asset?.mediaKind ?? "image"} label={expression.name} class="ls2-asset-media" />
+                    <span class="ls2-asset-overlay"><strong>{expression.name}</strong><small>{asset ? `${asset.fileName} · P${asset.priority}` : "No media yet"}</small></span>
+                    {asset && <span class="ls2-asset-check"><Icon name={props.selected.has(asset.id) ? "check" : "plus"} size={12} /></span>}
                   </button>
                 </article>
               );
             })}
           </div>
         ) : (
-          <EmptyState icon="image" title="No media in this pose" description="Import media or create an empty expression to start building this pose." action={<Button icon="upload" variant="primary" onClick={() => showImportModal(props.client, props.profile)}>Import media</Button>} />
+          <EmptyState icon="image" title="No expressions in this outfit" description="Import media or create an expression to start building this outfit." action={<Button icon="upload" variant="primary" onClick={() => showImportModal(props.client, props.profile)}>Import media</Button>} />
         )}
       </Surface>
 
-      {inspectedExpression && actor && outfit && pose && (
-        <Surface class="ls2-inspector">
-          <SectionTitle title="Expression inspector" description={`${actor.name} / ${outfit.name} / ${pose.name}`} trailing={<Status tone={inspectedExpression.enabled ? "success" : "neutral"}>{inspectedExpression.enabled ? "Enabled" : "Disabled"}</Status>} />
-          <div class="ls2-form-grid">
-            <Field label="Name"><input class="ls2-input" value={inspectedExpression.name} onChange={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.name = event.currentTarget.value; })} /></Field>
-            <Field label="Priority"><input class="ls2-input" type="number" value={inspectedExpression.priority} onChange={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.priority = Number(event.currentTarget.value); })} /></Field>
-            <Field label="Aliases" hint="Comma separated"><input class="ls2-input" value={inspectedExpression.aliases.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.aliases = cleanList(event.currentTarget.value); })} /></Field>
-            <Field label="Cue phrases" hint="Comma separated"><input class="ls2-input" value={inspectedExpression.cues.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.cues = cleanList(event.currentTarget.value); })} /></Field>
-            <Field label="Tags" hint="Comma separated" class="ls2-field-wide"><input class="ls2-input" value={inspectedExpression.tags.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.tags = cleanList(event.currentTarget.value); })} /></Field>
-          </div>
-          <Toolbar>
-            <Button icon="check" onClick={() => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id); if (node) node.defaultExpressionId = inspectedExpression.id; })}>Set as default</Button>
-            <Button icon={inspectedExpression.enabled ? "eyeOff" : "eye"} onClick={() => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.poses.find((p) => p.id === pose.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.enabled = !node.enabled; })}>{inspectedExpression.enabled ? "Disable" : "Enable"}</Button>
-          </Toolbar>
-        </Surface>
-      )}
-
-      {actor && outfit && pose && (
-        <details class="ls2-disclosure">
-          <summary><span><Icon name="settings" size={16} />Folder direction</span><Icon name="chevronDown" size={15} /></summary>
+      {props.selected.size > 0 && (
+        <details class="ls2-disclosure ls2-batch-panel">
+          <summary><span><Icon name="batch" size={16} />Batch edit {props.selected.size} media</span><Icon name="chevronDown" size={15} /></summary>
           <div class="ls2-disclosure-body">
             <div class="ls2-form-grid">
-              <Field label="Actor aliases"><input class="ls2-input" value={actor.aliases.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id); if (node) node.aliases = cleanList(event.currentTarget.value); })} /></Field>
-              <Field label="Outfit aliases"><input class="ls2-input" value={outfit.aliases.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.aliases = cleanList(event.currentTarget.value); })} /></Field>
-              <Field label="Outfit cues"><input class="ls2-input" value={outfit.cues.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.cues = cleanList(event.currentTarget.value); })} /></Field>
-              <Field label="Pose cues"><input class="ls2-input" value={pose.cues.join(", ")} onChange={(event) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id)?.poses.find((item) => item.id === pose.id); if (node) node.cues = cleanList(event.currentTarget.value); })} /></Field>
+              <Field label="Priority"><input class="ls2-input" type="number" value={priority} onInput={(event) => setPriority(Number(event.currentTarget.value))} /></Field>
+              <Field label="Move to outfit"><select class="ls2-select" value={destination} onChange={(event) => setDestination(event.currentTarget.value)}><option value="">Choose an outfit…</option>{destinations.map((item) => <option value={item.id}>{item.label}</option>)}</select></Field>
+              <Field label="Add tags"><input class="ls2-input" value={tags} onInput={(event) => setTags(event.currentTarget.value)} placeholder="bright, smile, joy" /></Field>
+              <Field label="Add aliases"><input class="ls2-input" value={aliases} onInput={(event) => setAliases(event.currentTarget.value)} placeholder="grin, cheerful" /></Field>
+              <Field label="Find in expression names"><input class="ls2-input" value={find} onInput={(event) => setFind(event.currentTarget.value)} /></Field>
+              <Field label="Replace with"><input class="ls2-input" value={replace} onInput={(event) => setReplace(event.currentTarget.value)} /></Field>
             </div>
-            <Toggle checked={outfit.allowAutoSwitch} onChange={(value) => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.allowAutoSwitch = value; })} label="Allow automatic outfit switching" hint="Still requires an explicit cue and the configured confidence threshold." />
-            <Toolbar><Button onClick={() => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id); if (node) node.defaultOutfitId = outfit.id; })}>Default outfit</Button><Button onClick={() => props.update((profile) => { const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id); if (node) node.defaultPoseId = pose.id; })}>Default pose</Button></Toolbar>
+            {find && renamePreview.length > 0 && <div class="ls2-rename-preview">{renamePreview.map((item) => <div><span>{item.before}</span><Icon name="chevronRight" size={13} /><strong>{item.after}</strong></div>)}</div>}
+            <Toolbar>
+              <Button size="small" onClick={() => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority })}>Set priority</Button>
+              <Button size="small" icon="move" disabled={!destination} onClick={() => props.mutate({ type: "move", assetIds: [...props.selected], outfitId: destination })}>Move</Button>
+              <Button size="small" icon="tag" disabled={!tags.trim()} onClick={() => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") })}>Add tags</Button>
+              <Button size="small" icon="tag" disabled={!aliases.trim()} onClick={() => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") })}>Add aliases</Button>
+              <Button size="small" disabled={!find} onClick={() => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace })}>Rename</Button>
+            </Toolbar>
+            <p class="ls2-help">Changes are reversible with Undo until the Library is saved.</p>
           </div>
         </details>
       )}
-    </div>
-  );
-}
 
-function BatchView(props: {
-  profile: CharacterProfileV1 | null;
-  selected: Set<string>;
-  setSelected: (selection: Set<string>) => void;
-  mutate: (mutation: BatchMutation) => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-}) {
-  const [priority, setPriority] = useState(0);
-  const [tags, setTags] = useState("");
-  const [aliases, setAliases] = useState("");
-  const [find, setFind] = useState("");
-  const [replace, setReplace] = useState("");
-  const [destination, setDestination] = useState("");
-  const profile = props.profile;
-  const selectedExpressions = useMemo(() => {
-    if (!profile) return [];
-    return [...new Set([...props.selected].map((assetId) => assetLocation(profile, assetId)?.expression.id).filter((id): id is string => !!id))];
-  }, [profile, props.selected]);
-  const destinations = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses.map((pose) => ({ key: `${outfit.id}|${pose.id}`, outfitId: outfit.id, poseId: pose.id, label: `${actor.name} / ${outfit.name} / ${pose.name}` })))) ?? [];
-  const selectedDestination = destinations.find((item) => item.key === destination) ?? null;
-  const preview = profile ? allExpressions(profile).filter((item) => selectedExpressions.includes(item.id)).slice(0, 5).map((item) => ({ before: item.name, after: find ? item.name.split(find).join(replace) : item.name })) : [];
-  const expressionNames = profile ? [...new Set(allExpressions(profile).map((item) => item.name))] : [];
-  const poses = profile?.actors.flatMap((actor) => actor.outfits.flatMap((outfit) => outfit.poses)) ?? [];
-
-  return (
-    <div class="ls2-view">
-      <ViewHeader eyebrow="Multi-edit workspace" title="Batch Lab" description="Make deliberate, reversible changes across selected media." actions={<><IconButton icon="undo" label="Undo" disabled={!props.canUndo} onClick={props.undo} /><IconButton icon="redo" label="Redo" disabled={!props.canRedo} onClick={props.redo} /></>} />
-      <Surface class="ls2-selection-hero" tone={props.selected.size ? "accent" : "default"}>
-        <div class="ls2-selection-icon"><Icon name="batch" size={22} /></div>
-        <div><strong>{props.selected.size ? `${props.selected.size} media selected` : "No media selected"}</strong><span>{props.selected.size ? `${selectedExpressions.length} expressions are in scope` : "Select media in Library or choose the full profile."}</span></div>
-        <Toolbar><Button size="small" onClick={() => profile && props.setSelected(new Set(allAssets(profile).map((asset) => asset.id)))} disabled={!profile}>Select all</Button><Button size="small" variant="ghost" onClick={() => props.setSelected(new Set())} disabled={!props.selected.size}>Clear</Button></Toolbar>
-      </Surface>
-
-      <div class="ls2-action-grid">
-        <Surface>
-          <SectionTitle title="Availability" description="Control what the resolver may choose." />
-          <Toolbar><Button icon="eye" disabled={!props.selected.size} onClick={() => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true })}>Enable</Button><Button icon="eyeOff" disabled={!props.selected.size} onClick={() => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false })}>Disable</Button></Toolbar>
+      {inspectedExpression && actor && outfit && (
+        <Surface class="ls2-inspector">
+          <SectionTitle title="Expression inspector" description={`${actor.name} / ${outfit.name}`} trailing={<Status tone={inspectedExpression.enabled ? "success" : "neutral"}>{inspectedExpression.enabled ? "Enabled" : "Disabled"}</Status>} />
+          <div class="ls2-form-grid">
+            <Field label="Name"><input class="ls2-input" value={inspectedExpression.name} onInput={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.name = event.currentTarget.value; })} /></Field>
+            <Field label="Priority"><input class="ls2-input" type="number" value={inspectedExpression.priority} onInput={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.priority = Number(event.currentTarget.value); })} /></Field>
+            <Field label="Aliases" hint="Comma separated"><input class="ls2-input" value={inspectedExpression.aliases.join(", ")} onInput={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.aliases = cleanList(event.currentTarget.value); })} /></Field>
+            <Field label="Cue phrases" hint="Comma separated"><input class="ls2-input" value={inspectedExpression.cues.join(", ")} onInput={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.cues = cleanList(event.currentTarget.value); })} /></Field>
+            <Field label="Tags" hint="Comma separated" class="ls2-field-wide"><input class="ls2-input" value={inspectedExpression.tags.join(", ")} onInput={(event) => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.tags = cleanList(event.currentTarget.value); })} /></Field>
+          </div>
+          <Toolbar>
+            <Button icon="check" onClick={() => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id); if (node) node.defaultExpressionId = inspectedExpression.id; })}>Set as default</Button>
+            <Button icon={inspectedExpression.enabled ? "eyeOff" : "eye"} onClick={() => props.update((profile) => { const node = profile.actors.find((a) => a.id === actor.id)?.outfits.find((o) => o.id === outfit.id)?.expressions.find((e) => e.id === inspectedExpression.id); if (node) node.enabled = !node.enabled; })}>{inspectedExpression.enabled ? "Disable" : "Enable"}</Button>
+          </Toolbar>
         </Surface>
-        <Surface>
-          <SectionTitle title="Priority" description="Higher values win among equivalent media." />
-          <div class="ls2-inline-field"><input class="ls2-input" type="number" value={priority} onInput={(event) => setPriority(Number(event.currentTarget.value))} /><Button variant="primary" disabled={!props.selected.size} onClick={() => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority })}>Apply</Button></div>
-        </Surface>
-      </div>
-
-      <Surface>
-        <SectionTitle title="Taxonomy" description="Add searchable language without replacing existing metadata." />
-        <div class="ls2-form-grid">
-          <Field label="Tags"><input class="ls2-input" value={tags} onInput={(event) => setTags(event.currentTarget.value)} placeholder="bright, smile, joy" /></Field>
-          <Field label="Aliases"><input class="ls2-input" value={aliases} onInput={(event) => setAliases(event.currentTarget.value)} placeholder="grin, cheerful" /></Field>
-        </div>
-        <Toolbar><Button icon="tag" disabled={!selectedExpressions.length || !tags.trim()} onClick={() => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") })}>Add tags</Button><Button icon="tag" disabled={!selectedExpressions.length || !aliases.trim()} onClick={() => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") })}>Add aliases</Button></Toolbar>
-      </Surface>
-
-      <Surface>
-        <SectionTitle title="Rename transform" description="Preview expression names before applying." />
-        <div class="ls2-form-grid">
-          <Field label="Find"><input class="ls2-input" value={find} onInput={(event) => setFind(event.currentTarget.value)} /></Field>
-          <Field label="Replace"><input class="ls2-input" value={replace} onInput={(event) => setReplace(event.currentTarget.value)} /></Field>
-        </div>
-        {preview.length > 0 && <div class="ls2-rename-preview">{preview.map((item) => <div><span>{item.before}</span><Icon name="chevronRight" size={13} /><strong>{item.after}</strong></div>)}</div>}
-        <Button variant="primary" disabled={!find || !selectedExpressions.length} onClick={() => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace })}>Apply rename</Button>
-      </Surface>
-
-      <Surface>
-        <SectionTitle title="Reassign and duplicate" description="Move media while preserving its expression identity." />
-        <Field label="Destination pose"><select class="ls2-select" value={destination} onChange={(event) => setDestination(event.currentTarget.value)}><option value="">Choose a destination…</option>{destinations.map((item) => <option value={item.key}>{item.label}</option>)}</select></Field>
-        <Toolbar>
-          <Button icon="move" disabled={!props.selected.size || !selectedDestination} onClick={() => selectedDestination && props.mutate({ type: "move", assetIds: [...props.selected], outfitId: selectedDestination.outfitId, poseId: selectedDestination.poseId })}>Move</Button>
-          <Button icon="copy" disabled={!props.selected.size} onClick={() => props.mutate({ type: "duplicate", assetIds: [...props.selected] })}>Duplicate</Button>
-          <Button icon="trash" variant="danger" disabled={!props.selected.size} onClick={() => props.mutate({ type: "delete", assetIds: [...props.selected] })}>Session trash</Button>
-        </Toolbar>
-        <p class="ls2-help">Session trash remains recoverable with Undo until the library is saved.</p>
-      </Surface>
-
-      <Surface>
-        <SectionTitle title="Completeness matrix" description="Enabled media coverage across every pose." trailing={<span class="ls2-count">{poses.length} poses</span>} />
-        {poses.length && expressionNames.length ? (
-          <div class="ls2-table-wrap"><table class="ls2-matrix"><thead><tr><th>Pose</th>{expressionNames.map((name) => <th>{name}</th>)}</tr></thead><tbody>{poses.map((pose) => <tr><th>{pose.name}</th>{expressionNames.map((name) => { const expression = pose.expressions.find((item) => item.name === name); const complete = !!expression?.assets.some((asset) => asset.enabled); return <td data-complete={complete}>{complete ? <Icon name="check" size={13} /> : "—"}</td>; })}</tr>)}</tbody></table></div>
-        ) : <EmptyState icon="batch" title="No coverage data yet" description="Add poses, expressions, and media to build the matrix." />}
-      </Surface>
+      )}
     </div>
   );
 }
@@ -590,8 +531,8 @@ function AutomationView({ client, openSettings }: { client: LumiStageClient; ope
       <Surface>
         <SectionTitle title="Confidence policy" description="Uncertain predictions preserve the previous stage." />
         <div class="ls2-range-stack">
-          <Field label={`Pose and expression · ${Math.round(detection.stateConfidence * 100)}%`}><input class="ls2-range" type="range" min=".3" max=".95" step=".05" value={detection.stateConfidence} onInput={(event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } })} /></Field>
-          <Field label={`Outfit change · ${Math.round(detection.outfitConfidence * 100)}%`} hint="Also requires an explicit clothing cue."><input class="ls2-range" type="range" min=".5" max="1" step=".05" value={detection.outfitConfidence} onInput={(event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } })} /></Field>
+          <Field label={`Expression sprite · ${Math.round(detection.stateConfidence * 100)}%`}><input class="ls2-range" type="range" min=".3" max=".95" step=".05" value={detection.stateConfidence} onInput={(event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } })} /></Field>
+          <Field label={`Outfit selection · ${Math.round(detection.outfitConfidence * 100)}%`} hint="Uses outfit folder names and the filenames of every sprite inside them."><input class="ls2-range" type="range" min=".5" max="1" step=".05" value={detection.outfitConfidence} onInput={(event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } })} /></Field>
         </div>
       </Surface>
     </div>
@@ -723,7 +664,7 @@ function AppearanceView({ client }: { client: LumiStageClient }) {
         <div class="ls2-preview-window">
           <div class="ls2-preview-toolbar"><span /><span /><span /></div>
           <div class="ls2-preview-actors"><i /><i data-focus /></div>
-          <div class="ls2-preview-caption">Focused actor · Outfit / Pose / Expression</div>
+          <div class="ls2-preview-caption">Focused actor · Outfit / Expression</div>
         </div>
         <div class="ls2-preview-copy"><strong>Live preview language</strong><span>Every surface and accent shown here comes from the active Lumiverse theme.</span></div>
       </Surface>
@@ -744,7 +685,7 @@ function AppearanceView({ client }: { client: LumiStageClient }) {
       <Surface>
         <SectionTitle title="Stage chrome" />
         <Toggle checked={appearance.showChrome} onChange={(showChrome) => patch({ showChrome })} label="Floating window frame" hint="Use Lumiverse glass, border, and shadow tokens around the stage." />
-        <Toggle checked={appearance.showCaptions} onChange={(showCaptions) => patch({ showCaptions })} label="State captions" hint="Show actor, outfit, pose, and expression below each sprite." />
+        <Toggle checked={appearance.showCaptions} onChange={(showCaptions) => patch({ showCaptions })} label="State captions" hint="Show actor, outfit, and expression below each sprite." />
         <Toggle checked={appearance.visible} onChange={(visible) => patch({ visible })} label="Stage visible" hint="The drawer and quick selector remain available while hidden." />
       </Surface>
       <Surface>
@@ -884,15 +825,14 @@ export function Studio({ client }: { client: LumiStageClient }) {
         <ProgressNotice client={client} />
         <main class="ls2-content">
           {view === "stage" && <LiveView client={client} navigate={setView} />}
-          {view === "library" && <LibraryView client={client} profile={draft} update={update} selected={selected} setSelected={setSelected} />}
-          {view === "batch" && <BatchView profile={draft} selected={selected} setSelected={setSelected} mutate={mutate} undo={undo} redo={redo} canUndo={undoRef.current.length > 0} canRedo={redoRef.current.length > 0} />}
+          {view === "library" && <LibraryView client={client} profile={draft} update={update} selected={selected} setSelected={setSelected} mutate={mutate} undo={undo} redo={redo} canUndo={undoRef.current.length > 0} canRedo={redoRef.current.length > 0} />}
           {view === "automation" && <AutomationView client={client} openSettings={() => setView("settings")} />}
           {view === "appearance" && <AppearanceView client={client} />}
           {view === "settings" && <SettingsView client={client} />}
           {view === "diagnostics" && <DiagnosticsView client={client} profile={draft} />}
         </main>
 
-        {(dirty || view === "library" || view === "batch") && (
+        {(dirty || view === "library") && (
           <div class="ls2-savebar" data-dirty={dirty}>
             <div><span class="ls2-save-dot" /><span>{dirty ? "Unsaved library changes" : "Library is up to date"}</span></div>
             <Toolbar>
@@ -917,7 +857,7 @@ export function CharacterSetup({ client, characterId, onOpenStudio }: { client: 
     <div class="ls2-root ls2-character-panel">
       <div class="ls2-character-hero">
         <ContextAvatar name={profile.characterName} />
-        <div><span class="ls2-eyebrow">Independent visual profile</span><h2>{profile.characterName}</h2><p>Actor, outfit, pose, and expression direction owned entirely by LumiStage.</p></div>
+        <div><span class="ls2-eyebrow">Independent visual profile</span><h2>{profile.characterName}</h2><p>Actor, outfit, expression, and sprite direction owned entirely by LumiStage.</p></div>
       </div>
       <div class="ls2-metric-grid"><div><Icon name="actors" size={18} /><span><strong>{profile.actors.length}</strong>Actors</span></div><div><Icon name="outfit" size={18} /><span><strong>{outfits}</strong>Outfits</span></div><div><Icon name="image" size={18} /><span><strong>{assets.length}</strong>Media</span></div></div>
       <Surface><SectionTitle title="Manage this profile" description="Open the full studio for visual libraries, batch operations, automation, archives, and diagnostics." /><Toolbar><Button icon="stage" variant="primary" onClick={onOpenStudio}>Open LumiStage</Button><Button icon="upload" onClick={() => showImportModal(client, profile)}>Import media</Button></Toolbar></Surface>

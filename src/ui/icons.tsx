@@ -6,7 +6,7 @@ export type IconName =
   | "lock" | "unlock" | "check" | "close" | "expand" | "eye" | "eyeOff"
   | "undo" | "redo" | "copy" | "trash" | "move" | "tag" | "settings"
   | "chevronLeft" | "chevronRight" | "chevronDown" | "image" | "actors"
-  | "outfit" | "pose" | "expression" | "download" | "refresh" | "menu"
+  | "outfit" | "expression" | "download" | "refresh" | "menu"
   | "info" | "warning" | "success";
 
 const paths: Record<IconName, JSX.Element> = {
@@ -42,7 +42,6 @@ const paths: Record<IconName, JSX.Element> = {
   image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m4 17 5-5 4 4 2-2 5 4" /></>,
   actors: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="9" r="2.3" /><path d="M15 15a4.5 4.5 0 0 1 5.5 4.4" /></>,
   outfit: <><path d="M8 4 5 7l3 3v10h8V10l3-3-3-3c-.8 1.3-2.1 2-4 2S8.8 5.3 8 4Z" /></>,
-  pose: <><circle cx="12" cy="5" r="2" /><path d="m8 21 2-7-3-3m9 10-2-7 3-3M7 11l5-3 5 3M12 8v6" /></>,
   expression: <><circle cx="12" cy="12" r="9" /><path d="M8.5 10h.1m6.8 0h.1M8 15c1.2 1.3 2.5 2 4 2s2.8-.7 4-2" /></>,
   download: <><path d="M12 4v12m-4-4 4 4 4-4" /><path d="M4 19h16" /></>,
   refresh: <><path d="M20 7v5h-5" /><path d="M19 12a7 7 0 1 0-1.6 4.5" /></>,
@@ -61,4 +60,3 @@ export function Icon({ name, size = 18, class: className }: { name: IconName; si
 }
 
 export const LUMI_STAGE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16M6 4v5m12-5v5M5 20h14"/><path d="M8 8.5c1.4 1 2.7 1.5 4 1.5s2.6-.5 4-1.5V18H8z"/></svg>`;
-
