@@ -6,7 +6,7 @@
   "author": "Archkr",
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": "https://github.com/Archkr/Lumiverse-LumiStage",
-  "description": "A cinematic, independent expression and sprite studio for Lumiverse.",
+  "description": "An independent expression and sprite studio for Lumiverse.",
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
