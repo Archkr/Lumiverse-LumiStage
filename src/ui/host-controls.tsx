@@ -11,6 +11,17 @@ import type {
 import { useEffect, useRef } from "preact/hooks";
 import type { LumiStageClient } from "./client";
 
+let mountedPortalSelects = 0;
+
+function retainPortalGuard(): () => void {
+  mountedPortalSelects += 1;
+  document.body.classList.add("ls-host-select-portals");
+  return () => {
+    mountedPortalSelects = Math.max(0, mountedPortalSelects - 1);
+    if (mountedPortalSelects === 0) document.body.classList.remove("ls-host-select-portals");
+  };
+}
+
 export function HostSwitch(props: {
   client: LumiStageClient;
   checked: boolean;
@@ -64,6 +75,7 @@ export function HostSelect(props: {
   latest.current = props;
   useEffect(() => {
     if (!root.current) return;
+    const releasePortalGuard = retainPortalGuard();
     handle.current = props.client.ctx.components.mountSelect(root.current, {
       value: props.value,
       options: props.options,
@@ -80,6 +92,7 @@ export function HostSelect(props: {
     return () => {
       handle.current?.destroy();
       handle.current = null;
+      releasePortalGuard();
     };
   }, [props.client]);
   useEffect(() => {

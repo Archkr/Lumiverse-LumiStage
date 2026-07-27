@@ -4,6 +4,7 @@ import {
   type DetectionCharacterDecisionV2,
   type DetectionDecisionV2,
   type LumiStageSettingsV2,
+  type ManualOverrideV2,
 } from "./types";
 
 export interface DetectorResponse {
@@ -111,6 +112,7 @@ export function buildDetectorRequest(
     variantId: string | null;
   }>,
   settings: LumiStageSettingsV2,
+  overrides: Record<string, ManualOverrideV2> = {},
 ): Record<string, unknown> {
   const system = [
     "You direct the visible character sprite stage after a completed roleplay reply.",
@@ -123,22 +125,33 @@ export function buildDetectorRequest(
     "Confidence is 0..1 for the complete visible-state match.",
     `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
     `Current states: ${JSON.stringify(currentStates)}`,
+    `Manual locks: ${JSON.stringify(overrides)}`,
   ].join("\n");
+  const messages = [
+    { role: "system", content: system },
+    ...recentMessages.slice(-settings.detection.contextMessages),
+    {
+      role: "user",
+      content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once.",
+    },
+  ];
+  const estimatedInputTokens = Math.ceil(
+    messages.reduce((sum, message) => sum + message.role.length + message.content.length, 0) / 4,
+  );
+  if (estimatedInputTokens > 24_000) {
+    throw new Error(
+      `The detector catalog and context are too large (${estimatedInputTokens} estimated input tokens; limit 24000).`,
+    );
+  }
   return {
-    messages: [
-      { role: "system", content: system },
-      ...recentMessages.slice(-settings.detection.contextMessages),
-      {
-        role: "user",
-        content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once.",
-      },
-    ],
+    messages,
     connection_id: settings.detection.connectionId ?? undefined,
     model: settings.detection.model ?? undefined,
     parameters: {
       temperature: settings.detection.temperature,
-      max_tokens: 560,
+      max_tokens: Math.min(2400, Math.max(560, 560 + Math.max(0, catalog.length - 1) * 230)),
     },
+    reasoning: { source: "off" },
     tools: [{
       name: "set_stage_state",
       description: "Select focused characters and exact sprite variants for the latest reply.",
@@ -181,8 +194,14 @@ export function validateDecision(
 ): DetectionDecisionV2 {
   const entries = new Map(catalog.map((entry) => [entry.characterId, entry.profile]));
   const characters: DetectionCharacterDecisionV2[] = [];
+  const seenCharacterIds = new Set<string>();
   let invalid = false;
   for (const item of decision.characters) {
+    if (seenCharacterIds.has(item.characterId)) {
+      invalid = true;
+      break;
+    }
+    seenCharacterIds.add(item.characterId);
     const profile = entries.get(item.characterId);
     const outfit = profile?.outfits.find((candidate) => candidate.id === item.outfitId);
     const expression = outfit?.expressions.find(

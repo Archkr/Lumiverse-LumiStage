@@ -19,20 +19,38 @@ export function Media(props: {
 
 export function useStableMedia(src: string | null, kind: "image" | "video") {
   const [displayed, setDisplayed] = useState<string | null>(src);
+  const [failed, setFailed] = useState<string | null>(null);
   useEffect(() => {
-    if (!src || src === displayed) return;
+    if (!src) {
+      setDisplayed(null);
+      setFailed(null);
+      return;
+    }
+    if (src === failed) {
+      setDisplayed(null);
+      return;
+    }
+    if (src === displayed) return;
     if (kind === "image") {
       const image = new Image();
-      image.onload = () => setDisplayed(src);
+      image.onload = () => { setFailed(null); setDisplayed(src); };
+      image.onerror = () => { setFailed(src); setDisplayed(null); };
       image.src = src;
-      return () => { image.onload = null; };
+      return () => { image.onload = null; image.onerror = null; };
     }
     const video = document.createElement("video");
     video.muted = true;
-    video.oncanplay = () => setDisplayed(src);
+    video.oncanplay = () => { setFailed(null); setDisplayed(src); };
+    video.onerror = () => { setFailed(src); setDisplayed(null); };
     video.src = src;
     video.load();
-    return () => { video.oncanplay = null; video.src = ""; };
-  }, [src, kind, displayed]);
-  return displayed;
+    return () => { video.oncanplay = null; video.onerror = null; video.src = ""; };
+  }, [src, kind, displayed, failed]);
+  return {
+    src: displayed,
+    clear: () => {
+      setFailed(src);
+      setDisplayed(null);
+    },
+  };
 }

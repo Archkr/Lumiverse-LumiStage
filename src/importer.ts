@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { unzip, unzipSync } from "fflate";
 import { cleanName, createId, normalizedKey } from "./ids";
 import {
   allVariants,
@@ -201,6 +201,10 @@ export function readLumiStageManifest(bytes: Uint8Array): ReadableLumiStageArchi
   });
   const manifestBytes = data["manifest.json"];
   if (!manifestBytes) return null;
+  return parseManifestBytes(manifestBytes);
+}
+
+function parseManifestBytes(manifestBytes: Uint8Array): ReadableLumiStageArchive {
   try {
     const parsed = JSON.parse(new TextDecoder().decode(manifestBytes)) as Record<string, unknown>;
     if (
@@ -214,6 +218,64 @@ export function readLumiStageManifest(bytes: Uint8Array): ReadableLumiStageArchi
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : "Invalid LumiStage manifest.");
   }
+}
+
+export async function extractLumiStageArchive(bytes: Uint8Array): Promise<{
+  manifest: ReadableLumiStageArchive;
+  candidates: ImportCandidate[];
+  errors: string[];
+}> {
+  if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
+  }
+  let expandedBytes = 0;
+  let acceptedCount = 0;
+  const rejected = new Map<string, string>();
+  const unzipped = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(bytes, {
+      filter(info) {
+        const path = normalizedArchivePath(info.name);
+        if (!path) return false;
+        if (path === "manifest.json") {
+          if (info.originalSize > 5 * 1024 * 1024) {
+            throw new Error("LumiStage manifest exceeds 5 MB.");
+          }
+          return true;
+        }
+        const mimeType = mimeForName(path);
+        if (!mimeType) return false;
+        acceptedCount += 1;
+        expandedBytes += info.originalSize;
+        const limit = mimeType.startsWith("video/") ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+        if (info.originalSize > limit) {
+          rejected.set(path, `File exceeds ${limit} bytes.`);
+          return false;
+        }
+        assertArchiveBudget(acceptedCount, expandedBytes);
+        return true;
+      },
+    }, (error, result) => error ? reject(error) : resolve(result));
+  });
+  const manifestEntry = Object.entries(unzipped).find(([path]) =>
+    normalizedArchivePath(path) === "manifest.json"
+  );
+  if (!manifestEntry) throw new Error("The archive does not contain a LumiStage manifest.");
+  const manifest = parseManifestBytes(manifestEntry[1]);
+  const candidates: ImportCandidate[] = [];
+  for (const [rawPath, data] of Object.entries(unzipped)) {
+    const path = normalizedArchivePath(rawPath);
+    if (!path || path === "manifest.json" || data.byteLength === 0) continue;
+    const mimeType = mimeForName(path);
+    if (!mimeType) continue;
+    const parts = path.split("/");
+    const fileName = parts.pop() ?? path;
+    candidates.push({ path, fileName, bytes: data, mimeType, segments: parts });
+  }
+  return {
+    manifest,
+    candidates,
+    errors: [...rejected].map(([path, reason]) => `${path}: ${reason}`),
+  };
 }
 
 export function directCandidate(
@@ -261,6 +323,8 @@ function findOrCreateExpression(outfit: OutfitFolderV2, name: string): Expressio
 
 export interface ImportedVariantV2 {
   target: ImportTargetV2;
+  targetOutfitId?: string;
+  targetExpressionId?: string;
   imageId: string;
   contentHash: string;
   fileName: string;
@@ -333,16 +397,21 @@ export function mergeImportedAssets(
     characterName,
     now,
   );
-  const hashes = new Set(allVariants(profile).map((variant) => variant.contentHash));
   let importedCount = 0;
   let skipped = 0;
   for (const item of imported) {
-    if (hashes.has(item.contentHash)) {
+    const outfit = item.targetOutfitId
+      ? profile.outfits.find((entry) => entry.id === item.targetOutfitId)
+      : findOrCreateOutfit(profile, item.target.outfitName);
+    if (!outfit) throw new Error(`Import target outfit ${item.targetOutfitId} no longer exists.`);
+    const expression = item.targetExpressionId
+      ? outfit.expressions.find((entry) => entry.id === item.targetExpressionId)
+      : findOrCreateExpression(outfit, item.target.expressionName);
+    if (!expression) throw new Error(`Import target expression ${item.targetExpressionId} no longer exists.`);
+    if (expression.variants.some((variant) => variant.contentHash === item.contentHash)) {
       skipped += 1;
       continue;
     }
-    const outfit = findOrCreateOutfit(profile, item.target.outfitName);
-    const expression = findOrCreateExpression(outfit, item.target.expressionName);
     const variant: StageVariantV2 = {
       id: createId("variant"),
       imageId: item.imageId,
@@ -354,7 +423,6 @@ export function mergeImportedAssets(
       createdAt: now,
     };
     expression.variants.push(variant);
-    hashes.add(item.contentHash);
     importedCount += 1;
   }
   profile.revision += 1;
@@ -407,9 +475,26 @@ export function hydrateArchiveProfile(
     characterName,
     now,
   );
-  const pathsByVariantId = new Map(
-    archiveEntries(archive).map((entry) => [entry.variantId, entry.path]),
-  );
+  const entries = archiveEntries(archive);
+  const pathsByVariantId = new Map<string, string>();
+  const referencedPaths = new Set<string>();
+  for (const entry of entries) {
+    const path = normalizedArchivePath(entry.path);
+    if (!path || path === "manifest.json") throw new Error(`Archive manifest contains an unsafe path: ${entry.path}`);
+    if (pathsByVariantId.has(entry.variantId)) throw new Error(`Archive manifest repeats variant ID ${entry.variantId}.`);
+    pathsByVariantId.set(entry.variantId, path);
+    referencedPaths.add(path);
+  }
+  const profileVariants = allVariants(profile);
+  if (pathsByVariantId.size !== profileVariants.length) {
+    throw new Error("Archive manifest does not contain exactly one media reference for every profile variant.");
+  }
+  for (const path of referencedPaths) {
+    if (!uploadedByPath.has(path)) throw new Error(`Archive is missing referenced media ${path}.`);
+  }
+  for (const path of uploadedByPath.keys()) {
+    if (!referencedPaths.has(path)) throw new Error(`Archive contains unreferenced media ${path}.`);
+  }
   for (const outfit of profile.outfits) {
     for (const expression of outfit.expressions) {
       expression.variants = expression.variants.flatMap((variant) => {

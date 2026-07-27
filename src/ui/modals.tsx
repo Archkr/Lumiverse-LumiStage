@@ -1,5 +1,7 @@
 import { render } from "preact";
 import { useMemo, useState } from "preact/hooks";
+import { strFromU8, unzip } from "fflate";
+import { MAX_ARCHIVE_BYTES } from "../importer";
 import type {
   CharacterProfileV2,
   ImportLayoutV2,
@@ -74,6 +76,7 @@ export function showImportModal(
   client: LumiStageClient,
   profile: CharacterProfileV2 | null,
   target?: { outfitId?: string; expressionId?: string },
+  onComplete?: (profile: CharacterProfileV2) => void,
 ) {
   const modal = client.ctx.ui.showModal({
     title: "Import LumiStage media",
@@ -98,9 +101,14 @@ export function showImportModal(
 
     async function start() {
       if (!files.length || busy) return;
+      if (!profile) {
+        client.notify("error", "Choose a character before importing media.");
+        return;
+      }
       setBusy(true);
       try {
-        await client.importFiles(files, layout, target?.outfitId, target?.expressionId);
+        const saved = await client.importFiles(files, profile, layout, target?.outfitId, target?.expressionId);
+        onComplete?.(saved);
         modal.dismiss();
       } catch (error) {
         client.notify("error", error instanceof Error ? error.message : "Import failed.");
@@ -110,7 +118,7 @@ export function showImportModal(
 
     function accept(next: FileList | File[]) {
       setFiles(Array.from(next).filter(
-        (file) => /\.(?:zip|png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name),
+        (file) => /\.(?:png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name),
       ));
     }
 
@@ -131,12 +139,12 @@ export function showImportModal(
           <input
             type="file"
             multiple
-            accept=".zip,.png,.jpg,.jpeg,.webp,.gif,.webm,.mp4"
+            accept=".png,.jpg,.jpeg,.webp,.gif,.webm,.mp4"
             onChange={(event) => event.currentTarget.files && accept(event.currentTarget.files)}
           />
           <span class="ls-dropzone-mark"><Icon name="upload" size={26} /></span>
-          <strong>{files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop sprites, video, or a LumiStage archive"}</strong>
-          <p>PNG, JPEG, WebP, GIF, muted WebM, muted MP4, or `.lumistage.zip`</p>
+          <strong>{files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop sprites or video"}</strong>
+          <p>PNG, JPEG, WebP, GIF, muted WebM, or muted MP4. Archives use Restore.</p>
           <Button icon="plus">Choose files</Button>
         </div>
 
@@ -159,8 +167,8 @@ export function showImportModal(
           />
           {files.length > 0 && (
             <div class="ls-mapping-preview">
-              {preview.map((path) => (
-                <div><Icon name="image" size={14} /><span>{path}</span></div>
+              {preview.map((path, index) => (
+                <div key={`${path}-${index}`}><Icon name="image" size={14} /><span>{path}</span></div>
               ))}
               {files.length > preview.length && <small>+ {files.length - preview.length} more</small>}
             </div>
@@ -186,6 +194,136 @@ export function showImportModal(
     );
   }
   render(<Importer />, modal.root);
+  modal.onDismiss(() => render(null, modal.root));
+}
+
+interface ArchivePreview {
+  outfits: number;
+  expressions: number;
+  variants: number;
+}
+
+async function previewArchive(file: File): Promise<ArchivePreview> {
+  if (file.size > MAX_ARCHIVE_BYTES) throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const entries = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(bytes, {
+      filter: (entry) => entry.name.replace(/\\/g, "/").replace(/^\/+/, "") === "manifest.json",
+    }, (error, result) => error ? reject(error) : resolve(result));
+  });
+  const manifestBytes = entries["manifest.json"];
+  if (!manifestBytes) throw new Error("The archive does not contain manifest.json.");
+  const manifest = JSON.parse(strFromU8(manifestBytes)) as {
+    kind?: string;
+    profile?: { outfits?: Array<{ expressions?: Array<{ variants?: unknown[] }> }> };
+  };
+  if (manifest.kind !== "lumistage-archive" || !manifest.profile) {
+    throw new Error("This is not a supported LumiStage archive.");
+  }
+  const outfits = manifest.profile.outfits ?? [];
+  return {
+    outfits: outfits.length,
+    expressions: outfits.reduce((sum, outfit) => sum + (outfit.expressions?.length ?? 0), 0),
+    variants: outfits.reduce(
+      (sum, outfit) => sum + (outfit.expressions ?? []).reduce(
+        (expressionSum, expression) => expressionSum + (expression.variants?.length ?? 0),
+        0,
+      ),
+      0,
+    ),
+  };
+}
+
+export function showRestoreArchiveModal(
+  client: LumiStageClient,
+  profile: CharacterProfileV2,
+  onComplete?: (profile: CharacterProfileV2) => void,
+) {
+  const modal = client.ctx.ui.showModal({
+    title: "Restore LumiStage archive",
+    width: 620,
+    maxHeight: 700,
+    persistent: true,
+  });
+  function RestoreArchive() {
+    const [file, setFile] = useState<File | null>(null);
+    const [preview, setPreview] = useState<ArchivePreview | null>(null);
+    const [confirmed, setConfirmed] = useState(false);
+    const [busy, setBusy] = useState(false);
+
+    async function choose(next: File | null) {
+      setFile(null);
+      setPreview(null);
+      setConfirmed(false);
+      if (!next) return;
+      if (!/\.lumistage\.zip$/i.test(next.name)) {
+        client.notify("error", "Choose exactly one .lumistage.zip archive.");
+        return;
+      }
+      try {
+        setPreview(await previewArchive(next));
+        setFile(next);
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Could not inspect the archive.");
+      }
+    }
+
+    async function restore() {
+      if (!file || !preview || !confirmed || busy) return;
+      setBusy(true);
+      try {
+        const saved = await client.restoreArchive(file, profile);
+        onComplete?.(saved);
+        modal.dismiss();
+        client.notify("success", "LumiStage archive restored.");
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Archive restore failed.");
+        setBusy(false);
+      }
+    }
+
+    return (
+      <div class="ls-import-modal">
+        <div class="ls-dropzone">
+          <input
+            type="file"
+            accept=".lumistage.zip"
+            onChange={(event) => void choose(event.currentTarget.files?.[0] ?? null)}
+          />
+          <span class="ls-dropzone-mark"><Icon name="upload" size={26} /></span>
+          <strong>{file?.name ?? "Choose one LumiStage archive"}</strong>
+          <p>Restore replaces this character’s entire profile after validation.</p>
+          <Button icon="plus">Choose archive</Button>
+        </div>
+        {preview && (
+          <section class="ls-import-mapping">
+            <span class="ls-kicker">Archive preview</span>
+            <h3>{preview.outfits} outfits · {preview.expressions} expressions · {preview.variants} variants</h3>
+            <label class="ls-check-row">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.currentTarget.checked)}
+              />
+              <span>I understand this replaces the current character profile.</span>
+            </label>
+          </section>
+        )}
+        <div class="ls-modal-actions">
+          <Button variant="ghost" onClick={() => modal.dismiss()}>Cancel</Button>
+          <Button
+            variant="primary"
+            icon="upload"
+            disabled={!file || !preview || !confirmed || busy}
+            onClick={() => void restore()}
+          >
+            {busy ? "Restoring…" : "Restore archive"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  render(<RestoreArchive />, modal.root);
   modal.onDismiss(() => render(null, modal.root));
 }
 
@@ -330,6 +468,7 @@ export function showQuickPicker(client: LumiStageClient) {
               const view = preview ? backend.variantViews[preview.id] : null;
               return (
                 <button
+                  key={item.id}
                   type="button"
                   class="ls-picker-expression"
                   data-selected={item.id === expression?.id}
@@ -356,6 +495,7 @@ export function showQuickPicker(client: LumiStageClient) {
                 const view = backend.variantViews[variant.id];
                 return (
                   <button
+                    key={variant.id}
                     type="button"
                     data-selected={variant.id === variantId}
                     onClick={() => setVariantId(variant.id)}

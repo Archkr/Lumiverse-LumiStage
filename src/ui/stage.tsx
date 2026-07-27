@@ -1,4 +1,5 @@
 import type { JSX } from "preact";
+import { useEffect, useRef } from "preact/hooks";
 import type { CharacterStageStateV2 } from "../types";
 import type { LumiStageClient } from "./client";
 import { Icon } from "./icons";
@@ -8,15 +9,16 @@ import { useClientState } from "./primitives";
 function StageCharacter({ state, client }: { state: CharacterStageStateV2; client: LumiStageClient }) {
   const { backend } = useClientState(client);
   const view = state.variantId ? backend.variantViews[state.variantId] : null;
-  const src = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
+  const media = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
+  const appearance = client.effectiveAppearance();
   return (
     <figure class="ls-stage-character" data-focused={state.focused}>
       <div class="ls-stage-character-frame">
-        {src && (view?.mediaKind === "video"
-          ? <video key={src} src={src} muted loop playsInline autoPlay aria-label={state.label} />
-          : <img key={src} src={src} alt={state.label} draggable={false} />)}
+        {media.src && (view?.mediaKind === "video"
+          ? <video key={media.src} src={media.src} muted loop playsInline autoPlay aria-label={state.label} onError={media.clear} />
+          : <img key={media.src} src={media.src} alt={state.label} draggable={false} onError={media.clear} />)}
       </div>
-      {backend.settings.appearance.showCaptions && (
+      {appearance.showCaptions && (
         <figcaption>
           <strong>{state.label.split(" · ")[0]}</strong>
           <span>{state.label.split(" · ").slice(1).join(" / ")}</span>
@@ -35,7 +37,11 @@ export function Stage(props: {
 }) {
   const { backend } = useClientState(props.client);
   const appearance = props.client.effectiveAppearance();
-  const characters = Object.values(backend.snapshot?.characters ?? {}).filter((character) => !!character.variantId)
+  const resizeCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeCleanup.current?.(), []);
+  const characters = Object.values(backend.snapshot?.characters ?? {}).filter((character) =>
+    !!character.variantId && !!backend.variantViews[character.variantId]?.url
+  )
     .sort((a, b) => Number(a.focused) - Number(b.focused));
   const style = {
     "--ls2-stage-opacity": appearance.opacity,
@@ -59,12 +65,18 @@ export function Stage(props: {
       height = Math.max(240, Math.min(1000, Math.round(startHeight + next.clientY - startY)));
       props.onResize(width, height, false);
     };
-    const end = () => {
+    resizeCleanup.current?.();
+    const cleanup = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
+      if (resizeCleanup.current === cleanup) resizeCleanup.current = null;
+    };
+    const end = () => {
+      cleanup();
       props.onResize(width, height, true);
     };
+    resizeCleanup.current = cleanup;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end, { once: true });
     window.addEventListener("pointercancel", end, { once: true });

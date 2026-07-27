@@ -207,6 +207,12 @@ describe("frontend host lifecycle", () => {
     expect(mock.context.ui.showModal).not.toHaveBeenCalledWith(
       expect.objectContaining({ persistent: true }),
     );
+    await waitFor(() => {
+      expect(document.body.classList.contains("ls-host-select-portals")).toBe(true);
+    });
+    expect(mock.context.dom.addStyle).toHaveBeenCalledWith(
+      expect.stringContaining("z-index: 10005 !important"),
+    );
 
     mock.editorState.open = true;
     mock.editorState.characterId = "character-a";
@@ -232,5 +238,6 @@ describe("frontend host lifecycle", () => {
     expect(mock.removeInputClick).toHaveBeenCalledOnce();
     expect(mock.removeDrag).toHaveBeenCalledOnce();
     expect(mock.removeStyle).toHaveBeenCalledOnce();
+    expect(document.body.classList.contains("ls-host-select-portals")).toBe(false);
   });
 });

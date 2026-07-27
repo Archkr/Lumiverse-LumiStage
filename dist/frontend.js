@@ -482,8 +482,8 @@ function H() {
   }
 }
 function L(n2, l3, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
-  var s3, h3, p3, v3, y3, _2, g2, m3 = t3 && t3.__k || w, b2 = l3.length;
-  for (f4 = T(u4, l3, m3, f4, b2), s3 = 0; s3 < b2; s3++) null != (p3 = u4.__k[s3]) && (h3 = -1 != p3.__i && m3[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h3, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h3.ref != p3.ref && (h3.ref && J(h3.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y3 && null != v3 && (y3 = v3), (g2 = !!(4 & p3.__u)) || h3.__k === p3.__k ? (f4 = j(p3, f4, n2, g2), g2 && h3.__e && (h3.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
+  var s3, h3, p3, v3, y3, _2, g2, m3 = t3 && t3.__k || w, b3 = l3.length;
+  for (f4 = T(u4, l3, m3, f4, b3), s3 = 0; s3 < b3; s3++) null != (p3 = u4.__k[s3]) && (h3 = -1 != p3.__i && m3[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h3, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h3.ref != p3.ref && (h3.ref && J(h3.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y3 && null != v3 && (y3 = v3), (g2 = !!(4 & p3.__u)) || h3.__k === p3.__k ? (f4 = j(p3, f4, n2, g2), g2 && h3.__e && (h3.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
   return u4.__e = y3, f4;
 }
 function T(n2, l3, u4, t3, i3) {
@@ -669,6 +669,24 @@ n = w.slice, l = { __e: function(n2, l3, u4, t3) {
 }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
 // node_modules/fflate/esm/browser.js
+var ch2 = {};
+var wk = (function(c3, id, msg, transfer, cb) {
+  var w3 = new Worker(ch2[id] || (ch2[id] = URL.createObjectURL(new Blob([
+    c3 + ';addEventListener("error",function(e){e=e.error;postMessage({$e$:[e.message,e.code,e.stack]})})'
+  ], { type: "text/javascript" }))));
+  w3.onmessage = function(e3) {
+    var d3 = e3.data, ed = d3.$e$;
+    if (ed) {
+      var err2 = new Error(ed[0]);
+      err2["code"] = ed[1];
+      err2.stack = ed[2];
+      cb(err2, null);
+    } else
+      cb(null, d3);
+  };
+  w3.postMessage(msg, transfer);
+  return w3;
+});
 var u8 = Uint8Array;
 var u16 = Uint16Array;
 var i32 = Int32Array;
@@ -745,17 +763,17 @@ var fdeb = new u8([
 ]);
 var clim = new u8([16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]);
 var freb = function(eb, start) {
-  var b2 = new u16(31);
+  var b3 = new u16(31);
   for (var i3 = 0; i3 < 31; ++i3) {
-    b2[i3] = start += 1 << eb[i3 - 1];
+    b3[i3] = start += 1 << eb[i3 - 1];
   }
-  var r3 = new i32(b2[30]);
+  var r3 = new i32(b3[30]);
   for (var i3 = 1; i3 < 30; ++i3) {
-    for (var j3 = b2[i3]; j3 < b2[i3 + 1]; ++j3) {
-      r3[j3] = j3 - b2[i3] << 5 | i3;
+    for (var j3 = b3[i3]; j3 < b3[i3 + 1]; ++j3) {
+      r3[j3] = j3 - b3[i3] << 5 | i3;
     }
   }
-  return { b: b2, r: r3 };
+  return { b: b3, r: r3 };
 };
 var _a = freb(fleb, 2);
 var fl = _a.b;
@@ -827,7 +845,25 @@ for (i3 = 0; i3 < 32; ++i3)
   fdt[i3] = 5;
 var i3;
 var flm = /* @__PURE__ */ hMap(flt, 9, 0);
+var flrm = /* @__PURE__ */ hMap(flt, 9, 1);
 var fdm = /* @__PURE__ */ hMap(fdt, 5, 0);
+var fdrm = /* @__PURE__ */ hMap(fdt, 5, 1);
+var max = function(a3) {
+  var m3 = a3[0];
+  for (var i3 = 1; i3 < a3.length; ++i3) {
+    if (a3[i3] > m3)
+      m3 = a3[i3];
+  }
+  return m3;
+};
+var bits = function(d3, p3, m3) {
+  var o3 = p3 / 8 | 0;
+  return (d3[o3] | d3[o3 + 1] << 8) >> (p3 & 7) & m3;
+};
+var bits16 = function(d3, p3) {
+  var o3 = p3 / 8 | 0;
+  return (d3[o3] | d3[o3 + 1] << 8 | d3[o3 + 2] << 16) >> (p3 & 7);
+};
 var shft = function(p3) {
   return (p3 + 7) / 8 | 0;
 };
@@ -865,6 +901,147 @@ var err = function(ind, msg, nt) {
     throw e3;
   return e3;
 };
+var inflt = function(dat, st, buf, dict) {
+  var sl = dat.length, dl = dict ? dict.length : 0;
+  if (!sl || st.f && !st.l)
+    return buf || new u8(0);
+  var noBuf = !buf;
+  var resize = noBuf || st.i != 2;
+  var noSt = st.i;
+  if (noBuf)
+    buf = new u8(sl * 3);
+  var cbuf = function(l4) {
+    var bl = buf.length;
+    if (l4 > bl) {
+      var nbuf = new u8(Math.max(bl * 2, l4));
+      nbuf.set(buf);
+      buf = nbuf;
+    }
+  };
+  var final = st.f || 0, pos = st.p || 0, bt = st.b || 0, lm = st.l, dm = st.d, lbt = st.m, dbt = st.n;
+  var tbts = sl * 8;
+  do {
+    if (!lm) {
+      final = bits(dat, pos, 1);
+      var type = bits(dat, pos + 1, 3);
+      pos += 3;
+      if (!type) {
+        var s3 = shft(pos) + 4, l3 = dat[s3 - 4] | dat[s3 - 3] << 8, t3 = s3 + l3;
+        if (t3 > sl) {
+          if (noSt)
+            err(0);
+          break;
+        }
+        if (resize)
+          cbuf(bt + l3);
+        buf.set(dat.subarray(s3, t3), bt);
+        st.b = bt += l3, st.p = pos = t3 * 8, st.f = final;
+        continue;
+      } else if (type == 1)
+        lm = flrm, dm = fdrm, lbt = 9, dbt = 5;
+      else if (type == 2) {
+        var hLit = bits(dat, pos, 31) + 257, hcLen = bits(dat, pos + 10, 15) + 4;
+        var tl = hLit + bits(dat, pos + 5, 31) + 1;
+        pos += 14;
+        var ldt = new u8(tl);
+        var clt = new u8(19);
+        for (var i3 = 0; i3 < hcLen; ++i3) {
+          clt[clim[i3]] = bits(dat, pos + i3 * 3, 7);
+        }
+        pos += hcLen * 3;
+        var clb = max(clt), clbmsk = (1 << clb) - 1;
+        var clm = hMap(clt, clb, 1);
+        for (var i3 = 0; i3 < tl; ) {
+          var r3 = clm[bits(dat, pos, clbmsk)];
+          pos += r3 & 15;
+          var s3 = r3 >> 4;
+          if (s3 < 16) {
+            ldt[i3++] = s3;
+          } else {
+            var c3 = 0, n2 = 0;
+            if (s3 == 16)
+              n2 = 3 + bits(dat, pos, 3), pos += 2, c3 = ldt[i3 - 1];
+            else if (s3 == 17)
+              n2 = 3 + bits(dat, pos, 7), pos += 3;
+            else if (s3 == 18)
+              n2 = 11 + bits(dat, pos, 127), pos += 7;
+            while (n2--)
+              ldt[i3++] = c3;
+          }
+        }
+        var lt = ldt.subarray(0, hLit), dt = ldt.subarray(hLit);
+        lbt = max(lt);
+        dbt = max(dt);
+        lm = hMap(lt, lbt, 1);
+        dm = hMap(dt, dbt, 1);
+      } else
+        err(1);
+      if (pos > tbts) {
+        if (noSt)
+          err(0);
+        break;
+      }
+    }
+    if (resize)
+      cbuf(bt + 131072);
+    var lms = (1 << lbt) - 1, dms = (1 << dbt) - 1;
+    var lpos = pos;
+    for (; ; lpos = pos) {
+      var c3 = lm[bits16(dat, pos) & lms], sym = c3 >> 4;
+      pos += c3 & 15;
+      if (pos > tbts) {
+        if (noSt)
+          err(0);
+        break;
+      }
+      if (!c3)
+        err(2);
+      if (sym < 256)
+        buf[bt++] = sym;
+      else if (sym == 256) {
+        lpos = pos, lm = null;
+        break;
+      } else {
+        var add = sym - 254;
+        if (sym > 264) {
+          var i3 = sym - 257, b3 = fleb[i3];
+          add = bits(dat, pos, (1 << b3) - 1) + fl[i3];
+          pos += b3;
+        }
+        var d3 = dm[bits16(dat, pos) & dms], dsym = d3 >> 4;
+        if (!d3)
+          err(3);
+        pos += d3 & 15;
+        var dt = fd[dsym];
+        if (dsym > 3) {
+          var b3 = fdeb[dsym];
+          dt += bits16(dat, pos) & (1 << b3) - 1, pos += b3;
+        }
+        if (pos > tbts) {
+          if (noSt)
+            err(0);
+          break;
+        }
+        if (resize)
+          cbuf(bt + 131072);
+        var end = bt + add;
+        if (bt < dt) {
+          var shift = dl - dt, dend = Math.min(dt, end);
+          if (shift + bt < 0)
+            err(3);
+          for (; bt < dend; ++bt)
+            buf[bt] = dict[shift + bt];
+        }
+        for (; bt < end; ++bt)
+          buf[bt] = buf[bt - dt];
+      }
+    }
+    st.l = lm, st.p = lpos, st.b = bt, st.f = final;
+    if (lm)
+      final = 1, st.m = lbt, st.d = dm, st.n = dbt;
+  } while (!final);
+  return bt != buf.length && noBuf ? slc(buf, 0, bt) : buf.subarray(0, bt);
+};
 var wbits = function(d3, p3, v3) {
   v3 <<= p3 & 7;
   var o3 = p3 / 8 | 0;
@@ -893,8 +1070,8 @@ var hTree = function(d3, mb) {
     v3[t3[0].s] = 1;
     return { t: v3, l: 1 };
   }
-  t3.sort(function(a3, b2) {
-    return a3.f - b2.f;
+  t3.sort(function(a3, b3) {
+    return a3.f - b3.f;
   });
   t3.push({ s: -1, f: 25001 });
   var l3 = t3[0], r3 = t3[1], i0 = 0, i1 = 1, i22 = 2;
@@ -914,8 +1091,8 @@ var hTree = function(d3, mb) {
   if (mbt > mb) {
     var i3 = 0, dt = 0;
     var lft = mbt - mb, cst = 1 << lft;
-    t22.sort(function(a3, b2) {
-      return tr[b2.s] - tr[a3.s] || a3.f - b2.f;
+    t22.sort(function(a3, b3) {
+      return tr[b3.s] - tr[a3.s] || a3.f - b3.f;
     });
     for (; i3 < s3; ++i3) {
       var i2_1 = t22[i3].s;
@@ -1204,20 +1381,124 @@ var dopt = function(dat, opt, pre, post, st) {
   }
   return dflt(dat, opt.level == null ? 6 : opt.level, opt.mem == null ? st.l ? Math.ceil(Math.max(8, Math.min(13, Math.log(dat.length))) * 1.5) : 20 : 12 + opt.mem, pre, post, st);
 };
-var mrg = function(a3, b2) {
+var mrg = function(a3, b3) {
   var o3 = {};
   for (var k3 in a3)
     o3[k3] = a3[k3];
-  for (var k3 in b2)
-    o3[k3] = b2[k3];
+  for (var k3 in b3)
+    o3[k3] = b3[k3];
   return o3;
 };
-var wbytes = function(d3, b2, v3) {
-  for (; v3; ++b2)
-    d3[b2] = v3, v3 >>>= 8;
+var wcln = function(fn, fnStr, td2) {
+  var dt = fn();
+  var st = fn.toString();
+  var ks = st.slice(st.indexOf("[") + 1, st.lastIndexOf("]")).replace(/\s+/g, "").split(",");
+  for (var i3 = 0; i3 < dt.length; ++i3) {
+    var v3 = dt[i3], k3 = ks[i3];
+    if (typeof v3 == "function") {
+      fnStr += ";" + k3 + "=";
+      var st_1 = v3.toString();
+      if (v3.prototype) {
+        if (st_1.indexOf("[native code]") != -1) {
+          var spInd = st_1.indexOf(" ", 8) + 1;
+          fnStr += st_1.slice(spInd, st_1.indexOf("(", spInd));
+        } else {
+          fnStr += st_1;
+          for (var t3 in v3.prototype)
+            fnStr += ";" + k3 + ".prototype." + t3 + "=" + v3.prototype[t3].toString();
+        }
+      } else
+        fnStr += st_1;
+    } else
+      td2[k3] = v3;
+  }
+  return fnStr;
 };
+var ch = [];
+var cbfs = function(v3) {
+  var tl = [];
+  for (var k3 in v3) {
+    if (v3[k3].buffer) {
+      tl.push((v3[k3] = new v3[k3].constructor(v3[k3])).buffer);
+    }
+  }
+  return tl;
+};
+var wrkr = function(fns, init, id, cb) {
+  if (!ch[id]) {
+    var fnStr = "", td_1 = {}, m3 = fns.length - 1;
+    for (var i3 = 0; i3 < m3; ++i3)
+      fnStr = wcln(fns[i3], fnStr, td_1);
+    ch[id] = { c: wcln(fns[m3], fnStr, td_1), e: td_1 };
+  }
+  var td2 = mrg({}, ch[id].e);
+  return wk(ch[id].c + ";onmessage=function(e){for(var k in e.data)self[k]=e.data[k];onmessage=" + init.toString() + "}", id, td2, cbfs(td2), cb);
+};
+var bInflt = function() {
+  return [u8, u16, i32, fleb, fdeb, clim, fl, fd, flrm, fdrm, rev, ec, hMap, max, bits, bits16, shft, slc, err, inflt, inflateSync, pbf, gopt];
+};
+var bDflt = function() {
+  return [u8, u16, i32, fleb, fdeb, clim, revfl, revfd, flm, flt, fdm, fdt, rev, deo, et, hMap, wbits, wbits16, hTree, ln, lc, clen, wfblk, wblk, shft, slc, dflt, dopt, deflateSync, pbf];
+};
+var pbf = function(msg) {
+  return postMessage(msg, [msg.buffer]);
+};
+var gopt = function(o3) {
+  return o3 && {
+    out: o3.size && new u8(o3.size),
+    dictionary: o3.dictionary
+  };
+};
+var cbify = function(dat, opts, fns, init, id, cb) {
+  var w3 = wrkr(fns, init, id, function(err2, dat2) {
+    w3.terminate();
+    cb(err2, dat2);
+  });
+  w3.postMessage([dat, opts], opts.consume ? [dat.buffer] : []);
+  return function() {
+    w3.terminate();
+  };
+};
+var b2 = function(d3, b3) {
+  return d3[b3] | d3[b3 + 1] << 8;
+};
+var b4 = function(d3, b3) {
+  return (d3[b3] | d3[b3 + 1] << 8 | d3[b3 + 2] << 16 | d3[b3 + 3] << 24) >>> 0;
+};
+var b8 = function(d3, b3) {
+  return b4(d3, b3) + b4(d3, b3 + 4) * 4294967296;
+};
+var wbytes = function(d3, b3, v3) {
+  for (; v3; ++b3)
+    d3[b3] = v3, v3 >>>= 8;
+};
+function deflate(data, opts, cb) {
+  if (!cb)
+    cb = opts, opts = {};
+  if (typeof cb != "function")
+    err(7);
+  return cbify(data, opts, [
+    bDflt
+  ], function(ev) {
+    return pbf(deflateSync(ev.data[0], ev.data[1]));
+  }, 0, cb);
+}
 function deflateSync(data, opts) {
   return dopt(data, opts || {}, 0, 0);
+}
+function inflate(data, opts, cb) {
+  if (!cb)
+    cb = opts, opts = {};
+  if (typeof cb != "function")
+    err(7);
+  return cbify(data, opts, [
+    bInflt
+  ], function(ev) {
+    return pbf(inflateSync(ev.data[0], gopt(ev.data[1])));
+  }, 1, cb);
+}
+function inflateSync(data, opts) {
+  return inflt(data, { i: 2 }, opts && opts.out, opts && opts.dictionary);
 }
 var fltn = function(d3, p3, t3, o3) {
   for (var k3 in d3) {
@@ -1240,6 +1521,22 @@ try {
   tds = 1;
 } catch (e3) {
 }
+var dutf8 = function(d3) {
+  for (var r3 = "", i3 = 0; ; ) {
+    var c3 = d3[i3++];
+    var eb = (c3 > 127) + (c3 > 223) + (c3 > 239);
+    if (i3 + eb > d3.length)
+      return { s: r3, r: slc(d3, i3 - 1) };
+    if (!eb)
+      r3 += String.fromCharCode(c3);
+    else if (eb == 3) {
+      c3 = ((c3 & 15) << 18 | (d3[i3++] & 63) << 12 | (d3[i3++] & 63) << 6 | d3[i3++] & 63) - 65536, r3 += String.fromCharCode(55296 | c3 >> 10, 56320 | c3 & 1023);
+    } else if (eb & 1)
+      r3 += String.fromCharCode((c3 & 31) << 6 | d3[i3++] & 63);
+    else
+      r3 += String.fromCharCode((c3 & 15) << 12 | (d3[i3++] & 63) << 6 | d3[i3++] & 63);
+  }
+};
 function strToU8(str, latin1) {
   if (latin1) {
     var ar_1 = new u8(str.length);
@@ -1273,6 +1570,48 @@ function strToU8(str, latin1) {
   }
   return slc(ar, 0, ai);
 }
+function strFromU8(dat, latin1) {
+  if (latin1) {
+    var r3 = "";
+    for (var i3 = 0; i3 < dat.length; i3 += 16384)
+      r3 += String.fromCharCode.apply(null, dat.subarray(i3, i3 + 16384));
+    return r3;
+  } else if (td) {
+    return td.decode(dat);
+  } else {
+    var _a2 = dutf8(dat), s3 = _a2.s, r3 = _a2.r;
+    if (r3.length)
+      err(8);
+    return s3;
+  }
+}
+var slzh = function(d3, b3) {
+  return b3 + 30 + b2(d3, b3 + 26) + b2(d3, b3 + 28);
+};
+var zh = function(d3, b3, z3) {
+  var fnl = b2(d3, b3 + 28), efl = b2(d3, b3 + 30), fn = strFromU8(d3.subarray(b3 + 46, b3 + 46 + fnl), !(b2(d3, b3 + 8) & 2048)), es = b3 + 46 + fnl;
+  var _a2 = z64hs(d3, es, efl, z3, b4(d3, b3 + 20), b4(d3, b3 + 24), b4(d3, b3 + 42)), sc = _a2[0], su = _a2[1], off = _a2[2];
+  return [b2(d3, b3 + 10), sc, su, fn, es + efl + b2(d3, b3 + 32), off];
+};
+var z64hs = function(d3, b3, l3, z3, sc, su, off) {
+  var nsc = sc == 4294967295, nsu = su == 4294967295, noff = off == 4294967295, e3 = b3 + l3;
+  var nf = nsc + nsu + noff;
+  if (z3 && nf) {
+    for (; b3 + 4 < e3; b3 += 4 + b2(d3, b3 + 2)) {
+      if (b2(d3, b3) == 1) {
+        return [
+          nsc ? b8(d3, b3 + 4 + 8 * nsu) : sc,
+          nsu ? b8(d3, b3 + 4) : su,
+          noff ? b8(d3, b3 + 4 + 8 * (nsu + nsc)) : off,
+          1
+        ];
+      }
+    }
+    if (z3 < 2)
+      err(13);
+  }
+  return [sc, su, off, 0];
+};
 var exfl = function(ex) {
   var le = 0;
   if (ex) {
@@ -1285,94 +1624,231 @@ var exfl = function(ex) {
   }
   return le;
 };
-var wzh = function(d3, b2, f4, fn, u4, c3, ce, co) {
+var wzh = function(d3, b3, f4, fn, u4, c3, ce, co) {
   var fl2 = fn.length, ex = f4.extra, col = co && co.length;
   var exl = exfl(ex);
-  wbytes(d3, b2, ce != null ? 33639248 : 67324752), b2 += 4;
+  wbytes(d3, b3, ce != null ? 33639248 : 67324752), b3 += 4;
   if (ce != null)
-    d3[b2++] = 20, d3[b2++] = f4.os;
-  d3[b2] = 20, b2 += 2;
-  d3[b2++] = f4.flag << 1 | (c3 < 0 && 8), d3[b2++] = u4 && 8;
-  d3[b2++] = f4.compression & 255, d3[b2++] = f4.compression >> 8;
+    d3[b3++] = 20, d3[b3++] = f4.os;
+  d3[b3] = 20, b3 += 2;
+  d3[b3++] = f4.flag << 1 | (c3 < 0 && 8), d3[b3++] = u4 && 8;
+  d3[b3++] = f4.compression & 255, d3[b3++] = f4.compression >> 8;
   var dt = new Date(f4.mtime == null ? Date.now() : f4.mtime), y3 = dt.getFullYear() - 1980;
   if (y3 < 0 || y3 > 119)
     err(10);
-  wbytes(d3, b2, y3 << 25 | dt.getMonth() + 1 << 21 | dt.getDate() << 16 | dt.getHours() << 11 | dt.getMinutes() << 5 | dt.getSeconds() >> 1), b2 += 4;
+  wbytes(d3, b3, y3 << 25 | dt.getMonth() + 1 << 21 | dt.getDate() << 16 | dt.getHours() << 11 | dt.getMinutes() << 5 | dt.getSeconds() >> 1), b3 += 4;
   if (c3 != -1) {
-    wbytes(d3, b2, f4.crc);
-    wbytes(d3, b2 + 4, c3 < 0 ? -c3 - 2 : c3);
-    wbytes(d3, b2 + 8, f4.size);
+    wbytes(d3, b3, f4.crc);
+    wbytes(d3, b3 + 4, c3 < 0 ? -c3 - 2 : c3);
+    wbytes(d3, b3 + 8, f4.size);
   }
-  wbytes(d3, b2 + 12, fl2);
-  wbytes(d3, b2 + 14, exl), b2 += 16;
+  wbytes(d3, b3 + 12, fl2);
+  wbytes(d3, b3 + 14, exl), b3 += 16;
   if (ce != null) {
-    wbytes(d3, b2, col);
-    wbytes(d3, b2 + 6, f4.attrs);
-    wbytes(d3, b2 + 10, ce), b2 += 14;
+    wbytes(d3, b3, col);
+    wbytes(d3, b3 + 6, f4.attrs);
+    wbytes(d3, b3 + 10, ce), b3 += 14;
   }
-  d3.set(fn, b2);
-  b2 += fl2;
+  d3.set(fn, b3);
+  b3 += fl2;
   if (exl) {
     for (var k3 in ex) {
       var exf = ex[k3], l3 = exf.length;
-      wbytes(d3, b2, +k3);
-      wbytes(d3, b2 + 2, l3);
-      d3.set(exf, b2 + 4), b2 += 4 + l3;
+      wbytes(d3, b3, +k3);
+      wbytes(d3, b3 + 2, l3);
+      d3.set(exf, b3 + 4), b3 += 4 + l3;
     }
   }
   if (col)
-    d3.set(co, b2), b2 += col;
-  return b2;
+    d3.set(co, b3), b3 += col;
+  return b3;
 };
-var wzf = function(o3, b2, c3, d3, e3) {
-  wbytes(o3, b2, 101010256);
-  wbytes(o3, b2 + 8, c3);
-  wbytes(o3, b2 + 10, c3);
-  wbytes(o3, b2 + 12, d3);
-  wbytes(o3, b2 + 16, e3);
+var wzf = function(o3, b3, c3, d3, e3) {
+  wbytes(o3, b3, 101010256);
+  wbytes(o3, b3 + 8, c3);
+  wbytes(o3, b3 + 10, c3);
+  wbytes(o3, b3 + 12, d3);
+  wbytes(o3, b3 + 16, e3);
 };
-function zipSync(data, opts) {
-  if (!opts)
-    opts = {};
+function zip(data, opts, cb) {
+  if (!cb)
+    cb = opts, opts = {};
+  if (typeof cb != "function")
+    err(7);
   var r3 = {};
-  var files = [];
   fltn(data, "", r3, opts);
-  var o3 = 0;
-  var tot = 0;
-  for (var fn in r3) {
+  var k3 = Object.keys(r3);
+  var lft = k3.length, o3 = 0, tot = 0;
+  var slft = lft, files = new Array(lft);
+  var term = [];
+  var tAll = function() {
+    for (var i4 = 0; i4 < term.length; ++i4)
+      term[i4]();
+  };
+  var cbd = function(a3, b3) {
+    mt(function() {
+      cb(a3, b3);
+    });
+  };
+  mt(function() {
+    cbd = cb;
+  });
+  var cbf = function() {
+    var out = new u8(tot + 22), oe = o3, cdl = tot - o3;
+    tot = 0;
+    for (var i4 = 0; i4 < slft; ++i4) {
+      var f4 = files[i4];
+      try {
+        var l3 = f4.c.length;
+        wzh(out, tot, f4, f4.f, f4.u, l3);
+        var badd = 30 + f4.f.length + exfl(f4.extra);
+        var loc = tot + badd;
+        out.set(f4.c, loc);
+        wzh(out, o3, f4, f4.f, f4.u, l3, tot, f4.m), o3 += 16 + badd + (f4.m ? f4.m.length : 0), tot = loc + l3;
+      } catch (e3) {
+        return cbd(e3, null);
+      }
+    }
+    wzf(out, o3, files.length, cdl, oe);
+    cbd(null, out);
+  };
+  if (!lft)
+    cbf();
+  var _loop_1 = function(i4) {
+    var fn = k3[i4];
     var _a2 = r3[fn], file = _a2[0], p3 = _a2[1];
-    var compression = p3.level == 0 ? 0 : 8;
+    var c3 = crc(), size = file.length;
+    c3.p(file);
     var f4 = strToU8(fn), s3 = f4.length;
     var com = p3.comment, m3 = com && strToU8(com), ms = m3 && m3.length;
     var exl = exfl(p3.extra);
+    var compression = p3.level == 0 ? 0 : 8;
+    var cbl = function(e3, d3) {
+      if (e3) {
+        tAll();
+        cbd(e3, null);
+      } else {
+        var l3 = d3.length;
+        files[i4] = mrg(p3, {
+          size,
+          crc: c3.d(),
+          c: d3,
+          f: f4,
+          m: m3,
+          u: s3 != fn.length || m3 && com.length != ms,
+          compression
+        });
+        o3 += 30 + s3 + exl + l3;
+        tot += 76 + 2 * (s3 + exl) + (ms || 0) + l3;
+        if (!--lft)
+          cbf();
+      }
+    };
     if (s3 > 65535)
-      err(11);
-    var d3 = compression ? deflateSync(file, p3) : file, l3 = d3.length;
-    var c3 = crc();
-    c3.p(file);
-    files.push(mrg(p3, {
-      size: file.length,
-      crc: c3.d(),
-      c: d3,
-      f: f4,
-      m: m3,
-      u: s3 != fn.length || m3 && com.length != ms,
-      o: o3,
-      compression
-    }));
-    o3 += 30 + s3 + exl + l3;
-    tot += 76 + 2 * (s3 + exl) + (ms || 0) + l3;
+      cbl(err(11, 0, 1), null);
+    if (!compression)
+      cbl(null, file);
+    else if (size < 16e4) {
+      try {
+        cbl(null, deflateSync(file, p3));
+      } catch (e3) {
+        cbl(e3, null);
+      }
+    } else
+      term.push(deflate(file, p3, cbl));
+  };
+  for (var i3 = 0; i3 < slft; ++i3) {
+    _loop_1(i3);
   }
-  var out = new u8(tot + 22), oe = o3, cdl = tot - o3;
-  for (var i3 = 0; i3 < files.length; ++i3) {
-    var f4 = files[i3];
-    wzh(out, f4.o, f4, f4.f, f4.u, f4.c.length);
-    var badd = 30 + f4.f.length + exfl(f4.extra);
-    out.set(f4.c, f4.o + badd);
-    wzh(out, o3, f4, f4.f, f4.u, f4.c.length, f4.o, f4.m), o3 += 16 + badd + (f4.m ? f4.m.length : 0);
+  return tAll;
+}
+var mt = typeof queueMicrotask == "function" ? queueMicrotask : typeof setTimeout == "function" ? setTimeout : function(fn) {
+  fn();
+};
+function unzip(data, opts, cb) {
+  if (!cb)
+    cb = opts, opts = {};
+  if (typeof cb != "function")
+    err(7);
+  var term = [];
+  var tAll = function() {
+    for (var i4 = 0; i4 < term.length; ++i4)
+      term[i4]();
+  };
+  var files = {};
+  var cbd = function(a3, b3) {
+    mt(function() {
+      cb(a3, b3);
+    });
+  };
+  mt(function() {
+    cbd = cb;
+  });
+  var e3 = data.length - 22;
+  for (; b4(data, e3) != 101010256; --e3) {
+    if (!e3 || data.length - e3 > 65558) {
+      cbd(err(13, 0, 1), null);
+      return tAll;
+    }
   }
-  wzf(out, o3, files.length, cdl, oe);
-  return out;
+  ;
+  var lft = b2(data, e3 + 8);
+  if (lft) {
+    var c3 = lft;
+    var o3 = b4(data, e3 + 16);
+    var z3 = b4(data, e3 - 20) == 117853008;
+    if (z3) {
+      var ze = b4(data, e3 - 12);
+      z3 = b4(data, ze) == 101075792;
+      if (z3) {
+        c3 = lft = b4(data, ze + 32);
+        o3 = b4(data, ze + 48);
+      }
+    }
+    var fltr = opts && opts.filter;
+    var _loop_3 = function(i4) {
+      var _a2 = zh(data, o3, z3), c_1 = _a2[0], sc = _a2[1], su = _a2[2], fn = _a2[3], no = _a2[4], off = _a2[5], b3 = slzh(data, off);
+      o3 = no;
+      var cbl = function(e4, d3) {
+        if (e4) {
+          tAll();
+          cbd(e4, null);
+        } else {
+          if (d3)
+            files[fn] = d3;
+          if (!--lft)
+            cbd(null, files);
+        }
+      };
+      if (!fltr || fltr({
+        name: fn,
+        size: sc,
+        originalSize: su,
+        compression: c_1
+      })) {
+        if (!c_1)
+          cbl(null, slc(data, b3, b3 + sc));
+        else if (c_1 == 8) {
+          var infl = data.subarray(b3, b3 + sc);
+          if (su < 524288 || sc > 0.8 * su) {
+            try {
+              cbl(null, inflateSync(infl, { out: new u8(su) }));
+            } catch (e4) {
+              cbl(e4, null);
+            }
+          } else
+            term.push(inflate(infl, { size: su }, cbl));
+        } else
+          cbl(err(14, "unknown compression type " + c_1, 1), null);
+      } else
+        cbl(null, null);
+    };
+    for (var i3 = 0; i3 < c3; ++i3) {
+      _loop_3(i3);
+    }
+  } else
+    cbd(null, {});
+  return tAll;
 }
 
 // node_modules/tus-js-client/lib.esm/error.js
@@ -1670,7 +2146,7 @@ var cb_btou = (cccc) => {
       return _fromCC((31 & cccc.charCodeAt(0)) << 6 | 63 & cccc.charCodeAt(1));
   }
 };
-var btou = (b2) => b2.replace(re_btou, cb_btou);
+var btou = (b3) => b3.replace(re_btou, cb_btou);
 var atobPolyfill = (asc) => {
   asc = asc.replace(/\s+/g, "");
   if (!b64re.test(asc))
@@ -3177,19 +3653,19 @@ function len(blobOrArray) {
   if (blobOrArray.size !== void 0) return blobOrArray.size;
   return blobOrArray.length;
 }
-function concat(a3, b2) {
+function concat(a3, b3) {
   if (a3.concat) {
-    return a3.concat(b2);
+    return a3.concat(b3);
   }
   if (a3 instanceof Blob) {
-    return new Blob([a3, b2], {
+    return new Blob([a3, b3], {
       type: a3.type
     });
   }
   if (a3.set) {
-    var c3 = new a3.constructor(a3.length + b2.length);
+    var c3 = new a3.constructor(a3.length + b3.length);
     c3.set(a3);
-    c3.set(b2, a3.length);
+    c3.set(b3, a3.length);
     return c3;
   }
   throw new Error("Unknown data type");
@@ -4081,7 +4557,7 @@ function cleanName(value, fallback = "Default") {
   return cleaned || fallback;
 }
 function normalizedKey(value) {
-  return cleanName(value, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return cleanName(value, "").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 // src/types.ts
@@ -4277,27 +4753,75 @@ function applyBatchMutation(profile, mutation, now = Date.now()) {
 }
 function inspectProfile(profile) {
   const issues = [];
+  const ids = /* @__PURE__ */ new Set();
+  const recordId = (id, label) => {
+    if (!id.trim()) issues.push({ severity: "error", code: "blank-id", message: `${label} has a blank ID.` });
+    else if (ids.has(id)) issues.push({ severity: "error", code: "duplicate-id", message: `${label} repeats ID ${id}.` });
+    else ids.add(id);
+  };
+  recordId(profile.characterId, profile.characterName || "Character");
   if (!profile.outfits.length) {
     issues.push({ severity: "error", code: "no-outfits", message: `${profile.characterName} has no outfits.` });
   }
+  const outfitNames = profile.outfits.map((outfit) => normalizedKey(outfit.name));
+  if (outfitNames.some((name) => !name)) {
+    issues.push({ severity: "error", code: "blank-outfit", message: "Every outfit needs a name." });
+  }
+  if (new Set(outfitNames).size !== outfitNames.length) {
+    issues.push({ severity: "error", code: "duplicate-outfit", message: "Outfit names must be unique." });
+  }
+  if (profile.defaultOutfitId && !profile.outfits.some((outfit) => outfit.id === profile.defaultOutfitId)) {
+    issues.push({ severity: "error", code: "invalid-default-outfit", message: "The default outfit no longer exists." });
+  }
   for (const outfit of profile.outfits) {
+    recordId(outfit.id, `Outfit ${outfit.name || "(unnamed)"}`);
     if (!outfit.expressions.length) {
       issues.push({ severity: "warning", code: "empty-outfit", message: `${outfit.name} has no expressions.` });
     }
     const names = outfit.expressions.map((item) => normalizedKey(item.name));
+    if (names.some((name) => !name)) {
+      issues.push({ severity: "error", code: "blank-expression", message: `${outfit.name} contains an expression without a name.` });
+    }
     if (new Set(names).size !== names.length) {
-      issues.push({ severity: "warning", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+      issues.push({ severity: "error", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+    }
+    if (outfit.defaultExpressionId && !outfit.expressions.some((expression) => expression.id === outfit.defaultExpressionId)) {
+      issues.push({ severity: "error", code: "invalid-default-expression", message: `${outfit.name} has an invalid default expression.` });
     }
     for (const expression of outfit.expressions) {
+      recordId(expression.id, `Expression ${outfit.name} / ${expression.name || "(unnamed)"}`);
       if (!expression.variants.length) {
         issues.push({ severity: "info", code: "empty-expression", message: `${outfit.name} / ${expression.name} has no sprite variants.` });
+      }
+      for (const variant of expression.variants) {
+        recordId(variant.id, `Variant ${variant.fileName || "(unnamed)"}`);
+        if (!variant.imageId || !variant.contentHash) {
+          issues.push({ severity: "error", code: "invalid-media-reference", message: `${variant.fileName || variant.id} has an invalid media reference.` });
+        }
       }
     }
   }
   return issues;
 }
 
+// src/importer.ts
+var MAX_ARCHIVE_BYTES = 250 * 1024 * 1024;
+var MAX_EXPANDED_BYTES = 1024 * 1024 * 1024;
+var MAX_ENTRY_COUNT = 5e3;
+var MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+var MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
 // src/ui/client.ts
+function pruneVariantViews(profiles, views) {
+  const validIds = new Set(profiles.flatMap(
+    (profile) => profile.outfits.flatMap(
+      (outfit) => outfit.expressions.flatMap((expression) => expression.variants.map((variant) => variant.id))
+    )
+  ));
+  return Object.fromEntries(
+    Object.entries(views).filter(([variantId]) => validIds.has(variantId))
+  );
+}
 var EMPTY_BACKEND = {
   settings: defaultSettings(0),
   profile: null,
@@ -4330,6 +4854,7 @@ var LumiStageClient = class {
   ui = { backend: EMPTY_BACKEND, busy: false, progress: null, notice: null };
   unsubscribeBackend = null;
   pending = /* @__PURE__ */ new Map();
+  desiredContext = null;
   getSnapshot = () => this.ui;
   subscribe = (listener) => {
     this.listeners.add(listener);
@@ -4351,9 +4876,13 @@ var LumiStageClient = class {
       entry.reject(new Error("LumiStage unloaded."));
     }
     this.pending.clear();
+    this.ui = { ...this.ui, busy: false, progress: null };
     this.listeners.clear();
   }
   send(message) {
+    if (message.type === "ready" || message.type === "refresh") {
+      this.desiredContext = { chatId: message.chatId, characterId: message.characterId };
+    }
     this.ctx.sendToBackend(message);
   }
   refresh(chatId, characterId) {
@@ -4364,16 +4893,24 @@ var LumiStageClient = class {
     this.emit({ notice: { tone, message } });
     this.dismissTimer = setTimeout(() => this.emit({ notice: null }), 6500);
   }
-  request(message, timeoutMs = 12e4) {
-    this.emit({ busy: true });
+  request(message, timeoutMs = 6e4) {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(message.requestId);
-        this.emit({ busy: false });
+        this.emit({ busy: this.pending.size > 0, progress: null });
         reject(new Error("LumiStage request timed out."));
       }, timeoutMs);
       this.pending.set(message.requestId, { resolve, reject, timeout });
-      this.send(message);
+      this.emit({ busy: this.pending.size > 0 });
+      try {
+        this.send(message);
+      } catch (error) {
+        this.settle(
+          message.requestId,
+          null,
+          error instanceof Error ? error : new Error("Could not send the LumiStage request.")
+        );
+      }
     });
   }
   settle(requestId, value, error) {
@@ -4387,15 +4924,70 @@ var LumiStageClient = class {
   }
   receive(message) {
     if (message.type === "state") {
-      this.emit({ backend: message.state });
+      const desired = this.desiredContext;
+      if (desired && (message.state.activeChatId !== desired.chatId || desired.characterId !== null && message.state.activeCharacterId !== desired.characterId && message.state.stageProfiles.some((profile2) => profile2.characterId === desired.characterId))) {
+        if (message.state.settings.revision >= this.ui.backend.settings.revision) {
+          this.emit({
+            backend: {
+              ...this.ui.backend,
+              settings: message.state.settings,
+              connections: message.state.connections,
+              permissions: message.state.permissions
+            }
+          });
+        }
+        return;
+      }
+      const current = this.ui.backend;
+      const currentProfiles = new Map(current.stageProfiles.map((profile2) => [profile2.characterId, profile2]));
+      const stageProfiles = message.state.stageProfiles.map((profile2) => {
+        const existing = currentProfiles.get(profile2.characterId);
+        return existing && existing.revision > profile2.revision ? existing : profile2;
+      });
+      const profile = message.state.profile ? stageProfiles.find((entry) => entry.characterId === message.state.profile?.characterId) ?? message.state.profile : null;
+      const timeline = current.timeline && message.state.timeline && current.timeline.chatId === message.state.timeline.chatId && current.timeline.revision > message.state.timeline.revision ? current.timeline : message.state.timeline;
+      const validVariantIds = new Set(stageProfiles.flatMap(
+        (entry) => entry.outfits.flatMap(
+          (outfit) => outfit.expressions.flatMap((expression) => expression.variants.map((variant) => variant.id))
+        )
+      ));
+      const variantViews = Object.fromEntries(
+        Object.entries(message.state.variantViews).filter(([variantId]) => validVariantIds.has(variantId))
+      );
+      this.emit({
+        backend: {
+          ...message.state,
+          settings: current.settings.revision > message.state.settings.revision ? current.settings : message.state.settings,
+          profile,
+          stageProfiles,
+          timeline,
+          snapshot: timeline?.snapshot ?? null,
+          variantViews
+        }
+      });
       return;
     }
     if (message.type === "profile") {
-      const stageProfiles = this.ui.backend.stageProfiles.some((profile) => profile.characterId === message.profile.characterId) ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === message.profile.characterId ? message.profile : profile) : [...this.ui.backend.stageProfiles, message.profile];
-      this.emit({ backend: { ...this.ui.backend, profile: message.profile, stageProfiles, variantViews: { ...this.ui.backend.variantViews, ...message.variantViews } } });
+      const existing = this.ui.backend.stageProfiles.find((profile) => profile.characterId === message.profile.characterId);
+      const accepted = existing && existing.revision > message.profile.revision ? existing : message.profile;
+      const stageProfiles = this.ui.backend.stageProfiles.some((profile) => profile.characterId === accepted.characterId) ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === accepted.characterId ? accepted : profile) : [...this.ui.backend.stageProfiles, accepted];
+      const isActive = this.ui.backend.activeCharacterId === accepted.characterId || this.ui.backend.profile?.characterId === accepted.characterId;
+      this.emit({
+        backend: {
+          ...this.ui.backend,
+          profile: isActive ? accepted : this.ui.backend.profile,
+          stageProfiles,
+          variantViews: pruneVariantViews(
+            stageProfiles,
+            { ...this.ui.backend.variantViews, ...message.variantViews }
+          )
+        }
+      });
       return;
     }
     if (message.type === "snapshot") {
+      if (this.ui.backend.timeline?.chatId && this.ui.backend.timeline.chatId !== message.timeline.chatId) return;
+      if (this.ui.backend.timeline?.chatId === message.timeline.chatId && this.ui.backend.timeline.revision > message.timeline.revision) return;
       this.emit({
         backend: {
           ...this.ui.backend,
@@ -4406,8 +4998,8 @@ var LumiStageClient = class {
       });
       return;
     }
-    if (message.type === "saved") {
-      this.settle(message.requestId, message.revision);
+    if (message.type === "operation-complete") {
+      this.settle(message.requestId, message.result ?? message.revision ?? true);
       return;
     }
     if (message.type === "import-progress") {
@@ -4417,9 +5009,16 @@ var LumiStageClient = class {
     if (message.type === "import-complete") {
       const stageProfiles = this.ui.backend.stageProfiles.some((profile) => profile.characterId === message.profile.characterId) ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === message.profile.characterId ? message.profile : profile) : [...this.ui.backend.stageProfiles, message.profile];
       this.emit({
-        backend: { ...this.ui.backend, profile: message.profile, stageProfiles, variantViews: { ...this.ui.backend.variantViews, ...message.variantViews } }
+        backend: {
+          ...this.ui.backend,
+          profile: this.ui.backend.activeCharacterId === message.profile.characterId || this.ui.backend.profile?.characterId === message.profile.characterId ? message.profile : this.ui.backend.profile,
+          stageProfiles,
+          variantViews: pruneVariantViews(
+            stageProfiles,
+            { ...this.ui.backend.variantViews, ...message.variantViews }
+          )
+        }
       });
-      this.settle(message.requestId, message);
       const suffix = message.errors.length ? ` ${message.errors.length} file(s) need attention.` : "";
       this.notify("success", `Imported ${message.imported} media file(s); skipped ${message.skipped}.${suffix}`);
       return;
@@ -4429,7 +5028,6 @@ var LumiStageClient = class {
       return;
     }
     if (message.type === "diagnostics") {
-      this.settle(message.requestId, message.report);
       return;
     }
     if (message.type === "notice") {
@@ -4444,23 +5042,25 @@ var LumiStageClient = class {
   }
   async saveSettings(settings) {
     const requestId = createId("save");
-    await this.request({
+    const result = await this.request({
       type: "save-settings",
       requestId,
       settings,
-      expectedRevision: this.ui.backend.settings.revision
+      expectedRevision: settings.revision
     });
     this.refresh(this.ui.backend.activeChatId, this.ui.backend.activeCharacterId);
+    return result.settings ?? { ...settings, revision: settings.revision + 1 };
   }
   async saveProfile(profile) {
     const requestId = createId("save");
-    await this.request({
+    const revision = await this.request({
       type: "save-profile",
       requestId,
       profile,
-      expectedRevision: this.ui.backend.profile?.revision ?? profile.revision
+      expectedRevision: profile.revision
     });
     this.refresh(this.ui.backend.activeChatId, profile.characterId);
+    return revision;
   }
   effectiveAppearance() {
     return {
@@ -4502,16 +5102,24 @@ var LumiStageClient = class {
     const requestId = createId("manual");
     await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
-  analyzeNow() {
+  async analyzeNow() {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) {
       this.notify("warning", "Open a chat before running detection.");
       return;
     }
-    this.send({ type: "analyze-now", requestId: createId("analyze"), chatId });
+    await this.request({ type: "analyze-now", requestId: createId("analyze"), chatId });
   }
-  uploadFile(file, onProgress) {
+  uploadFile(file, onProgress, timeoutMs = 10 * 6e4) {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeout = null;
+      const finish = (operation) => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        operation();
+      };
       const upload = new Upload(file, {
         endpoint: "/api/v1/spindle-uploads",
         chunkSize: 16 * 1024 * 1024,
@@ -4519,51 +5127,111 @@ var LumiStageClient = class {
         removeFingerprintOnSuccess: true,
         metadata: { filename: file.name, extension: "lumi_stage" },
         onProgress,
-        onError: (error) => reject(error),
+        onError: (error) => finish(() => reject(error)),
         onSuccess: () => {
           const uploadId = (upload.url ?? "").split("/").filter(Boolean).pop();
-          if (uploadId) resolve(uploadId);
-          else reject(new Error("Upload completed without an upload ID."));
+          if (uploadId) finish(() => resolve(uploadId));
+          else finish(() => reject(new Error("Upload completed without an upload ID.")));
         }
       });
+      timeout = setTimeout(() => {
+        void upload.abort(true).catch(() => void 0);
+        finish(() => reject(new Error("LumiStage media upload timed out.")));
+      }, Math.max(1, timeoutMs));
       upload.start();
     });
   }
-  async importFiles(files, layout, targetOutfitId, targetExpressionId) {
-    const characterId = this.ui.backend.profile?.characterId ?? this.ui.backend.activeCharacterId;
+  async importFiles(files, baseProfile, layout, targetOutfitId, targetExpressionId) {
+    const characterId = baseProfile.characterId;
     if (!characterId) throw new Error("Choose a character before importing media.");
-    if (!files.length) return;
-    this.emit({ busy: true, progress: { completed: 0, total: files.length, message: "Uploading media\u2026" } });
-    const uploadIds = [];
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      const uploadId = await this.uploadFile(file, (sent, total) => {
-        this.emit({
-          progress: {
-            completed: index + (total ? sent / total : 0),
-            total: files.length,
-            message: `Uploading ${file.name}\u2026`
-          }
-        });
-      });
-      uploadIds.push(uploadId);
+    if (!files.length) return baseProfile;
+    if (files.some((file) => /\.lumistage\.zip$|\.zip$/i.test(file.name))) {
+      throw new Error("Archives cannot be mixed with media imports. Use Restore archive instead.");
     }
-    const requestId = createId("import");
-    await this.request({
-      type: "import-assets",
-      requestId,
-      characterId,
-      uploadIds,
-      layout,
-      targetOutfitId,
-      targetExpressionId
-    }, 10 * 6e4);
+    this.emit({ busy: true, progress: { completed: 0, total: files.length, message: "Uploading media\u2026" } });
+    const uploads = [];
+    const deadline = Date.now() + 10 * 6e4;
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const uploadId = await this.uploadFile(file, (sent, total) => {
+          this.emit({
+            progress: {
+              completed: index + (total ? sent / total : 0),
+              total: files.length,
+              message: `Uploading ${file.name}\u2026`
+            }
+          });
+        }, deadline - Date.now());
+        uploads.push({ id: uploadId, relativePath: file.webkitRelativePath || file.name });
+      }
+      const requestId = createId("import");
+      const result = await this.request({
+        type: "import-assets",
+        requestId,
+        characterId,
+        uploads,
+        baseProfile: structuredClone(baseProfile),
+        expectedRevision: baseProfile.revision,
+        layout,
+        targetOutfitId,
+        targetExpressionId
+      }, Math.max(1, deadline - Date.now()));
+      return result.profile ?? this.ui.backend.stageProfiles.find((profile) => profile.characterId === characterId) ?? baseProfile;
+    } catch (error) {
+      this.emit({ busy: this.pending.size > 0, progress: null });
+      if (uploads.length) {
+        const requestId = createId("discard");
+        await this.request({
+          type: "discard-uploads",
+          requestId,
+          uploadIds: uploads.map((upload) => upload.id)
+        }).catch(() => void 0);
+      }
+      throw error;
+    }
   }
   async deleteVariants(variantIds) {
     const characterId = this.ui.backend.profile?.characterId;
     if (!characterId || !variantIds.length) return;
     const requestId = createId("delete");
-    await this.request({ type: "delete-variants", requestId, characterId, variantIds });
+    await this.request({
+      type: "delete-variants",
+      requestId,
+      characterId,
+      variantIds,
+      expectedRevision: this.ui.backend.profile?.revision ?? 0
+    });
+  }
+  async restoreArchive(file, profile) {
+    if (!/\.lumistage\.zip$/i.test(file.name)) throw new Error("Choose exactly one .lumistage.zip archive.");
+    this.emit({ busy: true, progress: { completed: 0, total: 1, message: "Uploading archive\u2026" } });
+    let id = null;
+    const deadline = Date.now() + 10 * 6e4;
+    try {
+      id = await this.uploadFile(file, (sent, total) => this.emit({
+        progress: { completed: total ? sent / total : 0, total: 1, message: `Uploading ${file.name}\u2026` }
+      }), deadline - Date.now());
+      const result = await this.request({
+        type: "restore-archive",
+        requestId: createId("restore"),
+        characterId: profile.characterId,
+        upload: { id, relativePath: file.name },
+        expectedRevision: profile.revision,
+        confirmed: true
+      }, Math.max(1, deadline - Date.now()));
+      return result.profile ?? profile;
+    } catch (error) {
+      this.emit({ busy: this.pending.size > 0, progress: null });
+      if (id) {
+        await this.request({
+          type: "discard-uploads",
+          requestId: createId("discard"),
+          uploadIds: [id]
+        }).catch(() => void 0);
+      }
+      throw error;
+    }
   }
   async exportProfile() {
     const characterId = this.ui.backend.profile?.characterId;
@@ -4577,19 +5245,37 @@ var LumiStageClient = class {
         "manifest.json": strToU8(JSON.stringify(archive, null, 2))
       };
       const paths2 = Object.keys(urls);
+      const referencedPaths = new Set(archive.variants.map((variant) => variant.path));
+      if (paths2.length !== referencedPaths.size || paths2.some((path) => !referencedPaths.has(path))) {
+        throw new Error("Export is missing one or more referenced media URLs.");
+      }
+      if (paths2.length + 1 > MAX_ENTRY_COUNT) {
+        throw new Error(`Export contains more than ${MAX_ENTRY_COUNT} files.`);
+      }
+      let totalBytes = entries["manifest.json"].byteLength;
       for (let index = 0; index < paths2.length; index += 1) {
         const path = paths2[index];
         this.emit({ progress: { completed: index, total: paths2.length, message: `Collecting ${path}\u2026` } });
         const response = await fetch(urls[path], { credentials: "include" });
         if (!response.ok) throw new Error(`Could not export ${path}.`);
         entries[path] = new Uint8Array(await response.arrayBuffer());
+        totalBytes += entries[path].byteLength;
+        if (totalBytes > MAX_EXPANDED_BYTES) {
+          throw new Error(`Export exceeds ${MAX_EXPANDED_BYTES} uncompressed bytes.`);
+        }
       }
-      const blob = new Blob([zipSync(entries, { level: 6 })], { type: "application/zip" });
+      this.emit({ progress: { completed: paths2.length, total: paths2.length, message: "Compressing archive\u2026" } });
+      const compressed = await new Promise((resolve, reject) => {
+        zip(entries, { level: 6 }, (error, data) => error ? reject(error) : resolve(data));
+      });
+      const blob = new Blob([compressed], { type: "application/zip" });
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = href;
       anchor.download = `${archive.profile.characterName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "character"}.lumistage.zip`;
+      document.body.append(anchor);
       anchor.click();
+      anchor.remove();
       setTimeout(() => URL.revokeObjectURL(href), 3e4);
       this.settle(requestId, true);
       this.notify("success", "LumiStage archive exported.");
@@ -4902,6 +5588,15 @@ function D2(n2, t3) {
 }
 
 // src/ui/host-controls.tsx
+var mountedPortalSelects = 0;
+function retainPortalGuard() {
+  mountedPortalSelects += 1;
+  document.body.classList.add("ls-host-select-portals");
+  return () => {
+    mountedPortalSelects = Math.max(0, mountedPortalSelects - 1);
+    if (mountedPortalSelects === 0) document.body.classList.remove("ls-host-select-portals");
+  };
+}
 function HostSwitch(props) {
   const root = A2(null);
   const handle = A2(null);
@@ -4937,6 +5632,7 @@ function HostSelect(props) {
   latest.current = props;
   h2(() => {
     if (!root.current) return;
+    const releasePortalGuard = retainPortalGuard();
     handle.current = props.client.ctx.components.mountSelect(root.current, {
       value: props.value,
       options: props.options,
@@ -4953,6 +5649,7 @@ function HostSelect(props) {
     return () => {
       handle.current?.destroy();
       handle.current = null;
+      releasePortalGuard();
     };
   }, [props.client]);
   h2(() => {
@@ -5130,27 +5827,59 @@ function Media(props) {
 }
 function useStableMedia(src, kind) {
   const [displayed, setDisplayed] = d2(src);
+  const [failed, setFailed] = d2(null);
   h2(() => {
-    if (!src || src === displayed) return;
+    if (!src) {
+      setDisplayed(null);
+      setFailed(null);
+      return;
+    }
+    if (src === failed) {
+      setDisplayed(null);
+      return;
+    }
+    if (src === displayed) return;
     if (kind === "image") {
       const image = new Image();
-      image.onload = () => setDisplayed(src);
+      image.onload = () => {
+        setFailed(null);
+        setDisplayed(src);
+      };
+      image.onerror = () => {
+        setFailed(src);
+        setDisplayed(null);
+      };
       image.src = src;
       return () => {
         image.onload = null;
+        image.onerror = null;
       };
     }
     const video = document.createElement("video");
     video.muted = true;
-    video.oncanplay = () => setDisplayed(src);
+    video.oncanplay = () => {
+      setFailed(null);
+      setDisplayed(src);
+    };
+    video.onerror = () => {
+      setFailed(src);
+      setDisplayed(null);
+    };
     video.src = src;
     video.load();
     return () => {
       video.oncanplay = null;
+      video.onerror = null;
       video.src = "";
     };
-  }, [src, kind, displayed]);
-  return displayed;
+  }, [src, kind, displayed, failed]);
+  return {
+    src: displayed,
+    clear: () => {
+      setFailed(src);
+      setDisplayed(null);
+    }
+  };
 }
 
 // src/ui/primitives.tsx
@@ -5269,7 +5998,7 @@ function showTextPrompt(client, options, onSubmit) {
   R(/* @__PURE__ */ u2(Prompt, {}), modal.root);
   modal.onDismiss(() => R(null, modal.root));
 }
-function showImportModal(client, profile, target) {
+function showImportModal(client, profile, target, onComplete) {
   const modal = client.ctx.ui.showModal({
     title: "Import LumiStage media",
     width: 720,
@@ -5292,9 +6021,14 @@ function showImportModal(client, profile, target) {
     }), [files, layout]);
     async function start() {
       if (!files.length || busy) return;
+      if (!profile) {
+        client.notify("error", "Choose a character before importing media.");
+        return;
+      }
       setBusy(true);
       try {
-        await client.importFiles(files, layout, target?.outfitId, target?.expressionId);
+        const saved = await client.importFiles(files, profile, layout, target?.outfitId, target?.expressionId);
+        onComplete?.(saved);
         modal.dismiss();
       } catch (error) {
         client.notify("error", error instanceof Error ? error.message : "Import failed.");
@@ -5303,7 +6037,7 @@ function showImportModal(client, profile, target) {
     }
     function accept(next) {
       setFiles(Array.from(next).filter(
-        (file) => /\.(?:zip|png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name)
+        (file) => /\.(?:png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name)
       ));
     }
     return /* @__PURE__ */ u2("div", { class: "ls-import-modal", children: [
@@ -5329,13 +6063,13 @@ function showImportModal(client, profile, target) {
               {
                 type: "file",
                 multiple: true,
-                accept: ".zip,.png,.jpg,.jpeg,.webp,.gif,.webm,.mp4",
+                accept: ".png,.jpg,.jpeg,.webp,.gif,.webm,.mp4",
                 onChange: (event) => event.currentTarget.files && accept(event.currentTarget.files)
               }
             ),
             /* @__PURE__ */ u2("span", { class: "ls-dropzone-mark", children: /* @__PURE__ */ u2(Icon, { name: "upload", size: 26 }) }),
-            /* @__PURE__ */ u2("strong", { children: files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop sprites, video, or a LumiStage archive" }),
-            /* @__PURE__ */ u2("p", { children: "PNG, JPEG, WebP, GIF, muted WebM, muted MP4, or `.lumistage.zip`" }),
+            /* @__PURE__ */ u2("strong", { children: files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop sprites or video" }),
+            /* @__PURE__ */ u2("p", { children: "PNG, JPEG, WebP, GIF, muted WebM, or muted MP4. Archives use Restore." }),
             /* @__PURE__ */ u2(Button, { icon: "plus", children: "Choose files" })
           ]
         }
@@ -5361,10 +6095,10 @@ function showImportModal(client, profile, target) {
           }
         ),
         files.length > 0 && /* @__PURE__ */ u2("div", { class: "ls-mapping-preview", children: [
-          preview.map((path) => /* @__PURE__ */ u2("div", { children: [
+          preview.map((path, index) => /* @__PURE__ */ u2("div", { children: [
             /* @__PURE__ */ u2(Icon, { name: "image", size: 14 }),
             /* @__PURE__ */ u2("span", { children: path })
-          ] })),
+          ] }, `${path}-${index}`)),
           files.length > preview.length && /* @__PURE__ */ u2("small", { children: [
             "+ ",
             files.length - preview.length,
@@ -5394,8 +6128,131 @@ function showImportModal(client, profile, target) {
   R(/* @__PURE__ */ u2(Importer, {}), modal.root);
   modal.onDismiss(() => R(null, modal.root));
 }
+async function previewArchive(file) {
+  if (file.size > MAX_ARCHIVE_BYTES) throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const entries = await new Promise((resolve, reject) => {
+    unzip(bytes, {
+      filter: (entry) => entry.name.replace(/\\/g, "/").replace(/^\/+/, "") === "manifest.json"
+    }, (error, result) => error ? reject(error) : resolve(result));
+  });
+  const manifestBytes = entries["manifest.json"];
+  if (!manifestBytes) throw new Error("The archive does not contain manifest.json.");
+  const manifest = JSON.parse(strFromU8(manifestBytes));
+  if (manifest.kind !== "lumistage-archive" || !manifest.profile) {
+    throw new Error("This is not a supported LumiStage archive.");
+  }
+  const outfits = manifest.profile.outfits ?? [];
+  return {
+    outfits: outfits.length,
+    expressions: outfits.reduce((sum, outfit) => sum + (outfit.expressions?.length ?? 0), 0),
+    variants: outfits.reduce(
+      (sum, outfit) => sum + (outfit.expressions ?? []).reduce(
+        (expressionSum, expression) => expressionSum + (expression.variants?.length ?? 0),
+        0
+      ),
+      0
+    )
+  };
+}
+function showRestoreArchiveModal(client, profile, onComplete) {
+  const modal = client.ctx.ui.showModal({
+    title: "Restore LumiStage archive",
+    width: 620,
+    maxHeight: 700,
+    persistent: true
+  });
+  function RestoreArchive() {
+    const [file, setFile] = d2(null);
+    const [preview, setPreview] = d2(null);
+    const [confirmed, setConfirmed] = d2(false);
+    const [busy, setBusy] = d2(false);
+    async function choose(next) {
+      setFile(null);
+      setPreview(null);
+      setConfirmed(false);
+      if (!next) return;
+      if (!/\.lumistage\.zip$/i.test(next.name)) {
+        client.notify("error", "Choose exactly one .lumistage.zip archive.");
+        return;
+      }
+      try {
+        setPreview(await previewArchive(next));
+        setFile(next);
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Could not inspect the archive.");
+      }
+    }
+    async function restore() {
+      if (!file || !preview || !confirmed || busy) return;
+      setBusy(true);
+      try {
+        const saved = await client.restoreArchive(file, profile);
+        onComplete?.(saved);
+        modal.dismiss();
+        client.notify("success", "LumiStage archive restored.");
+      } catch (error) {
+        client.notify("error", error instanceof Error ? error.message : "Archive restore failed.");
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ u2("div", { class: "ls-import-modal", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-dropzone", children: [
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            type: "file",
+            accept: ".lumistage.zip",
+            onChange: (event) => void choose(event.currentTarget.files?.[0] ?? null)
+          }
+        ),
+        /* @__PURE__ */ u2("span", { class: "ls-dropzone-mark", children: /* @__PURE__ */ u2(Icon, { name: "upload", size: 26 }) }),
+        /* @__PURE__ */ u2("strong", { children: file?.name ?? "Choose one LumiStage archive" }),
+        /* @__PURE__ */ u2("p", { children: "Restore replaces this character\u2019s entire profile after validation." }),
+        /* @__PURE__ */ u2(Button, { icon: "plus", children: "Choose archive" })
+      ] }),
+      preview && /* @__PURE__ */ u2("section", { class: "ls-import-mapping", children: [
+        /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Archive preview" }),
+        /* @__PURE__ */ u2("h3", { children: [
+          preview.outfits,
+          " outfits \xB7 ",
+          preview.expressions,
+          " expressions \xB7 ",
+          preview.variants,
+          " variants"
+        ] }),
+        /* @__PURE__ */ u2("label", { class: "ls-check-row", children: [
+          /* @__PURE__ */ u2(
+            "input",
+            {
+              type: "checkbox",
+              checked: confirmed,
+              onChange: (event) => setConfirmed(event.currentTarget.checked)
+            }
+          ),
+          /* @__PURE__ */ u2("span", { children: "I understand this replaces the current character profile." })
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls-modal-actions", children: [
+        /* @__PURE__ */ u2(Button, { variant: "ghost", onClick: () => modal.dismiss(), children: "Cancel" }),
+        /* @__PURE__ */ u2(
+          Button,
+          {
+            variant: "primary",
+            icon: "upload",
+            disabled: !file || !preview || !confirmed || busy,
+            onClick: () => void restore(),
+            children: busy ? "Restoring\u2026" : "Restore archive"
+          }
+        )
+      ] })
+    ] });
+  }
+  R(/* @__PURE__ */ u2(RestoreArchive, {}), modal.root);
+  modal.onDismiss(() => R(null, modal.root));
+}
 function firstVariant(expression) {
-  return expression ? [...expression.variants].sort((a3, b2) => a3.order - b2.order)[0] ?? null : null;
+  return expression ? [...expression.variants].sort((a3, b3) => a3.order - b3.order)[0] ?? null : null;
 }
 function showQuickPicker(client) {
   const modal = client.ctx.ui.showModal({ title: "Direct LumiStage", width: 900, maxHeight: 860 });
@@ -5544,7 +6401,8 @@ function showQuickPicker(client) {
                 ] }),
                 item.id === expression?.id && /* @__PURE__ */ u2("i", { children: /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) })
               ]
-            }
+            },
+            item.id
           );
         }) }),
         /* @__PURE__ */ u2("aside", { class: "ls-picker-variants", children: [
@@ -5571,7 +6429,8 @@ function showQuickPicker(client) {
                   ),
                   /* @__PURE__ */ u2("span", { children: variant.fileName })
                 ]
-              }
+              },
+              variant.id
             );
           }) })
         ] })
@@ -5602,10 +6461,11 @@ function showQuickPicker(client) {
 function StageCharacter({ state, client }) {
   const { backend } = useClientState(client);
   const view = state.variantId ? backend.variantViews[state.variantId] : null;
-  const src = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
+  const media = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
+  const appearance = client.effectiveAppearance();
   return /* @__PURE__ */ u2("figure", { class: "ls-stage-character", "data-focused": state.focused, children: [
-    /* @__PURE__ */ u2("div", { class: "ls-stage-character-frame", children: src && (view?.mediaKind === "video" ? /* @__PURE__ */ u2("video", { src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": state.label }, src) : /* @__PURE__ */ u2("img", { src, alt: state.label, draggable: false }, src)) }),
-    backend.settings.appearance.showCaptions && /* @__PURE__ */ u2("figcaption", { children: [
+    /* @__PURE__ */ u2("div", { class: "ls-stage-character-frame", children: media.src && (view?.mediaKind === "video" ? /* @__PURE__ */ u2("video", { src: media.src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": state.label, onError: media.clear }, media.src) : /* @__PURE__ */ u2("img", { src: media.src, alt: state.label, draggable: false, onError: media.clear }, media.src)) }),
+    appearance.showCaptions && /* @__PURE__ */ u2("figcaption", { children: [
       /* @__PURE__ */ u2("strong", { children: state.label.split(" \xB7 ")[0] }),
       /* @__PURE__ */ u2("span", { children: state.label.split(" \xB7 ").slice(1).join(" / ") })
     ] })
@@ -5614,7 +6474,11 @@ function StageCharacter({ state, client }) {
 function Stage(props) {
   const { backend } = useClientState(props.client);
   const appearance = props.client.effectiveAppearance();
-  const characters = Object.values(backend.snapshot?.characters ?? {}).filter((character) => !!character.variantId).sort((a3, b2) => Number(a3.focused) - Number(b2.focused));
+  const resizeCleanup = A2(null);
+  h2(() => () => resizeCleanup.current?.(), []);
+  const characters = Object.values(backend.snapshot?.characters ?? {}).filter(
+    (character) => !!character.variantId && !!backend.variantViews[character.variantId]?.url
+  ).sort((a3, b3) => Number(a3.focused) - Number(b3.focused));
   const style = {
     "--ls2-stage-opacity": appearance.opacity,
     "--ls2-stage-transition": `${appearance.transitionMs}ms`,
@@ -5636,12 +6500,18 @@ function Stage(props) {
       height = Math.max(240, Math.min(1e3, Math.round(startHeight + next.clientY - startY)));
       props.onResize(width, height, false);
     };
-    const end = () => {
+    resizeCleanup.current?.();
+    const cleanup = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
+      if (resizeCleanup.current === cleanup) resizeCleanup.current = null;
+    };
+    const end = () => {
+      cleanup();
       props.onResize(width, height, true);
     };
+    resizeCleanup.current = cleanup;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end, { once: true });
     window.addEventListener("pointercancel", end, { once: true });
@@ -5669,7 +6539,7 @@ function Stage(props) {
 
 // src/ui/studio.tsx
 function firstVariant2(expression) {
-  return expression ? [...expression.variants].sort((a3, b2) => a3.order - b2.order)[0] ?? null : null;
+  return expression ? [...expression.variants].sort((a3, b3) => a3.order - b3.order)[0] ?? null : null;
 }
 function selectedOutfit(profile, outfitId) {
   return profile?.outfits.find((item) => item.id === outfitId) ?? profile?.outfits.find((item) => item.id === profile.defaultOutfitId) ?? profile?.outfits[0] ?? null;
@@ -5790,7 +6660,7 @@ function DrawerDashboard(props) {
         "button",
         {
           type: "button",
-          onClick: () => void props.client.saveAppearance({ visible: !appearance.visible }),
+          onClick: () => void props.client.saveAppearance({ visible: !appearance.visible }).catch(() => void 0),
           children: [
             /* @__PURE__ */ u2(Icon, { name: appearance.visible ? "eyeOff" : "eye", size: 16 }),
             /* @__PURE__ */ u2("span", { children: appearance.visible ? "Hide floating stage" : "Show floating stage" })
@@ -5802,7 +6672,7 @@ function DrawerDashboard(props) {
         {
           type: "button",
           disabled: !backend.activeChatId,
-          onClick: () => props.client.analyzeNow(),
+          onClick: () => void props.client.analyzeNow().catch(() => void 0),
           children: [
             /* @__PURE__ */ u2(Icon, { name: "refresh", size: 16 }),
             /* @__PURE__ */ u2("span", { children: "Analyze current reply" })
@@ -5927,7 +6797,7 @@ function VariantTray(props) {
           onClick: () => showImportModal(props.client, props.profile, {
             outfitId: props.outfit.id,
             expressionId: props.expression.id
-          }),
+          }, props.acceptCommitted),
           children: "Add variants"
         }
       ),
@@ -5999,7 +6869,7 @@ function VariantTray(props) {
             /* @__PURE__ */ u2(IconButton, { icon: "chevronRight", label: "Move variant later", disabled: index === props.expression.variants.length - 1, onClick: () => reorder(variant.id, 1) }),
             /* @__PURE__ */ u2(IconButton, { icon: "trash", label: "Remove variant", danger: true, onClick: () => void removeVariant(variant) })
           ] })
-        ] });
+        ] }, variant.id);
       }),
       !props.expression.variants.length && /* @__PURE__ */ u2("div", { class: "ls-tray-empty", children: [
         /* @__PURE__ */ u2(Icon, { name: "image", size: 20 }),
@@ -6101,7 +6971,8 @@ function LibraryView(props) {
     return !needle || expression.name.toLocaleLowerCase().includes(needle) || expression.variants.some((variant) => variant.fileName.toLocaleLowerCase().includes(needle));
   }), [outfit, query]);
   const pages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const visible = filtered.slice((page - 1) * perPage, page * perPage);
+  const clampedPage = Math.min(page, pages);
+  const visible = filtered.slice((clampedPage - 1) * perPage, clampedPage * perPage);
   const inspected = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
   h2(() => {
     if (!props.profile.outfits.some((item) => item.id === outfitId)) {
@@ -6109,6 +6980,7 @@ function LibraryView(props) {
     }
   }, [props.profile.revision, props.profile.outfits.length, outfitId]);
   h2(() => setPage(1), [outfitId, query, perPage]);
+  h2(() => setPage((current) => Math.min(current, pages)), [pages]);
   h2(() => {
     setSelected(/* @__PURE__ */ new Set());
     setBatchMode(false);
@@ -6193,6 +7065,10 @@ function LibraryView(props) {
     });
   }
   function runBatch(mutation) {
+    if (mutation.type !== "delete" && !props.profile.outfits.some((candidate) => candidate.id === mutation.outfitId)) {
+      props.client.notify("error", "Choose a valid destination outfit.");
+      return;
+    }
     props.replace(applyBatchMutation(props.profile, mutation));
     setSelected(/* @__PURE__ */ new Set());
     if (mutation.type === "delete") setExpressionId("");
@@ -6230,7 +7106,8 @@ function LibraryView(props) {
             ] }),
             props.profile.defaultOutfitId === item.id && /* @__PURE__ */ u2("i", { children: "Default" })
           ]
-        }
+        },
+        item.id
       )) }),
       /* @__PURE__ */ u2("div", { class: "ls-outfit-rail-foot", children: /* @__PURE__ */ u2("span", { children: [
         /* @__PURE__ */ u2(Icon, { name: "move", size: 13 }),
@@ -6303,7 +7180,12 @@ function LibraryView(props) {
               size: "small",
               icon: "upload",
               variant: "primary",
-              onClick: () => showImportModal(props.client, props.profile, { outfitId: outfit?.id }),
+              onClick: () => showImportModal(
+                props.client,
+                props.profile,
+                { outfitId: outfit?.id },
+                props.acceptCommitted
+              ),
               children: "Import"
             }
           )
@@ -6347,7 +7229,8 @@ function LibraryView(props) {
             stop(event);
             reorderExpression(event.dataTransfer?.getData("text/lumistage-expression") ?? "", expression.id);
           }
-        }
+        },
+        expression.id
       )) }) : /* @__PURE__ */ u2(
         EmptyState,
         {
@@ -6381,6 +7264,7 @@ function LibraryView(props) {
         outfit,
         expression: inspected,
         update: props.update,
+        acceptCommitted: props.acceptCommitted,
         close: () => setExpressionId("")
       }
     )
@@ -6398,7 +7282,7 @@ function LiveStageView({ client }) {
         title: "Live Stage",
         description: "The resolved visual state for the current chat, including exact sprite variants and locks.",
         actions: /* @__PURE__ */ u2(Toolbar, { children: [
-          /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => client.analyzeNow(), children: "Analyze now" }),
+          /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => void client.analyzeNow().catch(() => void 0), children: "Analyze now" }),
           /* @__PURE__ */ u2(Button, { icon: "sparkles", variant: "primary", disabled: !backend.activeChatId, onClick: () => showQuickPicker(client), children: "Direct stage" })
         ] })
       }
@@ -6432,7 +7316,7 @@ function LiveStageView({ client }) {
               ] })
             ] })
           ] })
-        ] });
+        ] }, state.characterId);
       }),
       !characters.length && /* @__PURE__ */ u2(
         EmptyState,
@@ -6450,8 +7334,8 @@ function LiveStageView({ client }) {
           /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Floating stage" }),
           /* @__PURE__ */ u2("h3", { children: "Presentation" })
         ] }),
-        /* @__PURE__ */ u2(SettingRow, { title: "Stage visibility", description: "Show the resizable sprite stage over the chat.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage visibility", checked: appearance.visible, onChange: (visible) => void client.saveAppearance({ visible }) }) }),
-        /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show character, outfit, and expression beneath each sprite.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage captions", checked: appearance.showCaptions, onChange: (showCaptions) => void client.saveAppearance({ showCaptions }) }) })
+        /* @__PURE__ */ u2(SettingRow, { title: "Stage visibility", description: "Show the resizable sprite stage over the chat.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage visibility", checked: appearance.visible, onChange: (visible) => void client.saveAppearance({ visible }).catch(() => void 0) }) }),
+        /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show character, outfit, and expression beneath each sprite.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage captions", checked: appearance.showCaptions, onChange: (showCaptions) => void client.saveAppearance({ showCaptions }).catch(() => void 0) }) })
       ] }),
       /* @__PURE__ */ u2("section", { children: [
         /* @__PURE__ */ u2("div", { children: [
@@ -6464,7 +7348,7 @@ function LiveStageView({ client }) {
             Button,
             {
               disabled: !backend.activeChatId,
-              onClick: () => void client.saveChatLayout({ ...appearance }),
+              onClick: () => void client.saveChatLayout({ ...appearance }).catch(() => void 0),
               children: "Save layout for chat"
             }
           ),
@@ -6473,7 +7357,7 @@ function LiveStageView({ client }) {
             {
               variant: "ghost",
               disabled: !backend.timeline?.layoutOverride,
-              onClick: () => void client.saveChatLayout(null),
+              onClick: () => void client.saveChatLayout(null).catch(() => void 0),
               children: "Use global layout"
             }
           )
@@ -6509,7 +7393,7 @@ function DiagnosticsPanel({ client }) {
     /* @__PURE__ */ u2("div", { class: "ls-permission-grid", children: permissions.map(([name, granted]) => /* @__PURE__ */ u2("span", { "data-granted": granted, children: [
       /* @__PURE__ */ u2(Icon, { name: granted ? "success" : "warning", size: 14 }),
       name
-    ] })) }),
+    ] }, name)) }),
     /* @__PURE__ */ u2("div", { class: "ls-diagnostic-summary", children: [
       /* @__PURE__ */ u2("div", { children: [
         /* @__PURE__ */ u2("span", { children: "Detector" }),
@@ -6534,8 +7418,22 @@ function SettingsView({ client }) {
   const { backend } = useClientState(client);
   const [draft, setDraft] = d2(() => structuredClone(backend.settings));
   const [section, setSection] = d2("detection");
-  const dirty = JSON.stringify(draft) !== JSON.stringify(backend.settings);
-  h2(() => setDraft(structuredClone(backend.settings)), [backend.settings.revision]);
+  const [dirty, setDirty] = d2(false);
+  const [conflict, setConflict] = d2(false);
+  h2(() => {
+    if (backend.settings.revision === draft.revision) return;
+    if (dirty) {
+      setConflict(true);
+      return;
+    }
+    setDraft(structuredClone(backend.settings));
+    setDirty(false);
+    setConflict(false);
+  }, [backend.settings.revision, draft.revision, dirty]);
+  const edit = (settings) => {
+    setDraft(settings);
+    setDirty(true);
+  };
   const connections = [
     { value: "", label: "Use active Lumiverse connection", sublabel: "Follows the host selection" },
     ...backend.connections.map((item) => ({
@@ -6546,7 +7444,10 @@ function SettingsView({ client }) {
   ];
   async function save() {
     try {
-      await client.saveSettings(draft);
+      const saved = await client.saveSettings(draft);
+      setDraft(structuredClone(saved));
+      setDirty(false);
+      setConflict(false);
       client.notify("success", "LumiStage settings saved.");
     } catch (error) {
       client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
@@ -6559,9 +7460,18 @@ function SettingsView({ client }) {
         kicker: "Configuration",
         title: "Settings",
         description: "Connection, detection, stage presentation, archives, and health in one focused workspace.",
-        actions: /* @__PURE__ */ u2(Button, { variant: "primary", icon: "check", disabled: !dirty, onClick: () => void save(), children: "Save settings" })
+        actions: /* @__PURE__ */ u2(Button, { variant: "primary", icon: "check", disabled: !dirty || conflict, onClick: () => void save(), children: "Save settings" })
       }
     ),
+    conflict && /* @__PURE__ */ u2("div", { class: "ls-validation-note", "data-tone": "warning", children: [
+      /* @__PURE__ */ u2(Icon, { name: "warning", size: 16 }),
+      /* @__PURE__ */ u2("span", { children: "Settings changed elsewhere. Your draft is preserved; reload before editing or saving against the new revision." }),
+      /* @__PURE__ */ u2(Button, { size: "small", onClick: () => {
+        setDraft(structuredClone(backend.settings));
+        setDirty(false);
+        setConflict(false);
+      }, children: "Reload settings" })
+    ] }),
     /* @__PURE__ */ u2("div", { class: "ls-settings-layout", children: [
       /* @__PURE__ */ u2("nav", { class: "ls-settings-nav", "aria-label": "Settings sections", children: [
         /* @__PURE__ */ u2("button", { type: "button", "data-active": section === "detection", onClick: () => setSection("detection"), children: [
@@ -6600,7 +7510,7 @@ function SettingsView({ client }) {
                 client,
                 label: "Automatic detection",
                 checked: draft.detection.enabled,
-                onChange: (enabled) => setDraft({ ...draft, detection: { ...draft.detection, enabled } })
+                onChange: (enabled) => edit({ ...draft, detection: { ...draft.detection, enabled } })
               }
             )
           ] }),
@@ -6612,7 +7522,7 @@ function SettingsView({ client }) {
                 label: "LLM connection",
                 value: draft.detection.connectionId ?? "",
                 options: connections,
-                onChange: (connectionId) => setDraft({
+                onChange: (connectionId) => edit({
                   ...draft,
                   detection: { ...draft.detection, connectionId: connectionId || null, model: null }
                 })
@@ -6624,7 +7534,7 @@ function SettingsView({ client }) {
                 client,
                 value: draft.detection.model ?? "",
                 connectionId: draft.detection.connectionId,
-                onChange: (model) => setDraft({ ...draft, detection: { ...draft.detection, model: model || null } })
+                onChange: (model) => edit({ ...draft, detection: { ...draft.detection, model: model || null } })
               }
             ) })
           ] }),
@@ -6635,7 +7545,7 @@ function SettingsView({ client }) {
               value: draft.detection.contextMessages,
               min: 1,
               max: 20,
-              onChange: (contextMessages) => setDraft({ ...draft, detection: { ...draft.detection, contextMessages } })
+              onChange: (contextMessages) => edit({ ...draft, detection: { ...draft.detection, contextMessages } })
             }
           ) }),
           /* @__PURE__ */ u2(
@@ -6649,12 +7559,12 @@ function SettingsView({ client }) {
               suffix: "%",
               label: "Confidence threshold",
               hint: "Below this threshold the complete prior stage state is preserved.",
-              onChange: (confidence) => setDraft({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })
+              onChange: (confidence) => edit({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })
             }
           ),
           /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: [
             /* @__PURE__ */ u2(Button, { icon: "settings", onClick: () => client.send({ type: "open-connections" }), children: "Manage connections" }),
-            /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => client.analyzeNow(), children: "Analyze current reply" })
+            /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => void client.analyzeNow().catch(() => void 0), children: "Analyze current reply" })
           ] })
         ] }) }),
         section === "stage" && /* @__PURE__ */ u2("section", { class: "ls-settings-card", children: [
@@ -6670,7 +7580,7 @@ function SettingsView({ client }) {
                 client,
                 label: "Transition",
                 value: draft.appearance.transition,
-                onChange: (transition) => setDraft({
+                onChange: (transition) => edit({
                   ...draft,
                   appearance: { ...draft.appearance, transition }
                 }),
@@ -6689,17 +7599,17 @@ function SettingsView({ client }) {
                 min: 0,
                 max: 2e3,
                 step: 20,
-                onChange: (transitionMs) => setDraft({ ...draft, appearance: { ...draft.appearance, transitionMs } })
+                onChange: (transitionMs) => edit({ ...draft, appearance: { ...draft.appearance, transitionMs } })
               }
             ) })
           ] }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.opacity * 100), min: 10, max: 100, step: 5, suffix: "%", label: "Stage opacity", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } }) }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.idleOpacity * 100), min: 5, max: 100, step: 5, suffix: "%", label: "Unfocused character opacity", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } }) }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.focusedScale * 100), min: 80, max: 130, step: 1, suffix: "%", label: "Focused character scale", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } }) }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.ensembleOverlap * 100), min: 0, max: 80, step: 5, suffix: "%", label: "Ensemble overlap", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } }) }),
-          /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show resolved names beneath stage sprites.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Captions", checked: draft.appearance.showCaptions, onChange: (showCaptions) => setDraft({ ...draft, appearance: { ...draft.appearance, showCaptions } }) }) }),
-          /* @__PURE__ */ u2(SettingRow, { title: "Stage chrome", description: "Show the compact live header and controls.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage chrome", checked: draft.appearance.showChrome, onChange: (showChrome) => setDraft({ ...draft, appearance: { ...draft.appearance, showChrome } }) }) }),
-          /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: /* @__PURE__ */ u2(Button, { onClick: () => setDraft({
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.opacity * 100), min: 10, max: 100, step: 5, suffix: "%", label: "Stage opacity", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.idleOpacity * 100), min: 5, max: 100, step: 5, suffix: "%", label: "Unfocused character opacity", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.focusedScale * 100), min: 80, max: 130, step: 1, suffix: "%", label: "Focused character scale", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.ensembleOverlap * 100), min: 0, max: 80, step: 5, suffix: "%", label: "Ensemble overlap", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } }) }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show resolved names beneath stage sprites.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Captions", checked: draft.appearance.showCaptions, onChange: (showCaptions) => edit({ ...draft, appearance: { ...draft.appearance, showCaptions } }) }) }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Stage chrome", description: "Show the compact live header and controls.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage chrome", checked: draft.appearance.showChrome, onChange: (showChrome) => edit({ ...draft, appearance: { ...draft.appearance, showChrome } }) }) }),
+          /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: /* @__PURE__ */ u2(Button, { onClick: () => edit({
             ...draft,
             appearance: { ...draft.appearance, width: 320, height: 420, x: -1, y: -1, fullscreen: false }
           }), children: "Reset size and position" }) })
@@ -6712,7 +7622,7 @@ function SettingsView({ client }) {
               /* @__PURE__ */ u2("p", { children: "Export or restore this character\u2019s folders, expression slots, variants, and media." })
             ] }) }),
             /* @__PURE__ */ u2("div", { class: "ls-data-actions", children: [
-              /* @__PURE__ */ u2("button", { type: "button", disabled: !backend.profile, onClick: () => void client.exportProfile(), children: [
+              /* @__PURE__ */ u2("button", { type: "button", disabled: !backend.profile, onClick: () => void client.exportProfile().catch(() => void 0), children: [
                 /* @__PURE__ */ u2(Icon, { name: "download", size: 20 }),
                 /* @__PURE__ */ u2("span", { children: [
                   /* @__PURE__ */ u2("strong", { children: "Export archive" }),
@@ -6720,14 +7630,22 @@ function SettingsView({ client }) {
                 ] }),
                 /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
               ] }),
-              /* @__PURE__ */ u2("button", { type: "button", disabled: !backend.profile, onClick: () => showImportModal(client, backend.profile), children: [
-                /* @__PURE__ */ u2(Icon, { name: "upload", size: 20 }),
-                /* @__PURE__ */ u2("span", { children: [
-                  /* @__PURE__ */ u2("strong", { children: "Import archive or media" }),
-                  /* @__PURE__ */ u2("small", { children: "Validate and merge into the active character" })
-                ] }),
-                /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
-              ] })
+              /* @__PURE__ */ u2(
+                "button",
+                {
+                  type: "button",
+                  disabled: !backend.profile,
+                  onClick: () => backend.profile && showRestoreArchiveModal(client, backend.profile),
+                  children: [
+                    /* @__PURE__ */ u2(Icon, { name: "upload", size: 20 }),
+                    /* @__PURE__ */ u2("span", { children: [
+                      /* @__PURE__ */ u2("strong", { children: "Restore archive" }),
+                      /* @__PURE__ */ u2("small", { children: "Preview, confirm, and replace the active character profile" })
+                    ] }),
+                    /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
+                  ]
+                }
+              )
             ] })
           ] }),
           /* @__PURE__ */ u2(DiagnosticsPanel, { client })
@@ -6746,12 +7664,19 @@ function StudioWorkspace(props) {
   const [history, setHistory] = d2([]);
   const [future, setFuture] = d2([]);
   const [dirty, setDirty] = d2(false);
+  const [conflict, setConflict] = d2(false);
   h2(() => {
+    if (backendProfile?.characterId === draft?.characterId && backendProfile?.revision === draft?.revision) return;
+    if (dirty && backendProfile?.characterId === draft?.characterId) {
+      setConflict(true);
+      return;
+    }
     setDraft(backendProfile ? structuredClone(backendProfile) : null);
     setHistory([]);
     setFuture([]);
     setDirty(false);
-  }, [backendProfile?.characterId, backendProfile?.revision]);
+    setConflict(false);
+  }, [backendProfile?.characterId, backendProfile?.revision, draft?.characterId, draft?.revision, dirty]);
   function update(mutator) {
     if (!draft) return;
     const before = structuredClone(draft);
@@ -6769,6 +7694,13 @@ function StudioWorkspace(props) {
     setFuture([]);
     setDraft(structuredClone(profile));
     setDirty(true);
+  }
+  function acceptCommitted(profile) {
+    setDraft(structuredClone(profile));
+    setHistory([]);
+    setFuture([]);
+    setDirty(false);
+    setConflict(false);
   }
   function undo() {
     const previous = history.at(-1);
@@ -6788,6 +7720,15 @@ function StudioWorkspace(props) {
   }
   async function saveProfile() {
     if (!draft) return;
+    const blocking = inspectProfile(draft).filter((issue) => issue.severity === "error");
+    if (blocking.length) {
+      props.client.notify("error", blocking[0].message);
+      return;
+    }
+    if (conflict) {
+      props.client.notify("warning", "Reload the newer profile before saving this draft.");
+      return;
+    }
     try {
       await props.client.saveProfile(draft);
       setDirty(false);
@@ -6849,7 +7790,7 @@ function StudioWorkspace(props) {
             size: "small",
             icon: "check",
             variant: "primary",
-            disabled: !dirty || state.busy,
+            disabled: !dirty || state.busy || conflict || !!draft && inspectProfile(draft).some((issue) => issue.severity === "error"),
             onClick: () => void saveProfile(),
             children: state.busy ? "Saving\u2026" : dirty ? "Save changes" : "Saved"
           }
@@ -6857,6 +7798,11 @@ function StudioWorkspace(props) {
       ] })
     ] }),
     /* @__PURE__ */ u2("div", { class: "ls-studio-content", children: [
+      conflict && /* @__PURE__ */ u2("div", { class: "ls-validation-note", "data-tone": "warning", children: [
+        /* @__PURE__ */ u2(Icon, { name: "warning", size: 16 }),
+        /* @__PURE__ */ u2("span", { children: "The backend has a newer profile. Your unsaved Studio draft is preserved." }),
+        /* @__PURE__ */ u2(Button, { size: "small", onClick: () => backendProfile && acceptCommitted(backendProfile), children: "Reload profile" })
+      ] }),
       view === "library" && draft && /* @__PURE__ */ u2(
         LibraryView,
         {
@@ -6864,6 +7810,7 @@ function StudioWorkspace(props) {
           profile: draft,
           update,
           replace,
+          acceptCommitted,
           undo,
           redo,
           canUndo: history.length > 0,
@@ -6885,7 +7832,7 @@ function StudioWorkspace(props) {
 }
 function CharacterSetup(props) {
   const { backend, busy } = useClientState(props.client);
-  const profile = backend.profile?.characterId === props.characterId ? backend.profile : null;
+  const profile = backend.stageProfiles.find((candidate) => candidate.characterId === props.characterId) ?? (backend.profile?.characterId === props.characterId ? backend.profile : null);
   const [outfitId, setOutfitId] = d2("");
   const outfit = selectedOutfit(profile, outfitId);
   h2(() => {
@@ -6941,7 +7888,7 @@ function CharacterSetup(props) {
         /* @__PURE__ */ u2(Icon, { name: "outfit", size: 15 }),
         /* @__PURE__ */ u2("span", { children: item.name }),
         /* @__PURE__ */ u2("small", { children: item.expressions.length })
-      ] })),
+      ] }, item.id)),
       /* @__PURE__ */ u2(
         "button",
         {
@@ -7032,7 +7979,8 @@ function CharacterSetup(props) {
                 "Default"
               ] })
             ]
-          }
+          },
+          expression.id
         );
       }),
       /* @__PURE__ */ u2(
@@ -7064,6 +8012,11 @@ function CharacterSetup(props) {
 
 // src/ui/styles.ts
 var LUMI_STAGE_CSS = String.raw`
+body.ls-host-select-portals [data-spindle-component-portal],
+body.ls-host-select-portals [class*="popoverPortal"] {
+  z-index: 10005 !important;
+}
+
 :where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form, .ls-stage-root) {
   --ls-bg: var(--lumiverse-bg);
   --ls-panel: color-mix(in srgb, var(--lumiverse-bg) 93%, var(--lumiverse-text) 7%);
@@ -7655,7 +8608,7 @@ var LUMI_STAGE_CSS = String.raw`
 
 @media (max-width: 900px) {
   .ls-studio-topbar { grid-template-columns: 170px 1fr auto; }
-  .ls-character-select { display: none; }
+  .ls-character-select { min-width: 132px; max-width: 170px; }
   .ls-library-view:has(.ls-variant-tray) { grid-template-columns: 180px minmax(0, 1fr) 270px; }
   .ls-outfit-rail { grid-template-rows: 58px minmax(0, 1fr); }
   .ls-outfit-rail-foot { display: none; }
@@ -7670,6 +8623,7 @@ var LUMI_STAGE_CSS = String.raw`
   .ls-studio-topbar nav { grid-column: 1 / -1; grid-row: 2; order: 3; border-top: 1px solid var(--ls-line); }
   .ls-studio-topbar nav button { min-width: 0; flex: 1; padding: 0 8px; }
   .ls-studio-context { grid-column: 2; grid-row: 1; }
+  .ls-character-select { display: block; min-width: 120px; max-width: 150px; }
   .ls-library-view, .ls-library-view:has(.ls-variant-tray) { position: relative; display: grid; grid-template-columns: 1fr; grid-template-rows: 78px minmax(0, 1fr); }
   .ls-outfit-rail { display: block; overflow: hidden; border-right: 0; border-bottom: 1px solid var(--ls-line); }
   .ls-outfit-rail-head { height: 32px; padding: 2px 8px 0 10px; border: 0; }

@@ -115,6 +115,7 @@ export interface DecisionRecordV2 {
   messageId: string;
   swipeId: number;
   contentHash: string;
+  requestFingerprint?: string;
   decision: DetectionDecisionV2;
   provider: string | null;
   model: string | null;
@@ -211,10 +212,17 @@ export type BatchMutationV2 =
 
 export type ImportLayoutV2 = "automatic" | "outfit-expression" | "outfit-expression-variant";
 
+export interface ImportUploadV2 {
+  id: string;
+  relativePath: string;
+}
+
 export interface ImportRequestV2 {
   requestId: string;
   characterId: string;
-  uploadIds: string[];
+  uploads: ImportUploadV2[];
+  baseProfile: CharacterProfileV2;
+  expectedRevision: number;
   layout: ImportLayoutV2;
   targetOutfitId?: string;
   targetExpressionId?: string;
@@ -230,7 +238,9 @@ export type FrontendToBackend =
   | { type: "clear-manual"; requestId: string; chatId: string; characterId: string }
   | { type: "analyze-now"; requestId: string; chatId: string }
   | ({ type: "import-assets" } & ImportRequestV2)
-  | { type: "delete-variants"; requestId: string; characterId: string; variantIds: string[] }
+  | { type: "restore-archive"; requestId: string; characterId: string; upload: ImportUploadV2; expectedRevision: number; confirmed: true }
+  | { type: "discard-uploads"; requestId: string; uploadIds: string[] }
+  | { type: "delete-variants"; requestId: string; characterId: string; variantIds: string[]; expectedRevision: number }
   | { type: "request-export"; requestId: string; characterId: string }
   | { type: "request-diagnostics"; requestId: string }
   | { type: "open-connections" }
@@ -240,7 +250,7 @@ export type BackendToFrontend =
   | { type: "state"; state: FrontendState }
   | { type: "profile"; profile: CharacterProfileV2; variantViews: Record<string, VariantView> }
   | { type: "snapshot"; timeline: ChatTimelineV2; variantViews: Record<string, VariantView> }
-  | { type: "saved"; requestId: string; revision: number }
+  | { type: "operation-complete"; requestId: string; revision?: number; result?: unknown }
   | { type: "import-progress"; requestId: string; completed: number; total: number; message: string }
   | { type: "import-complete"; requestId: string; profile: CharacterProfileV2; variantViews: Record<string, VariantView>; imported: number; skipped: number; errors: string[] }
   | { type: "export-ready"; requestId: string; archive: LumiStageArchiveV2; urls: Record<string, string> }

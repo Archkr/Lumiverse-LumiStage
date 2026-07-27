@@ -28,7 +28,7 @@ import {
 } from "./host-controls";
 import { Icon } from "./icons";
 import { Media } from "./media";
-import { showImportModal, showQuickPicker, showTextPrompt } from "./modals";
+import { showImportModal, showQuickPicker, showRestoreArchiveModal, showTextPrompt } from "./modals";
 import {
   Button,
   EmptyState,
@@ -198,7 +198,7 @@ export function DrawerDashboard(props: {
       <div class="ls-drawer-utility">
         <button
           type="button"
-          onClick={() => void props.client.saveAppearance({ visible: !appearance.visible })}
+          onClick={() => void props.client.saveAppearance({ visible: !appearance.visible }).catch(() => undefined)}
         >
           <Icon name={appearance.visible ? "eyeOff" : "eye"} size={16} />
           <span>{appearance.visible ? "Hide floating stage" : "Show floating stage"}</span>
@@ -206,7 +206,7 @@ export function DrawerDashboard(props: {
         <button
           type="button"
           disabled={!backend.activeChatId}
-          onClick={() => props.client.analyzeNow()}
+          onClick={() => void props.client.analyzeNow().catch(() => undefined)}
         >
           <Icon name="refresh" size={16} />
           <span>Analyze current reply</span>
@@ -228,6 +228,7 @@ interface LibraryProps {
   profile: CharacterProfileV2;
   update: (mutator: (profile: CharacterProfileV2) => void) => void;
   replace: (profile: CharacterProfileV2) => void;
+  acceptCommitted: (profile: CharacterProfileV2) => void;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -299,6 +300,7 @@ function VariantTray(props: {
   outfit: OutfitFolderV2;
   expression: ExpressionSlotV2;
   update: LibraryProps["update"];
+  acceptCommitted: LibraryProps["acceptCommitted"];
   close: () => void;
 }) {
   const { backend } = useClientState(props.client);
@@ -360,7 +362,7 @@ function VariantTray(props: {
           onClick={() => showImportModal(props.client, props.profile, {
             outfitId: props.outfit.id,
             expressionId: props.expression.id,
-          })}
+          }, props.acceptCommitted)}
         >
           Add variants
         </Button>
@@ -380,7 +382,7 @@ function VariantTray(props: {
         {props.expression.variants.map((variant, index) => {
           const view = backend.variantViews[variant.id];
           return (
-            <div class="ls-variant-row">
+            <div key={variant.id} class="ls-variant-row">
               <button
                 type="button"
                 class="ls-variant-preview"
@@ -532,7 +534,8 @@ function LibraryView(props: LibraryProps) {
       || expression.variants.some((variant) => variant.fileName.toLocaleLowerCase().includes(needle));
   }), [outfit, query]);
   const pages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const visible = filtered.slice((page - 1) * perPage, page * perPage);
+  const clampedPage = Math.min(page, pages);
+  const visible = filtered.slice((clampedPage - 1) * perPage, clampedPage * perPage);
   const inspected = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
 
   useEffect(() => {
@@ -541,6 +544,7 @@ function LibraryView(props: LibraryProps) {
     }
   }, [props.profile.revision, props.profile.outfits.length, outfitId]);
   useEffect(() => setPage(1), [outfitId, query, perPage]);
+  useEffect(() => setPage((current) => Math.min(current, pages)), [pages]);
   useEffect(() => {
     setSelected(new Set());
     setBatchMode(false);
@@ -626,6 +630,13 @@ function LibraryView(props: LibraryProps) {
   }
 
   function runBatch(mutation: BatchMutationV2) {
+    if (
+      mutation.type !== "delete"
+      && !props.profile.outfits.some((candidate) => candidate.id === mutation.outfitId)
+    ) {
+      props.client.notify("error", "Choose a valid destination outfit.");
+      return;
+    }
     props.replace(applyBatchMutation(props.profile, mutation));
     setSelected(new Set());
     if (mutation.type === "delete") setExpressionId("");
@@ -641,6 +652,7 @@ function LibraryView(props: LibraryProps) {
         <div class="ls-outfit-list">
           {props.profile.outfits.map((item) => (
             <button
+              key={item.id}
               type="button"
               data-active={item.id === outfit?.id}
               draggable
@@ -715,7 +727,12 @@ function LibraryView(props: LibraryProps) {
               size="small"
               icon="upload"
               variant="primary"
-              onClick={() => showImportModal(props.client, props.profile, { outfitId: outfit?.id })}
+              onClick={() => showImportModal(
+                props.client,
+                props.profile,
+                { outfitId: outfit?.id },
+                props.acceptCommitted,
+              )}
             >
               Import
             </Button>
@@ -741,6 +758,7 @@ function LibraryView(props: LibraryProps) {
             <div class="ls-expression-grid" role="list" aria-label={`${outfit?.name} expressions`}>
               {visible.map((expression) => (
                 <ExpressionCard
+                  key={expression.id}
                   client={props.client}
                   expression={expression}
                   selected={selected.has(expression.id)}
@@ -785,12 +803,13 @@ function LibraryView(props: LibraryProps) {
       </main>
 
       {outfit && inspected && (
-        <VariantTray
+                <VariantTray
           client={props.client}
           profile={props.profile}
           outfit={outfit}
           expression={inspected}
-          update={props.update}
+                  update={props.update}
+                  acceptCommitted={props.acceptCommitted}
           close={() => setExpressionId("")}
         />
       )}
@@ -810,7 +829,7 @@ function LiveStageView({ client }: { client: LumiStageClient }) {
         description="The resolved visual state for the current chat, including exact sprite variants and locks."
         actions={(
           <Toolbar>
-            <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => client.analyzeNow()}>Analyze now</Button>
+            <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => void client.analyzeNow().catch(() => undefined)}>Analyze now</Button>
             <Button icon="sparkles" variant="primary" disabled={!backend.activeChatId} onClick={() => showQuickPicker(client)}>Direct stage</Button>
           </Toolbar>
         )}
@@ -821,7 +840,7 @@ function LiveStageView({ client }: { client: LumiStageClient }) {
             const view = state.variantId ? backend.variantViews[state.variantId] : null;
             const lock = backend.timeline?.manualOverrides[state.characterId];
             return (
-              <article data-focused={state.focused}>
+              <article key={state.characterId} data-focused={state.focused}>
                 <div class="ls-live-character-media">
                   <Media
                     src={view?.url ?? null}
@@ -856,10 +875,10 @@ function LiveStageView({ client }: { client: LumiStageClient }) {
         <section>
           <div><span class="ls-kicker">Floating stage</span><h3>Presentation</h3></div>
           <SettingRow title="Stage visibility" description="Show the resizable sprite stage over the chat.">
-            <HostSwitch client={client} label="Stage visibility" checked={appearance.visible} onChange={(visible) => void client.saveAppearance({ visible })} />
+            <HostSwitch client={client} label="Stage visibility" checked={appearance.visible} onChange={(visible) => void client.saveAppearance({ visible }).catch(() => undefined)} />
           </SettingRow>
           <SettingRow title="Captions" description="Show character, outfit, and expression beneath each sprite.">
-            <HostSwitch client={client} label="Stage captions" checked={appearance.showCaptions} onChange={(showCaptions) => void client.saveAppearance({ showCaptions })} />
+            <HostSwitch client={client} label="Stage captions" checked={appearance.showCaptions} onChange={(showCaptions) => void client.saveAppearance({ showCaptions }).catch(() => undefined)} />
           </SettingRow>
         </section>
         <section>
@@ -868,14 +887,14 @@ function LiveStageView({ client }: { client: LumiStageClient }) {
           <Toolbar>
             <Button
               disabled={!backend.activeChatId}
-              onClick={() => void client.saveChatLayout({ ...appearance })}
+              onClick={() => void client.saveChatLayout({ ...appearance }).catch(() => undefined)}
             >
               Save layout for chat
             </Button>
             <Button
               variant="ghost"
               disabled={!backend.timeline?.layoutOverride}
-              onClick={() => void client.saveChatLayout(null)}
+              onClick={() => void client.saveChatLayout(null).catch(() => undefined)}
             >
               Use global layout
             </Button>
@@ -909,7 +928,7 @@ function DiagnosticsPanel({ client }: { client: LumiStageClient }) {
       </div>
       <div class="ls-permission-grid">
         {permissions.map(([name, granted]) => (
-          <span data-granted={granted}><Icon name={granted ? "success" : "warning"} size={14} />{name}</span>
+          <span key={name} data-granted={granted}><Icon name={granted ? "success" : "warning"} size={14} />{name}</span>
         ))}
       </div>
       <div class="ls-diagnostic-summary">
@@ -926,8 +945,22 @@ function SettingsView({ client }: { client: LumiStageClient }) {
   const { backend } = useClientState(client);
   const [draft, setDraft] = useState<LumiStageSettingsV2>(() => structuredClone(backend.settings));
   const [section, setSection] = useState<"detection" | "stage" | "data">("detection");
-  const dirty = JSON.stringify(draft) !== JSON.stringify(backend.settings);
-  useEffect(() => setDraft(structuredClone(backend.settings)), [backend.settings.revision]);
+  const [dirty, setDirty] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  useEffect(() => {
+    if (backend.settings.revision === draft.revision) return;
+    if (dirty) {
+      setConflict(true);
+      return;
+    }
+    setDraft(structuredClone(backend.settings));
+    setDirty(false);
+    setConflict(false);
+  }, [backend.settings.revision, draft.revision, dirty]);
+  const edit = (settings: LumiStageSettingsV2) => {
+    setDraft(settings);
+    setDirty(true);
+  };
   const connections = [
     { value: "", label: "Use active Lumiverse connection", sublabel: "Follows the host selection" },
     ...backend.connections.map((item) => ({
@@ -938,7 +971,10 @@ function SettingsView({ client }: { client: LumiStageClient }) {
   ];
   async function save() {
     try {
-      await client.saveSettings(draft);
+      const saved = await client.saveSettings(draft);
+      setDraft(structuredClone(saved));
+      setDirty(false);
+      setConflict(false);
       client.notify("success", "LumiStage settings saved.");
     } catch (error) {
       client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
@@ -950,8 +986,19 @@ function SettingsView({ client }: { client: LumiStageClient }) {
         kicker="Configuration"
         title="Settings"
         description="Connection, detection, stage presentation, archives, and health in one focused workspace."
-        actions={<Button variant="primary" icon="check" disabled={!dirty} onClick={() => void save()}>Save settings</Button>}
+        actions={<Button variant="primary" icon="check" disabled={!dirty || conflict} onClick={() => void save()}>Save settings</Button>}
       />
+      {conflict && (
+        <div class="ls-validation-note" data-tone="warning">
+          <Icon name="warning" size={16} />
+          <span>Settings changed elsewhere. Your draft is preserved; reload before editing or saving against the new revision.</span>
+          <Button size="small" onClick={() => {
+            setDraft(structuredClone(backend.settings));
+            setDirty(false);
+            setConflict(false);
+          }}>Reload settings</Button>
+        </div>
+      )}
       <div class="ls-settings-layout">
         <nav class="ls-settings-nav" aria-label="Settings sections">
           <button type="button" data-active={section === "detection"} onClick={() => setSection("detection")}><Icon name="automation" size={17} /><span><strong>Detection</strong><small>Connection and confidence</small></span></button>
@@ -968,7 +1015,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     client={client}
                     label="Automatic detection"
                     checked={draft.detection.enabled}
-                    onChange={(enabled) => setDraft({ ...draft, detection: { ...draft.detection, enabled } })}
+                    onChange={(enabled) => edit({ ...draft, detection: { ...draft.detection, enabled } })}
                   />
                 </div>
                 <div class="ls-settings-form-grid">
@@ -978,7 +1025,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                       label="LLM connection"
                       value={draft.detection.connectionId ?? ""}
                       options={connections}
-                      onChange={(connectionId) => setDraft({
+                      onChange={(connectionId) => edit({
                         ...draft,
                         detection: { ...draft.detection, connectionId: connectionId || null, model: null },
                       })}
@@ -989,7 +1036,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                       client={client}
                       value={draft.detection.model ?? ""}
                       connectionId={draft.detection.connectionId}
-                      onChange={(model) => setDraft({ ...draft, detection: { ...draft.detection, model: model || null } })}
+                      onChange={(model) => edit({ ...draft, detection: { ...draft.detection, model: model || null } })}
                     />
                   </Field>
                 </div>
@@ -999,7 +1046,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     value={draft.detection.contextMessages}
                     min={1}
                     max={20}
-                    onChange={(contextMessages) => setDraft({ ...draft, detection: { ...draft.detection, contextMessages } })}
+                    onChange={(contextMessages) => edit({ ...draft, detection: { ...draft.detection, contextMessages } })}
                   />
                 </SettingRow>
                 <HostRange
@@ -1011,11 +1058,11 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                   suffix="%"
                   label="Confidence threshold"
                   hint="Below this threshold the complete prior stage state is preserved."
-                  onChange={(confidence) => setDraft({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })}
+                  onChange={(confidence) => edit({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })}
                 />
                 <div class="ls-settings-inline-actions">
                   <Button icon="settings" onClick={() => client.send({ type: "open-connections" })}>Manage connections</Button>
-                  <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => client.analyzeNow()}>Analyze current reply</Button>
+                  <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => void client.analyzeNow().catch(() => undefined)}>Analyze current reply</Button>
                 </div>
               </section>
             </>
@@ -1031,7 +1078,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     client={client}
                     label="Transition"
                     value={draft.appearance.transition}
-                    onChange={(transition) => setDraft({
+                    onChange={(transition) => edit({
                       ...draft,
                       appearance: { ...draft.appearance, transition: transition as LumiStageSettingsV2["appearance"]["transition"] },
                     })}
@@ -1049,22 +1096,22 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     min={0}
                     max={2000}
                     step={20}
-                    onChange={(transitionMs) => setDraft({ ...draft, appearance: { ...draft.appearance, transitionMs } })}
+                    onChange={(transitionMs) => edit({ ...draft, appearance: { ...draft.appearance, transitionMs } })}
                   />
                 </Field>
               </div>
-              <HostRange client={client} value={Math.round(draft.appearance.opacity * 100)} min={10} max={100} step={5} suffix="%" label="Stage opacity" onChange={(value) => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } })} />
-              <HostRange client={client} value={Math.round(draft.appearance.idleOpacity * 100)} min={5} max={100} step={5} suffix="%" label="Unfocused character opacity" onChange={(value) => setDraft({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } })} />
-              <HostRange client={client} value={Math.round(draft.appearance.focusedScale * 100)} min={80} max={130} step={1} suffix="%" label="Focused character scale" onChange={(value) => setDraft({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } })} />
-              <HostRange client={client} value={Math.round(draft.appearance.ensembleOverlap * 100)} min={0} max={80} step={5} suffix="%" label="Ensemble overlap" onChange={(value) => setDraft({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.opacity * 100)} min={10} max={100} step={5} suffix="%" label="Stage opacity" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.idleOpacity * 100)} min={5} max={100} step={5} suffix="%" label="Unfocused character opacity" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.focusedScale * 100)} min={80} max={130} step={1} suffix="%" label="Focused character scale" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.ensembleOverlap * 100)} min={0} max={80} step={5} suffix="%" label="Ensemble overlap" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } })} />
               <SettingRow title="Captions" description="Show resolved names beneath stage sprites.">
-                <HostSwitch client={client} label="Captions" checked={draft.appearance.showCaptions} onChange={(showCaptions) => setDraft({ ...draft, appearance: { ...draft.appearance, showCaptions } })} />
+                <HostSwitch client={client} label="Captions" checked={draft.appearance.showCaptions} onChange={(showCaptions) => edit({ ...draft, appearance: { ...draft.appearance, showCaptions } })} />
               </SettingRow>
               <SettingRow title="Stage chrome" description="Show the compact live header and controls.">
-                <HostSwitch client={client} label="Stage chrome" checked={draft.appearance.showChrome} onChange={(showChrome) => setDraft({ ...draft, appearance: { ...draft.appearance, showChrome } })} />
+                <HostSwitch client={client} label="Stage chrome" checked={draft.appearance.showChrome} onChange={(showChrome) => edit({ ...draft, appearance: { ...draft.appearance, showChrome } })} />
               </SettingRow>
               <div class="ls-settings-inline-actions">
-                <Button onClick={() => setDraft({
+                <Button onClick={() => edit({
                   ...draft,
                   appearance: { ...draft.appearance, width: 320, height: 420, x: -1, y: -1, fullscreen: false },
                 })}>Reset size and position</Button>
@@ -1078,14 +1125,18 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                   <div><span class="ls-kicker">Portable backup</span><h3>LumiStage archive</h3><p>Export or restore this character’s folders, expression slots, variants, and media.</p></div>
                 </div>
                 <div class="ls-data-actions">
-                  <button type="button" disabled={!backend.profile} onClick={() => void client.exportProfile()}>
+                  <button type="button" disabled={!backend.profile} onClick={() => void client.exportProfile().catch(() => undefined)}>
                     <Icon name="download" size={20} />
                     <span><strong>Export archive</strong><small>Create a complete `.lumistage.zip` backup</small></span>
                     <Icon name="chevronRight" size={16} />
                   </button>
-                  <button type="button" disabled={!backend.profile} onClick={() => showImportModal(client, backend.profile)}>
+                  <button
+                    type="button"
+                    disabled={!backend.profile}
+                    onClick={() => backend.profile && showRestoreArchiveModal(client, backend.profile)}
+                  >
                     <Icon name="upload" size={20} />
-                    <span><strong>Import archive or media</strong><small>Validate and merge into the active character</small></span>
+                    <span><strong>Restore archive</strong><small>Preview, confirm, and replace the active character profile</small></span>
                     <Icon name="chevronRight" size={16} />
                   </button>
                 </div>
@@ -1112,13 +1163,20 @@ export function StudioWorkspace(props: {
   const [history, setHistory] = useState<CharacterProfileV2[]>([]);
   const [future, setFuture] = useState<CharacterProfileV2[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [conflict, setConflict] = useState(false);
 
   useEffect(() => {
+    if (backendProfile?.characterId === draft?.characterId && backendProfile?.revision === draft?.revision) return;
+    if (dirty && backendProfile?.characterId === draft?.characterId) {
+      setConflict(true);
+      return;
+    }
     setDraft(backendProfile ? structuredClone(backendProfile) : null);
     setHistory([]);
     setFuture([]);
     setDirty(false);
-  }, [backendProfile?.characterId, backendProfile?.revision]);
+    setConflict(false);
+  }, [backendProfile?.characterId, backendProfile?.revision, draft?.characterId, draft?.revision, dirty]);
 
   function update(mutator: (profile: CharacterProfileV2) => void) {
     if (!draft) return;
@@ -1138,6 +1196,14 @@ export function StudioWorkspace(props: {
     setFuture([]);
     setDraft(structuredClone(profile));
     setDirty(true);
+  }
+
+  function acceptCommitted(profile: CharacterProfileV2) {
+    setDraft(structuredClone(profile));
+    setHistory([]);
+    setFuture([]);
+    setDirty(false);
+    setConflict(false);
   }
 
   function undo() {
@@ -1160,6 +1226,15 @@ export function StudioWorkspace(props: {
 
   async function saveProfile() {
     if (!draft) return;
+    const blocking = inspectProfile(draft).filter((issue) => issue.severity === "error");
+    if (blocking.length) {
+      props.client.notify("error", blocking[0].message);
+      return;
+    }
+    if (conflict) {
+      props.client.notify("warning", "Reload the newer profile before saving this draft.");
+      return;
+    }
     try {
       await props.client.saveProfile(draft);
       setDirty(false);
@@ -1210,7 +1285,7 @@ export function StudioWorkspace(props: {
               size="small"
               icon="check"
               variant="primary"
-              disabled={!dirty || state.busy}
+              disabled={!dirty || state.busy || conflict || !!draft && inspectProfile(draft).some((issue) => issue.severity === "error")}
               onClick={() => void saveProfile()}
             >
               {state.busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
@@ -1220,12 +1295,20 @@ export function StudioWorkspace(props: {
       </header>
 
       <div class="ls-studio-content">
+        {conflict && (
+          <div class="ls-validation-note" data-tone="warning">
+            <Icon name="warning" size={16} />
+            <span>The backend has a newer profile. Your unsaved Studio draft is preserved.</span>
+            <Button size="small" onClick={() => backendProfile && acceptCommitted(backendProfile)}>Reload profile</Button>
+          </div>
+        )}
         {view === "library" && draft && (
           <LibraryView
             client={props.client}
             profile={draft}
             update={update}
             replace={replace}
+            acceptCommitted={acceptCommitted}
             undo={undo}
             redo={redo}
             canUndo={history.length > 0}
@@ -1254,7 +1337,8 @@ export function CharacterSetup(props: {
   onOpenStudio: (characterId: string) => void;
 }) {
   const { backend, busy } = useClientState(props.client);
-  const profile = backend.profile?.characterId === props.characterId ? backend.profile : null;
+  const profile = backend.stageProfiles.find((candidate) => candidate.characterId === props.characterId)
+    ?? (backend.profile?.characterId === props.characterId ? backend.profile : null);
   const [outfitId, setOutfitId] = useState("");
   const outfit = selectedOutfit(profile, outfitId);
   useEffect(() => {
@@ -1305,7 +1389,7 @@ export function CharacterSetup(props: {
 
       <div class="ls-character-outfit-strip">
         {profile.outfits.map((item) => (
-          <button type="button" data-active={item.id === outfit?.id} onClick={() => setOutfitId(item.id)}>
+          <button key={item.id} type="button" data-active={item.id === outfit?.id} onClick={() => setOutfitId(item.id)}>
             <Icon name="outfit" size={15} />
             <span>{item.name}</span>
             <small>{item.expressions.length}</small>
@@ -1359,6 +1443,7 @@ export function CharacterSetup(props: {
           const view = variant ? backend.variantViews[variant.id] : null;
           return (
             <button
+              key={expression.id}
               type="button"
               class="ls-character-expression-card"
               data-default={outfit?.defaultExpressionId === expression.id}

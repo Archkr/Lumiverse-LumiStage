@@ -110,6 +110,7 @@ export function recordA(
     messageId,
     swipeId,
     contentHash,
+    requestFingerprint: "fingerprint",
     decision: {
       schemaVersion: 2,
       focusedCharacterIds: ["character-a"],

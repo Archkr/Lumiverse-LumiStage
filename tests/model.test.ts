@@ -10,6 +10,7 @@ import {
   normalizeProfile,
   normalizeSettings,
   resolveCharacterState,
+  inspectProfile,
 } from "../src/model";
 import { profileA, profileB } from "./fixtures";
 
@@ -186,9 +187,51 @@ describe("state resolution", () => {
         confidence: 1,
       }],
     }, {}, defaultSettings(1), 2);
-    expect(Object.keys(snapshot.characters).sort()).toEqual(["character-a", "character-b"]);
+    expect(Object.keys(snapshot.characters).sort()).toEqual(["character-b"]);
     expect(snapshot.characters["character-b"].focused).toBe(true);
-    expect(snapshot.characters["character-a"].focused).toBe(false);
+  });
+
+  it("preserves the complete prior snapshot and focus when any decision is below confidence", () => {
+    const profiles = [profileA(), profileB()];
+    const catalog = buildCatalog(profiles);
+    const initial = applyDecision(createTimeline("chat", 1).snapshot, catalog, {
+      schemaVersion: 2,
+      focusedCharacterIds: ["character-a"],
+      characters: [{
+        characterId: "character-a",
+        outfitId: "outfit-casual",
+        expressionId: "expression-happy",
+        variantId: "variant-expression-happy",
+        confidence: 1,
+      }],
+    }, {}, defaultSettings(1), 2);
+    const preserved = applyDecision(initial, catalog, {
+      schemaVersion: 2,
+      focusedCharacterIds: ["character-b"],
+      characters: [{
+        characterId: "character-b",
+        outfitId: "outfit-b",
+        expressionId: "expression-b",
+        variantId: "variant-b",
+        confidence: 0.2,
+      }],
+    }, {}, defaultSettings(1), 3);
+    expect(preserved).toBe(initial);
+    expect(preserved.focusedCharacterIds).toEqual(["character-a"]);
+  });
+
+  it("preserves duplicate expression records for blocking Studio validation", () => {
+    const profile = profileA();
+    profile.outfits[0].expressions.push({
+      ...structuredClone(profile.outfits[0].expressions[0]),
+      id: "duplicate-expression-id",
+    });
+    const normalized = normalizeProfile(profile, profile.characterId, profile.characterName);
+    expect(normalized.outfits[0].expressions).toHaveLength(profile.outfits[0].expressions.length);
+    expect(inspectProfile(normalized)).toContainEqual(expect.objectContaining({
+      severity: "error",
+      code: "duplicate-expression",
+    }));
   });
 });
 

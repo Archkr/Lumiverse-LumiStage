@@ -172,13 +172,8 @@ function mergeVariants(target: ExpressionSlotV2, source: ExpressionSlotV2): void
 
 function normalizeOutfit(value: unknown, index: number, now: number, forcedName?: string): OutfitFolderV2 {
   const raw = record(value);
-  const expressions: ExpressionSlotV2[] = [];
-  for (const [expressionIndex, entry] of list(raw.expressions).entries()) {
-    const expression = normalizeExpression(entry, expressionIndex, now);
-    const existing = expressions.find((item) => normalizedKey(item.name) === normalizedKey(expression.name));
-    if (existing) mergeVariants(existing, expression);
-    else expressions.push({ ...expression, order: expressions.length });
-  }
+  const expressions = list(raw.expressions)
+    .map((entry, expressionIndex) => normalizeExpression(entry, expressionIndex, now));
   if (!expressions.length) expressions.push(createExpression("Neutral"));
   const requestedDefault = optionalId(raw.defaultExpressionId);
   return {
@@ -420,11 +415,37 @@ export function applyDecision(
   settings: LumiStageSettingsV2,
   now = Date.now(),
 ): StageSnapshotV2 {
-  const characters: Record<string, CharacterStageStateV2> = { ...snapshot.characters };
-  const focused = new Set(
-    decision.focusedCharacterIds.filter((id) => !!findCharacter(catalog, id)),
+  const catalogIds = new Set(catalog.map((entry) => entry.characterId));
+  const priorCharacters = Object.fromEntries(
+    Object.entries(snapshot.characters).filter(([characterId]) => catalogIds.has(characterId)),
   );
-  for (const entry of catalog) {
+  const priorFocus = snapshot.focusedCharacterIds.filter((characterId) => catalogIds.has(characterId));
+  const detectorDecision = decision.characters.length > 0;
+  if (
+    detectorDecision
+    && decision.characters.some((item) => item.confidence < settings.detection.confidence)
+  ) {
+    if (
+      Object.keys(priorCharacters).length === Object.keys(snapshot.characters).length
+      && priorFocus.length === snapshot.focusedCharacterIds.length
+    ) return snapshot;
+    return {
+      ...snapshot,
+      characters: priorCharacters,
+      focusedCharacterIds: priorFocus,
+    };
+  }
+  const characters: Record<string, CharacterStageStateV2> = { ...priorCharacters };
+  const focused = new Set(
+    (detectorDecision ? decision.focusedCharacterIds : priorFocus)
+      .filter((id) => catalogIds.has(id)),
+  );
+  const selectedIds = new Set([
+    ...Object.keys(priorCharacters),
+    ...decision.characters.map((item) => item.characterId),
+    ...Object.keys(overrides),
+  ]);
+  for (const entry of catalog.filter((candidate) => selectedIds.has(candidate.characterId))) {
     const item = decision.characters.find((candidate) => candidate.characterId === entry.characterId) ?? null;
     const state = resolveCharacterState(
       entry,
@@ -447,6 +468,28 @@ export function applyDecision(
     focusedCharacterIds: [...focused],
     updatedAt: now,
   };
+}
+
+export function isValidManualOverride(
+  catalog: CatalogEntry[],
+  override: ManualOverrideV2,
+): boolean {
+  const profile = findCharacter(catalog, override.characterId)?.profile;
+  const outfit = profile?.outfits.find((item) => item.id === override.outfitId);
+  if (!profile || !outfit) return false;
+  if (override.lock === "outfit") {
+    if (override.expressionId == null && override.variantId == null) return true;
+    const expression = outfit.expressions.find((item) => item.id === override.expressionId);
+    return !!expression && (
+      override.variantId == null
+      || expression.variants.some((variant) => variant.id === override.variantId)
+    );
+  }
+  const expression = outfit.expressions.find((item) => item.id === override.expressionId);
+  return !!expression && (
+    override.variantId == null
+    || expression.variants.some((variant) => variant.id === override.variantId)
+  );
 }
 
 export function applyManualOverride(
@@ -590,20 +633,54 @@ export interface CatalogIssue {
 
 export function inspectProfile(profile: CharacterProfileV2): CatalogIssue[] {
   const issues: CatalogIssue[] = [];
+  const ids = new Set<string>();
+  const recordId = (id: string, label: string) => {
+    if (!id.trim()) issues.push({ severity: "error", code: "blank-id", message: `${label} has a blank ID.` });
+    else if (ids.has(id)) issues.push({ severity: "error", code: "duplicate-id", message: `${label} repeats ID ${id}.` });
+    else ids.add(id);
+  };
+  recordId(profile.characterId, profile.characterName || "Character");
   if (!profile.outfits.length) {
     issues.push({ severity: "error", code: "no-outfits", message: `${profile.characterName} has no outfits.` });
   }
+  const outfitNames = profile.outfits.map((outfit) => normalizedKey(outfit.name));
+  if (outfitNames.some((name) => !name)) {
+    issues.push({ severity: "error", code: "blank-outfit", message: "Every outfit needs a name." });
+  }
+  if (new Set(outfitNames).size !== outfitNames.length) {
+    issues.push({ severity: "error", code: "duplicate-outfit", message: "Outfit names must be unique." });
+  }
+  if (profile.defaultOutfitId && !profile.outfits.some((outfit) => outfit.id === profile.defaultOutfitId)) {
+    issues.push({ severity: "error", code: "invalid-default-outfit", message: "The default outfit no longer exists." });
+  }
   for (const outfit of profile.outfits) {
+    recordId(outfit.id, `Outfit ${outfit.name || "(unnamed)"}`);
     if (!outfit.expressions.length) {
       issues.push({ severity: "warning", code: "empty-outfit", message: `${outfit.name} has no expressions.` });
     }
     const names = outfit.expressions.map((item) => normalizedKey(item.name));
+    if (names.some((name) => !name)) {
+      issues.push({ severity: "error", code: "blank-expression", message: `${outfit.name} contains an expression without a name.` });
+    }
     if (new Set(names).size !== names.length) {
-      issues.push({ severity: "warning", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+      issues.push({ severity: "error", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+    }
+    if (
+      outfit.defaultExpressionId
+      && !outfit.expressions.some((expression) => expression.id === outfit.defaultExpressionId)
+    ) {
+      issues.push({ severity: "error", code: "invalid-default-expression", message: `${outfit.name} has an invalid default expression.` });
     }
     for (const expression of outfit.expressions) {
+      recordId(expression.id, `Expression ${outfit.name} / ${expression.name || "(unnamed)"}`);
       if (!expression.variants.length) {
         issues.push({ severity: "info", code: "empty-expression", message: `${outfit.name} / ${expression.name} has no sprite variants.` });
+      }
+      for (const variant of expression.variants) {
+        recordId(variant.id, `Variant ${variant.fileName || "(unnamed)"}`);
+        if (!variant.imageId || !variant.contentHash) {
+          issues.push({ severity: "error", code: "invalid-media-reference", message: `${variant.fileName || variant.id} has an invalid media reference.` });
+        }
       }
     }
   }

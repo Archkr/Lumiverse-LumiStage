@@ -17,8 +17,14 @@ describe("decision cache and replay", () => {
       variantId: "variant-expression-angry",
     });
     const records = upsertDecision(upsertDecision([], first), second);
-    expect(findCachedDecision(records, { id: "message", swipeId: 0, contentHash: "hash-a" })).toBe(first);
-    expect(findCachedDecision(records, { id: "message", swipeId: 1, contentHash: "hash-b" })).toBe(second);
+    expect(findCachedDecision(records, { id: "message", swipeId: 0, contentHash: "hash-a" }, "fingerprint")).toBe(first);
+    expect(findCachedDecision(records, { id: "message", swipeId: 1, contentHash: "hash-b" }, "fingerprint")).toBe(second);
+    expect(findCachedDecision(records, { id: "message", swipeId: 0, contentHash: "hash-a" }, "changed")).toBeNull();
+    expect(findCachedDecision([{ ...first, requestFingerprint: undefined }], {
+      id: "message",
+      swipeId: 0,
+      contentHash: "hash-a",
+    }, "fingerprint")).toBeNull();
   });
 
   it("invalidates active edits while retaining inactive swipe records", () => {

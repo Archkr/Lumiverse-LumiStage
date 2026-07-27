@@ -15,11 +15,14 @@ export interface TimelineMessageKey {
 export function findCachedDecision(
   records: DecisionRecordV2[],
   message: Pick<TimelineMessageKey, "id" | "swipeId" | "contentHash">,
+  requestFingerprint?: string,
 ): DecisionRecordV2 | null {
+  if (!requestFingerprint) return null;
   return records.find((record) =>
     record.messageId === message.id
     && record.swipeId === message.swipeId
     && record.contentHash === message.contentHash
+    && record.requestFingerprint === requestFingerprint
   ) ?? null;
 }
 
@@ -62,7 +65,11 @@ export function replayTimeline(
   let snapshot = emptySnapshot(timeline.chatId, now);
   for (const message of messages) {
     if (message.role !== "assistant") continue;
-    const cached = findCachedDecision(decisions, message);
+    const cached = decisions.find((record) =>
+      record.messageId === message.id
+      && record.swipeId === message.swipeId
+      && record.contentHash === message.contentHash
+    );
     if (!cached) continue;
     snapshot = applyDecision(
       snapshot,

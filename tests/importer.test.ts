@@ -5,6 +5,8 @@ import {
   assertUnambiguousCandidates,
   directCandidate,
   extractArchive,
+  extractLumiStageArchive,
+  hydrateArchiveProfile,
   importTarget,
   mergeImportedAssets,
   normalizedArchivePath,
@@ -62,6 +64,33 @@ describe("import mapping and safety", () => {
     }));
   });
 
+  it("asynchronously extracts a validated LumiStage archive", async () => {
+    const profile = profileA();
+    const archive = {
+      schemaVersion: 2 as const,
+      kind: "lumistage-archive" as const,
+      exportedAt: 1,
+      profile,
+      variants: allVariants(profile).map((variant, index) => ({
+        path: `assets/${index}.png`,
+        characterId: profile.characterId,
+        outfitId: profile.outfits.find((outfit) =>
+          outfit.expressions.some((expression) => expression.variants.some((item) => item.id === variant.id))
+        )!.id,
+        expressionId: profile.outfits.flatMap((outfit) => outfit.expressions)
+          .find((expression) => expression.variants.some((item) => item.id === variant.id))!.id,
+        variant,
+      })),
+    };
+    const zip = zipSync({
+      "manifest.json": strToU8(JSON.stringify(archive)),
+      ...Object.fromEntries(archive.variants.map((entry, index) => [entry.path, new Uint8Array([index + 1])])),
+    });
+    const extracted = await extractLumiStageArchive(zip);
+    expect(extracted.manifest.kind).toBe("lumistage-archive");
+    expect(extracted.candidates).toHaveLength(archive.variants.length);
+  });
+
   it("reports partial host upload failures per file", () => {
     const candidates = [
       directCandidate("Casual/happy.png", new Uint8Array([1])),
@@ -102,18 +131,94 @@ describe("variant merge, deduplication, and ownership references", () => {
     expect(joy?.variants.map((item) => item.fileName)).toEqual(["front.png", "side.png"]);
   });
 
-  it("deduplicates imported content hashes", () => {
+  it("reuses a content hash across destinations while deduplicating within one destination", () => {
     const source = profileA();
     const existing = allVariants(source)[0];
     const result = mergeImportedAssets(source, [{
       target: { outfitName: "Formal", expressionName: "Duplicate" },
-      imageId: "different-image-record",
+      imageId: existing.imageId,
       contentHash: existing.contentHash,
       fileName: "duplicate.png",
       mimeType: "image/png",
     }], "Aster");
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toBe(1);
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(
+      result.profile.outfits.find((item) => item.name === "Formal")
+        ?.expressions.find((item) => item.name === "Duplicate")
+        ?.variants[0].imageId,
+    ).toBe(existing.imageId);
+    const duplicate = mergeImportedAssets(result.profile, [{
+      target: { outfitName: "Formal", expressionName: "Duplicate" },
+      imageId: existing.imageId,
+      contentHash: existing.contentHash,
+      fileName: "duplicate-again.png",
+      mimeType: "image/png",
+    }], "Aster");
+    expect(duplicate.imported).toBe(0);
+    expect(duplicate.skipped).toBe(1);
+  });
+
+  it("commits an unsaved ID-targeted outfit and expression without renaming either", () => {
+    const source = profileA();
+    source.outfits.push({
+      id: "outfit-unsaved",
+      name: "Rain Coat",
+      order: source.outfits.length,
+      defaultExpressionId: "expression-unsaved",
+      expressions: [{
+        id: "expression-unsaved",
+        name: "Quiet Resolve",
+        order: 0,
+        variants: [],
+      }],
+    });
+    const result = mergeImportedAssets(source, [{
+      target: { outfitName: "ignored filename outfit", expressionName: "asset-file-name" },
+      targetOutfitId: "outfit-unsaved",
+      targetExpressionId: "expression-unsaved",
+      imageId: "image-new",
+      contentHash: "hash-new",
+      fileName: "WRONG-NAME.png",
+      mimeType: "image/png",
+    }], "Aster");
+    expect(result.profile.outfits.map((outfit) => outfit.name)).toContain("Rain Coat");
+    const expression = result.profile.outfits
+      .find((outfit) => outfit.id === "outfit-unsaved")
+      ?.expressions.find((item) => item.id === "expression-unsaved");
+    expect(expression?.name).toBe("Quiet Resolve");
+    expect(expression?.variants[0].fileName).toBe("WRONG-NAME.png");
+  });
+
+  it("restores multiple variant records that intentionally share one archive media path", () => {
+    const profile = profileA();
+    const variants = allVariants(profile);
+    const entries = variants.map((variant, index) => ({
+      path: index < 2 ? "assets/shared.png" : `assets/${index}.png`,
+      characterId: profile.characterId,
+      outfitId: profile.outfits.find((outfit) =>
+        outfit.expressions.some((expression) => expression.variants.some((item) => item.id === variant.id))
+      )!.id,
+      expressionId: profile.outfits.flatMap((outfit) => outfit.expressions)
+        .find((expression) => expression.variants.some((item) => item.id === variant.id))!.id,
+      variant,
+    }));
+    const uploaded = new Map(
+      [...new Set(entries.map((entry) => entry.path))].map((path) => [path, {
+        imageId: path === "assets/shared.png" ? "shared-image" : `image-${path}`,
+        contentHash: `hash-${path}`,
+        fileName: path.split("/").pop()!,
+        mimeType: "image/png",
+      }]),
+    );
+    const restored = hydrateArchiveProfile({
+      schemaVersion: 2,
+      kind: "lumistage-archive",
+      exportedAt: 1,
+      profile,
+      variants: entries,
+    }, profile.characterId, profile.characterName, uploaded);
+    expect(allVariants(restored).filter((variant) => variant.imageId === "shared-image")).toHaveLength(2);
   });
 
   it("only marks an image unreferenced after every profile reference is gone", () => {

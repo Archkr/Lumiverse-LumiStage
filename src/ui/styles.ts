@@ -1,4 +1,9 @@
 export const LUMI_STAGE_CSS = String.raw`
+body.ls-host-select-portals [data-spindle-component-portal],
+body.ls-host-select-portals [class*="popoverPortal"] {
+  z-index: 10005 !important;
+}
+
 :where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form, .ls-stage-root) {
   --ls-bg: var(--lumiverse-bg);
   --ls-panel: color-mix(in srgb, var(--lumiverse-bg) 93%, var(--lumiverse-text) 7%);
@@ -590,7 +595,7 @@ export const LUMI_STAGE_CSS = String.raw`
 
 @media (max-width: 900px) {
   .ls-studio-topbar { grid-template-columns: 170px 1fr auto; }
-  .ls-character-select { display: none; }
+  .ls-character-select { min-width: 132px; max-width: 170px; }
   .ls-library-view:has(.ls-variant-tray) { grid-template-columns: 180px minmax(0, 1fr) 270px; }
   .ls-outfit-rail { grid-template-rows: 58px minmax(0, 1fr); }
   .ls-outfit-rail-foot { display: none; }
@@ -605,6 +610,7 @@ export const LUMI_STAGE_CSS = String.raw`
   .ls-studio-topbar nav { grid-column: 1 / -1; grid-row: 2; order: 3; border-top: 1px solid var(--ls-line); }
   .ls-studio-topbar nav button { min-width: 0; flex: 1; padding: 0 8px; }
   .ls-studio-context { grid-column: 2; grid-row: 1; }
+  .ls-character-select { display: block; min-width: 120px; max-width: 150px; }
   .ls-library-view, .ls-library-view:has(.ls-variant-tray) { position: relative; display: grid; grid-template-columns: 1fr; grid-template-rows: 78px minmax(0, 1fr); }
   .ls-outfit-rail { display: block; overflow: hidden; border-right: 0; border-bottom: 1px solid var(--ls-line); }
   .ls-outfit-rail-head { height: 32px; padding: 2px 8px 0 10px; border: 0; }

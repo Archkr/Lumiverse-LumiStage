@@ -194,7 +194,13 @@ export class LumiStageRepository {
     const path = profilePath(characterId);
     const key = this.key(userId, path);
     const cached = this.profileCache.get(key);
-    if (cached) return structuredClone(cached);
+    if (cached) {
+      if (characterName.trim() && characterName !== "Character" && cached.characterName !== characterName.trim()) {
+        cached.characterName = characterName.trim();
+        this.profileCache.set(key, cached);
+      }
+      return structuredClone(cached);
+    }
     const { raw, migrated } = await this.readCurrentOrOld<unknown>(
       path,
       oldProfilePath(characterId),
@@ -203,6 +209,9 @@ export class LumiStageRepository {
     const profile = raw
       ? normalizeProfile(raw, characterId, characterName)
       : createProfile(characterId, characterName);
+    if (characterName.trim() && characterName !== "Character") {
+      profile.characterName = characterName.trim();
+    }
     if (migrated) await this.storage.setJson(path, profile, { indent: 2, userId });
     this.profileCache.set(key, profile);
     return structuredClone(profile);
@@ -224,17 +233,6 @@ export class LumiStageRepository {
         value.characterId,
         characterName,
       );
-      await this.storage.setJson(path, profile, { indent: 2, userId });
-      this.profileCache.set(key, profile);
-      return structuredClone(profile);
-    });
-  }
-
-  async replaceProfile(userId: string, value: CharacterProfileV2): Promise<CharacterProfileV2> {
-    const path = profilePath(value.characterId);
-    const key = this.key(userId, path);
-    return this.enqueue(key, async () => {
-      const profile = normalizeProfile(value, value.characterId, value.characterName);
       await this.storage.setJson(path, profile, { indent: 2, userId });
       this.profileCache.set(key, profile);
       return structuredClone(profile);
@@ -270,6 +268,7 @@ export class LumiStageRepository {
       const timeline = {
         ...structuredClone(value),
         schemaVersion: SCHEMA_VERSION,
+        revision: current.revision + 1,
         updatedAt: Date.now(),
       };
       await this.storage.setJson(path, timeline, { indent: 2, userId });

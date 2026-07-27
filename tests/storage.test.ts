@@ -8,6 +8,7 @@ import {
   type UserStorageApi,
 } from "../src/storage";
 import { profileA } from "./fixtures";
+import { createTimeline } from "../src/model";
 
 class MemoryStorage implements UserStorageApi {
   values = new Map<string, unknown>();
@@ -64,6 +65,17 @@ describe("V2 user storage", () => {
     await expect(first).resolves.toEqual(expect.objectContaining({ revision: 1 }));
     await expect(second).rejects.toBeInstanceOf(RevisionConflict);
     expect(settingsPath()).toBe("settings.v2.json");
+  });
+
+  it("owns timeline revision increments instead of trusting caller values", async () => {
+    const storage = new MemoryStorage();
+    const repository = new LumiStageRepository(storage);
+    const timeline = createTimeline("chat", 1);
+    timeline.revision = 99;
+    const saved = await repository.saveTimeline("user", timeline, 0);
+    expect(saved.revision).toBe(1);
+    await expect(repository.saveTimeline("user", timeline, 0))
+      .rejects.toBeInstanceOf(RevisionConflict);
   });
 
   it("migrates V1 profiles and writes the V2 record without losing media", async () => {

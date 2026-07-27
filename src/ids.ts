@@ -27,6 +27,6 @@ export function cleanName(value: string, fallback = "Default"): string {
 export function normalizedKey(value: string): string {
   return cleanName(value, "")
     .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }

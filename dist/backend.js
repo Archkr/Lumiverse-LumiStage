@@ -18,7 +18,7 @@ function cleanName(value, fallback = "Default") {
   return cleaned || fallback;
 }
 function normalizedKey(value) {
-  return cleanName(value, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return cleanName(value, "").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 // src/types.ts
@@ -174,25 +174,9 @@ function normalizeExpression(value, index, now) {
     variants
   };
 }
-function mergeVariants(target, source) {
-  const ids = new Set(target.variants.map((item) => item.id));
-  const hashes = new Set(target.variants.map((item) => item.contentHash));
-  for (const variant of source.variants) {
-    if (ids.has(variant.id) || hashes.has(variant.contentHash)) continue;
-    target.variants.push({ ...variant, order: target.variants.length });
-    ids.add(variant.id);
-    hashes.add(variant.contentHash);
-  }
-}
 function normalizeOutfit(value, index, now, forcedName) {
   const raw = record(value);
-  const expressions = [];
-  for (const [expressionIndex, entry] of list(raw.expressions).entries()) {
-    const expression = normalizeExpression(entry, expressionIndex, now);
-    const existing = expressions.find((item) => normalizedKey(item.name) === normalizedKey(expression.name));
-    if (existing) mergeVariants(existing, expression);
-    else expressions.push({ ...expression, order: expressions.length });
-  }
+  const expressions = list(raw.expressions).map((entry, expressionIndex) => normalizeExpression(entry, expressionIndex, now));
   if (!expressions.length) expressions.push(createExpression("Neutral"));
   const requestedDefault = optionalId(raw.defaultExpressionId);
   return {
@@ -346,11 +330,30 @@ function resolveCharacterState(entry, previous, decision, override, settings, fo
   };
 }
 function applyDecision(snapshot, catalog, decision, overrides, settings, now = Date.now()) {
-  const characters = { ...snapshot.characters };
-  const focused = new Set(
-    decision.focusedCharacterIds.filter((id) => !!findCharacter(catalog, id))
+  const catalogIds = new Set(catalog.map((entry) => entry.characterId));
+  const priorCharacters = Object.fromEntries(
+    Object.entries(snapshot.characters).filter(([characterId]) => catalogIds.has(characterId))
   );
-  for (const entry of catalog) {
+  const priorFocus = snapshot.focusedCharacterIds.filter((characterId) => catalogIds.has(characterId));
+  const detectorDecision = decision.characters.length > 0;
+  if (detectorDecision && decision.characters.some((item) => item.confidence < settings.detection.confidence)) {
+    if (Object.keys(priorCharacters).length === Object.keys(snapshot.characters).length && priorFocus.length === snapshot.focusedCharacterIds.length) return snapshot;
+    return {
+      ...snapshot,
+      characters: priorCharacters,
+      focusedCharacterIds: priorFocus
+    };
+  }
+  const characters = { ...priorCharacters };
+  const focused = new Set(
+    (detectorDecision ? decision.focusedCharacterIds : priorFocus).filter((id) => catalogIds.has(id))
+  );
+  const selectedIds = /* @__PURE__ */ new Set([
+    ...Object.keys(priorCharacters),
+    ...decision.characters.map((item) => item.characterId),
+    ...Object.keys(overrides)
+  ]);
+  for (const entry of catalog.filter((candidate) => selectedIds.has(candidate.characterId))) {
     const item = decision.characters.find((candidate) => candidate.characterId === entry.characterId) ?? null;
     const state = resolveCharacterState(
       entry,
@@ -373,6 +376,18 @@ function applyDecision(snapshot, catalog, decision, overrides, settings, now = D
     focusedCharacterIds: [...focused],
     updatedAt: now
   };
+}
+function isValidManualOverride(catalog, override) {
+  const profile = findCharacter(catalog, override.characterId)?.profile;
+  const outfit = profile?.outfits.find((item) => item.id === override.outfitId);
+  if (!profile || !outfit) return false;
+  if (override.lock === "outfit") {
+    if (override.expressionId == null && override.variantId == null) return true;
+    const expression2 = outfit.expressions.find((item) => item.id === override.expressionId);
+    return !!expression2 && (override.variantId == null || expression2.variants.some((variant) => variant.id === override.variantId));
+  }
+  const expression = outfit.expressions.find((item) => item.id === override.expressionId);
+  return !!expression && (override.variantId == null || expression.variants.some((variant) => variant.id === override.variantId));
 }
 function applyManualOverride(timeline, catalog, override, settings, now = Date.now()) {
   const manualOverrides = { ...timeline.manualOverrides, [override.characterId]: override };
@@ -401,20 +416,51 @@ function consumeOnceOverrides(overrides) {
 }
 function inspectProfile(profile) {
   const issues = [];
+  const ids = /* @__PURE__ */ new Set();
+  const recordId = (id, label) => {
+    if (!id.trim()) issues.push({ severity: "error", code: "blank-id", message: `${label} has a blank ID.` });
+    else if (ids.has(id)) issues.push({ severity: "error", code: "duplicate-id", message: `${label} repeats ID ${id}.` });
+    else ids.add(id);
+  };
+  recordId(profile.characterId, profile.characterName || "Character");
   if (!profile.outfits.length) {
     issues.push({ severity: "error", code: "no-outfits", message: `${profile.characterName} has no outfits.` });
   }
+  const outfitNames = profile.outfits.map((outfit) => normalizedKey(outfit.name));
+  if (outfitNames.some((name) => !name)) {
+    issues.push({ severity: "error", code: "blank-outfit", message: "Every outfit needs a name." });
+  }
+  if (new Set(outfitNames).size !== outfitNames.length) {
+    issues.push({ severity: "error", code: "duplicate-outfit", message: "Outfit names must be unique." });
+  }
+  if (profile.defaultOutfitId && !profile.outfits.some((outfit) => outfit.id === profile.defaultOutfitId)) {
+    issues.push({ severity: "error", code: "invalid-default-outfit", message: "The default outfit no longer exists." });
+  }
   for (const outfit of profile.outfits) {
+    recordId(outfit.id, `Outfit ${outfit.name || "(unnamed)"}`);
     if (!outfit.expressions.length) {
       issues.push({ severity: "warning", code: "empty-outfit", message: `${outfit.name} has no expressions.` });
     }
     const names = outfit.expressions.map((item) => normalizedKey(item.name));
+    if (names.some((name) => !name)) {
+      issues.push({ severity: "error", code: "blank-expression", message: `${outfit.name} contains an expression without a name.` });
+    }
     if (new Set(names).size !== names.length) {
-      issues.push({ severity: "warning", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+      issues.push({ severity: "error", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+    }
+    if (outfit.defaultExpressionId && !outfit.expressions.some((expression) => expression.id === outfit.defaultExpressionId)) {
+      issues.push({ severity: "error", code: "invalid-default-expression", message: `${outfit.name} has an invalid default expression.` });
     }
     for (const expression of outfit.expressions) {
+      recordId(expression.id, `Expression ${outfit.name} / ${expression.name || "(unnamed)"}`);
       if (!expression.variants.length) {
         issues.push({ severity: "info", code: "empty-expression", message: `${outfit.name} / ${expression.name} has no sprite variants.` });
+      }
+      for (const variant of expression.variants) {
+        recordId(variant.id, `Variant ${variant.fileName || "(unnamed)"}`);
+        if (!variant.imageId || !variant.contentHash) {
+          issues.push({ severity: "error", code: "invalid-media-reference", message: `${variant.fileName || variant.id} has an invalid media reference.` });
+        }
       }
     }
   }
@@ -427,10 +473,42 @@ var require2 = createRequire("/");
 var _a;
 var Worker;
 var isMarkedAsUntransferable;
+var workerAdd = ";var __w=require('worker_threads');__w.parentPort.on('message',function(m){onmessage({data:m})}),postMessage=function(m,t){__w.parentPort.postMessage(m,t)},close=process.exit;self=global";
 try {
   _a = require2("worker_threads"), Worker = _a.Worker, isMarkedAsUntransferable = _a.isMarkedAsUntransferable;
 } catch (e) {
 }
+var wk = Worker ? function(c, _, msg, transfer, cb) {
+  var done = false;
+  var w = new Worker(c + workerAdd, { eval: true }).on("error", function(e) {
+    return cb(e, null);
+  }).on("message", function(m) {
+    return cb(null, m);
+  }).on("exit", function(c2) {
+    if (c2 && !done)
+      cb(new Error("exited with code " + c2), null);
+  });
+  if (isMarkedAsUntransferable)
+    transfer = transfer.filter(function(t) {
+      return !isMarkedAsUntransferable(t);
+    });
+  w.postMessage(msg, transfer);
+  w.terminate = function() {
+    done = true;
+    return Worker.prototype.terminate.call(w);
+  };
+  return w;
+} : function(_, __, ___, ____, cb) {
+  setImmediate(function() {
+    return cb(new Error("async operations unsupported - update to Node 12+ (or Node 10-11 with the --experimental-worker CLI flag)"), null);
+  });
+  var NOP = function() {
+  };
+  return {
+    terminate: NOP,
+    postMessage: NOP
+  };
+};
 var u8 = Uint8Array;
 var u16 = Uint16Array;
 var i32 = Int32Array;
@@ -785,6 +863,81 @@ var inflt = function(dat, st, buf, dict) {
   return bt != buf.length && noBuf ? slc(buf, 0, bt) : buf.subarray(0, bt);
 };
 var et = /* @__PURE__ */ new u8(0);
+var mrg = function(a, b) {
+  var o = {};
+  for (var k in a)
+    o[k] = a[k];
+  for (var k in b)
+    o[k] = b[k];
+  return o;
+};
+var wcln = function(fn, fnStr, td2) {
+  var dt = fn();
+  var st = fn.toString();
+  var ks = st.slice(st.indexOf("[") + 1, st.lastIndexOf("]")).replace(/\s+/g, "").split(",");
+  for (var i = 0; i < dt.length; ++i) {
+    var v = dt[i], k = ks[i];
+    if (typeof v == "function") {
+      fnStr += ";" + k + "=";
+      var st_1 = v.toString();
+      if (v.prototype) {
+        if (st_1.indexOf("[native code]") != -1) {
+          var spInd = st_1.indexOf(" ", 8) + 1;
+          fnStr += st_1.slice(spInd, st_1.indexOf("(", spInd));
+        } else {
+          fnStr += st_1;
+          for (var t in v.prototype)
+            fnStr += ";" + k + ".prototype." + t + "=" + v.prototype[t].toString();
+        }
+      } else
+        fnStr += st_1;
+    } else
+      td2[k] = v;
+  }
+  return fnStr;
+};
+var ch = [];
+var cbfs = function(v) {
+  var tl = [];
+  for (var k in v) {
+    if (v[k].buffer) {
+      tl.push((v[k] = new v[k].constructor(v[k])).buffer);
+    }
+  }
+  return tl;
+};
+var wrkr = function(fns, init, id, cb) {
+  if (!ch[id]) {
+    var fnStr = "", td_1 = {}, m = fns.length - 1;
+    for (var i = 0; i < m; ++i)
+      fnStr = wcln(fns[i], fnStr, td_1);
+    ch[id] = { c: wcln(fns[m], fnStr, td_1), e: td_1 };
+  }
+  var td2 = mrg({}, ch[id].e);
+  return wk(ch[id].c + ";onmessage=function(e){for(var k in e.data)self[k]=e.data[k];onmessage=" + init.toString() + "}", id, td2, cbfs(td2), cb);
+};
+var bInflt = function() {
+  return [u8, u16, i32, fleb, fdeb, clim, fl, fd, flrm, fdrm, rev, ec, hMap, max, bits, bits16, shft, slc, err, inflt, inflateSync, pbf, gopt];
+};
+var pbf = function(msg) {
+  return postMessage(msg, [msg.buffer]);
+};
+var gopt = function(o) {
+  return o && {
+    out: o.size && new u8(o.size),
+    dictionary: o.dictionary
+  };
+};
+var cbify = function(dat, opts, fns, init, id, cb) {
+  var w = wrkr(fns, init, id, function(err2, dat2) {
+    w.terminate();
+    cb(err2, dat2);
+  });
+  w.postMessage([dat, opts], opts.consume ? [dat.buffer] : []);
+  return function() {
+    w.terminate();
+  };
+};
 var b2 = function(d, b) {
   return d[b] | d[b + 1] << 8;
 };
@@ -794,6 +947,17 @@ var b4 = function(d, b) {
 var b8 = function(d, b) {
   return b4(d, b) + b4(d, b + 4) * 4294967296;
 };
+function inflate(data, opts, cb) {
+  if (!cb)
+    cb = opts, opts = {};
+  if (typeof cb != "function")
+    err(7);
+  return cbify(data, opts, [
+    bInflt
+  ], function(ev) {
+    return pbf(inflateSync(ev.data[0], gopt(ev.data[1])));
+  }, 1, cb);
+}
 function inflateSync(data, opts) {
   return inflt(data, { i: 2 }, opts && opts.out, opts && opts.dictionary);
 }
@@ -862,46 +1026,93 @@ var z64hs = function(d, b, l, z, sc, su, off) {
   }
   return [sc, su, off, 0];
 };
-function unzipSync(data, opts) {
+var mt = typeof queueMicrotask == "function" ? queueMicrotask : typeof setTimeout == "function" ? setTimeout : function(fn) {
+  fn();
+};
+function unzip(data, opts, cb) {
+  if (!cb)
+    cb = opts, opts = {};
+  if (typeof cb != "function")
+    err(7);
+  var term = [];
+  var tAll = function() {
+    for (var i2 = 0; i2 < term.length; ++i2)
+      term[i2]();
+  };
   var files = {};
+  var cbd = function(a, b) {
+    mt(function() {
+      cb(a, b);
+    });
+  };
+  mt(function() {
+    cbd = cb;
+  });
   var e = data.length - 22;
   for (; b4(data, e) != 101010256; --e) {
-    if (!e || data.length - e > 65558)
-      err(13);
+    if (!e || data.length - e > 65558) {
+      cbd(err(13, 0, 1), null);
+      return tAll;
+    }
   }
   ;
-  var c = b2(data, e + 8);
-  if (!c)
-    return {};
-  var o = b4(data, e + 16);
-  var z = b4(data, e - 20) == 117853008;
-  if (z) {
-    var ze = b4(data, e - 12);
-    z = b4(data, ze) == 101075792;
+  var lft = b2(data, e + 8);
+  if (lft) {
+    var c = lft;
+    var o = b4(data, e + 16);
+    var z = b4(data, e - 20) == 117853008;
     if (z) {
-      c = b4(data, ze + 32);
-      o = b4(data, ze + 48);
+      var ze = b4(data, e - 12);
+      z = b4(data, ze) == 101075792;
+      if (z) {
+        c = lft = b4(data, ze + 32);
+        o = b4(data, ze + 48);
+      }
     }
-  }
-  var fltr = opts && opts.filter;
-  for (var i = 0; i < c; ++i) {
-    var _a2 = zh(data, o, z), c_2 = _a2[0], sc = _a2[1], su = _a2[2], fn = _a2[3], no = _a2[4], off = _a2[5], b = slzh(data, off);
-    o = no;
-    if (!fltr || fltr({
-      name: fn,
-      size: sc,
-      originalSize: su,
-      compression: c_2
-    })) {
-      if (!c_2)
-        files[fn] = slc(data, b, b + sc);
-      else if (c_2 == 8)
-        files[fn] = inflateSync(data.subarray(b, b + sc), { out: new u8(su) });
-      else
-        err(14, "unknown compression type " + c_2);
+    var fltr = opts && opts.filter;
+    var _loop_3 = function(i2) {
+      var _a2 = zh(data, o, z), c_1 = _a2[0], sc = _a2[1], su = _a2[2], fn = _a2[3], no = _a2[4], off = _a2[5], b = slzh(data, off);
+      o = no;
+      var cbl = function(e2, d) {
+        if (e2) {
+          tAll();
+          cbd(e2, null);
+        } else {
+          if (d)
+            files[fn] = d;
+          if (!--lft)
+            cbd(null, files);
+        }
+      };
+      if (!fltr || fltr({
+        name: fn,
+        size: sc,
+        originalSize: su,
+        compression: c_1
+      })) {
+        if (!c_1)
+          cbl(null, slc(data, b, b + sc));
+        else if (c_1 == 8) {
+          var infl = data.subarray(b, b + sc);
+          if (su < 524288 || sc > 0.8 * su) {
+            try {
+              cbl(null, inflateSync(infl, { out: new u8(su) }));
+            } catch (e2) {
+              cbl(e2, null);
+            }
+          } else
+            term.push(inflate(infl, { size: su }, cbl));
+        } else
+          cbl(err(14, "unknown compression type " + c_1, 1), null);
+      } else
+        cbl(null, null);
+    };
+    for (var i = 0; i < c; ++i) {
+      _loop_3(i);
     }
-  }
-  return files;
+  } else
+    cbd(null, {});
+  return tAll;
 }
 
 // src/importer.ts
@@ -996,62 +1207,7 @@ function assertUnambiguousCandidates(candidates, layout) {
     );
   }
 }
-function extractArchive(bytes) {
-  if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
-    throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
-  }
-  let expandedBytes = 0;
-  let acceptedCount = 0;
-  const rejected = /* @__PURE__ */ new Map();
-  const unzipped = unzipSync(bytes, {
-    filter(info) {
-      const path = normalizedArchivePath(info.name);
-      if (!path || path === "manifest.json") return false;
-      const mimeType = mimeForName(path);
-      if (!mimeType) return false;
-      acceptedCount += 1;
-      expandedBytes += info.originalSize;
-      const limit = mimeType.startsWith("video/") ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-      if (info.originalSize > limit) {
-        rejected.set(path, `File exceeds ${limit} bytes.`);
-        return false;
-      }
-      assertArchiveBudget(acceptedCount, expandedBytes);
-      return true;
-    }
-  });
-  const candidates = [];
-  const errors = [...rejected].map(([path, reason]) => `${path}: ${reason}`);
-  for (const [rawPath, data] of Object.entries(unzipped)) {
-    const path = normalizedArchivePath(rawPath);
-    if (!path || data.byteLength === 0) continue;
-    const mimeType = mimeForName(path);
-    if (!mimeType) continue;
-    const parts = path.split("/");
-    const rawFileName = parts.pop() ?? path;
-    candidates.push({
-      path,
-      fileName: rawFileName,
-      bytes: data,
-      mimeType,
-      segments: parts
-    });
-  }
-  return { candidates, errors };
-}
-function readLumiStageManifest(bytes) {
-  const data = unzipSync(bytes, {
-    filter(info) {
-      const path = normalizedArchivePath(info.name);
-      if (path !== "manifest.json") return false;
-      if (info.originalSize > 5 * 1024 * 1024) {
-        throw new Error("LumiStage manifest exceeds 5 MB.");
-      }
-      return true;
-    }
-  });
-  const manifestBytes = data["manifest.json"];
-  if (!manifestBytes) return null;
+function parseManifestBytes(manifestBytes) {
   try {
     const parsed = JSON.parse(new TextDecoder().decode(manifestBytes));
     if (parsed.kind !== "lumistage-archive" || parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2 || !parsed.profile) {
@@ -1061,6 +1217,59 @@ function readLumiStageManifest(bytes) {
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : "Invalid LumiStage manifest.");
   }
+}
+async function extractLumiStageArchive(bytes) {
+  if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
+  }
+  let expandedBytes = 0;
+  let acceptedCount = 0;
+  const rejected = /* @__PURE__ */ new Map();
+  const unzipped = await new Promise((resolve, reject) => {
+    unzip(bytes, {
+      filter(info) {
+        const path = normalizedArchivePath(info.name);
+        if (!path) return false;
+        if (path === "manifest.json") {
+          if (info.originalSize > 5 * 1024 * 1024) {
+            throw new Error("LumiStage manifest exceeds 5 MB.");
+          }
+          return true;
+        }
+        const mimeType = mimeForName(path);
+        if (!mimeType) return false;
+        acceptedCount += 1;
+        expandedBytes += info.originalSize;
+        const limit = mimeType.startsWith("video/") ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+        if (info.originalSize > limit) {
+          rejected.set(path, `File exceeds ${limit} bytes.`);
+          return false;
+        }
+        assertArchiveBudget(acceptedCount, expandedBytes);
+        return true;
+      }
+    }, (error, result) => error ? reject(error) : resolve(result));
+  });
+  const manifestEntry = Object.entries(unzipped).find(
+    ([path]) => normalizedArchivePath(path) === "manifest.json"
+  );
+  if (!manifestEntry) throw new Error("The archive does not contain a LumiStage manifest.");
+  const manifest = parseManifestBytes(manifestEntry[1]);
+  const candidates = [];
+  for (const [rawPath, data] of Object.entries(unzipped)) {
+    const path = normalizedArchivePath(rawPath);
+    if (!path || path === "manifest.json" || data.byteLength === 0) continue;
+    const mimeType = mimeForName(path);
+    if (!mimeType) continue;
+    const parts = path.split("/");
+    const fileName = parts.pop() ?? path;
+    candidates.push({ path, fileName, bytes: data, mimeType, segments: parts });
+  }
+  return {
+    manifest,
+    candidates,
+    errors: [...rejected].map(([path, reason]) => `${path}: ${reason}`)
+  };
 }
 function directCandidate(fileName, bytes, mimeTypeHint) {
   const path = normalizedArchivePath(fileName);
@@ -1097,31 +1306,6 @@ function findOrCreateExpression(outfit, name) {
   }
   return expression;
 }
-function settleHostUploads(prepared, results, layout) {
-  const imported = [];
-  const uploadedByPath = /* @__PURE__ */ new Map();
-  const errors = [];
-  for (let index = 0; index < prepared.length; index += 1) {
-    const result = results[index];
-    const item = prepared[index];
-    if (!result?.id) {
-      errors.push(`${item.candidate.path}: ${result?.error ?? "Upload failed."}`);
-      continue;
-    }
-    const uploaded = {
-      imageId: result.id,
-      contentHash: item.hash,
-      fileName: item.candidate.fileName,
-      mimeType: item.candidate.mimeType
-    };
-    uploadedByPath.set(item.candidate.path, uploaded);
-    imported.push({
-      target: importTarget(item.candidate, layout),
-      ...uploaded
-    });
-  }
-  return { imported, uploadedByPath, errors };
-}
 function mergeImportedAssets(source, imported, characterName2, now = Date.now()) {
   const profile = normalizeProfile(
     structuredClone(source),
@@ -1129,16 +1313,17 @@ function mergeImportedAssets(source, imported, characterName2, now = Date.now())
     characterName2,
     now
   );
-  const hashes = new Set(allVariants(profile).map((variant) => variant.contentHash));
   let importedCount = 0;
   let skipped = 0;
   for (const item of imported) {
-    if (hashes.has(item.contentHash)) {
+    const outfit = item.targetOutfitId ? profile.outfits.find((entry) => entry.id === item.targetOutfitId) : findOrCreateOutfit(profile, item.target.outfitName);
+    if (!outfit) throw new Error(`Import target outfit ${item.targetOutfitId} no longer exists.`);
+    const expression = item.targetExpressionId ? outfit.expressions.find((entry) => entry.id === item.targetExpressionId) : findOrCreateExpression(outfit, item.target.expressionName);
+    if (!expression) throw new Error(`Import target expression ${item.targetExpressionId} no longer exists.`);
+    if (expression.variants.some((variant2) => variant2.contentHash === item.contentHash)) {
       skipped += 1;
       continue;
     }
-    const outfit = findOrCreateOutfit(profile, item.target.outfitName);
-    const expression = findOrCreateExpression(outfit, item.target.expressionName);
     const variant = {
       id: createId("variant"),
       imageId: item.imageId,
@@ -1150,7 +1335,6 @@ function mergeImportedAssets(source, imported, characterName2, now = Date.now())
       createdAt: now
     };
     expression.variants.push(variant);
-    hashes.add(item.contentHash);
     importedCount += 1;
   }
   profile.revision += 1;
@@ -1179,9 +1363,26 @@ function hydrateArchiveProfile(archive, characterId, characterName2, uploadedByP
     characterName2,
     now
   );
-  const pathsByVariantId = new Map(
-    archiveEntries(archive).map((entry) => [entry.variantId, entry.path])
-  );
+  const entries = archiveEntries(archive);
+  const pathsByVariantId = /* @__PURE__ */ new Map();
+  const referencedPaths = /* @__PURE__ */ new Set();
+  for (const entry of entries) {
+    const path = normalizedArchivePath(entry.path);
+    if (!path || path === "manifest.json") throw new Error(`Archive manifest contains an unsafe path: ${entry.path}`);
+    if (pathsByVariantId.has(entry.variantId)) throw new Error(`Archive manifest repeats variant ID ${entry.variantId}.`);
+    pathsByVariantId.set(entry.variantId, path);
+    referencedPaths.add(path);
+  }
+  const profileVariants = allVariants(profile);
+  if (pathsByVariantId.size !== profileVariants.length) {
+    throw new Error("Archive manifest does not contain exactly one media reference for every profile variant.");
+  }
+  for (const path of referencedPaths) {
+    if (!uploadedByPath.has(path)) throw new Error(`Archive is missing referenced media ${path}.`);
+  }
+  for (const path of uploadedByPath.keys()) {
+    if (!referencedPaths.has(path)) throw new Error(`Archive contains unreferenced media ${path}.`);
+  }
   for (const outfit of profile.outfits) {
     for (const expression of outfit.expressions) {
       expression.variants = expression.variants.flatMap((variant) => {
@@ -1306,7 +1507,7 @@ function characterSummary(entry) {
     }))
   };
 }
-function buildDetectorRequest(catalog, recentMessages, currentStates, settings) {
+function buildDetectorRequest(catalog, recentMessages, currentStates, settings, overrides = {}) {
   const system = [
     "You direct the visible character sprite stage after a completed roleplay reply.",
     "Choose only IDs present in the complete catalog. Never invent or rewrite an ID.",
@@ -1317,23 +1518,34 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings) 
     "Return one complete outfit, expression, and exact sprite variant for every character you update.",
     "Confidence is 0..1 for the complete visible-state match.",
     `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
-    `Current states: ${JSON.stringify(currentStates)}`
+    `Current states: ${JSON.stringify(currentStates)}`,
+    `Manual locks: ${JSON.stringify(overrides)}`
   ].join("\n");
+  const messages = [
+    { role: "system", content: system },
+    ...recentMessages.slice(-settings.detection.contextMessages),
+    {
+      role: "user",
+      content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once."
+    }
+  ];
+  const estimatedInputTokens = Math.ceil(
+    messages.reduce((sum, message) => sum + message.role.length + message.content.length, 0) / 4
+  );
+  if (estimatedInputTokens > 24e3) {
+    throw new Error(
+      `The detector catalog and context are too large (${estimatedInputTokens} estimated input tokens; limit 24000).`
+    );
+  }
   return {
-    messages: [
-      { role: "system", content: system },
-      ...recentMessages.slice(-settings.detection.contextMessages),
-      {
-        role: "user",
-        content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once."
-      }
-    ],
+    messages,
     connection_id: settings.detection.connectionId ?? void 0,
     model: settings.detection.model ?? void 0,
     parameters: {
       temperature: settings.detection.temperature,
-      max_tokens: 560
+      max_tokens: Math.min(2400, Math.max(560, 560 + Math.max(0, catalog.length - 1) * 230))
     },
+    reasoning: { source: "off" },
     tools: [{
       name: "set_stage_state",
       description: "Select focused characters and exact sprite variants for the latest reply.",
@@ -1372,8 +1584,14 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings) 
 function validateDecision(decision, catalog) {
   const entries = new Map(catalog.map((entry) => [entry.characterId, entry.profile]));
   const characters = [];
+  const seenCharacterIds = /* @__PURE__ */ new Set();
   let invalid = false;
   for (const item of decision.characters) {
+    if (seenCharacterIds.has(item.characterId)) {
+      invalid = true;
+      break;
+    }
+    seenCharacterIds.add(item.characterId);
     const profile = entries.get(item.characterId);
     const outfit = profile?.outfits.find((candidate) => candidate.id === item.outfitId);
     const expression = outfit?.expressions.find(
@@ -1536,13 +1754,22 @@ var LumiStageRepository = class {
     const path = profilePath(characterId);
     const key = this.key(userId, path);
     const cached = this.profileCache.get(key);
-    if (cached) return structuredClone(cached);
+    if (cached) {
+      if (characterName2.trim() && characterName2 !== "Character" && cached.characterName !== characterName2.trim()) {
+        cached.characterName = characterName2.trim();
+        this.profileCache.set(key, cached);
+      }
+      return structuredClone(cached);
+    }
     const { raw, migrated } = await this.readCurrentOrOld(
       path,
       oldProfilePath(characterId),
       userId
     );
     const profile = raw ? normalizeProfile(raw, characterId, characterName2) : createProfile(characterId, characterName2);
+    if (characterName2.trim() && characterName2 !== "Character") {
+      profile.characterName = characterName2.trim();
+    }
     if (migrated) await this.storage.setJson(path, profile, { indent: 2, userId });
     this.profileCache.set(key, profile);
     return structuredClone(profile);
@@ -1558,16 +1785,6 @@ var LumiStageRepository = class {
         value.characterId,
         characterName2
       );
-      await this.storage.setJson(path, profile, { indent: 2, userId });
-      this.profileCache.set(key, profile);
-      return structuredClone(profile);
-    });
-  }
-  async replaceProfile(userId, value) {
-    const path = profilePath(value.characterId);
-    const key = this.key(userId, path);
-    return this.enqueue(key, async () => {
-      const profile = normalizeProfile(value, value.characterId, value.characterName);
       await this.storage.setJson(path, profile, { indent: 2, userId });
       this.profileCache.set(key, profile);
       return structuredClone(profile);
@@ -1597,6 +1814,7 @@ var LumiStageRepository = class {
       const timeline = {
         ...structuredClone(value),
         schemaVersion: SCHEMA_VERSION,
+        revision: current.revision + 1,
         updatedAt: Date.now()
       };
       await this.storage.setJson(path, timeline, { indent: 2, userId });
@@ -1656,9 +1874,10 @@ async function confirmExtensionOwnedImageIds(imageIds, lookup) {
 }
 
 // src/timeline.ts
-function findCachedDecision(records, message) {
+function findCachedDecision(records, message, requestFingerprint) {
+  if (!requestFingerprint) return null;
   return records.find(
-    (record2) => record2.messageId === message.id && record2.swipeId === message.swipeId && record2.contentHash === message.contentHash
+    (record2) => record2.messageId === message.id && record2.swipeId === message.swipeId && record2.contentHash === message.contentHash && record2.requestFingerprint === requestFingerprint
   ) ?? null;
 }
 function upsertDecision(records, incoming, limit = 2e3) {
@@ -1681,7 +1900,9 @@ function replayTimeline(timeline, catalog, settings, messages, now = Date.now())
   let snapshot = emptySnapshot(timeline.chatId, now);
   for (const message of messages) {
     if (message.role !== "assistant") continue;
-    const cached = findCachedDecision(decisions, message);
+    const cached = decisions.find(
+      (record2) => record2.messageId === message.id && record2.swipeId === message.swipeId && record2.contentHash === message.contentHash
+    );
     if (!cached) continue;
     snapshot = applyDecision(
       snapshot,
@@ -1725,7 +1946,8 @@ var scheduled = /* @__PURE__ */ new Map();
 var analysisQueues = /* @__PURE__ */ new Map();
 var queueDepth = /* @__PURE__ */ new Map();
 var lastDetection = /* @__PURE__ */ new Map();
-var lastFrontendUserId = null;
+var mediaViewCache = /* @__PURE__ */ new Map();
+var diagnosticCounters = /* @__PURE__ */ new Map();
 var onEvent = spindle.on;
 function asRecord3(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -1739,13 +1961,26 @@ function extractChatId(value) {
   return readString(value, ["chatId", "chat_id", "id"]);
 }
 function resolveUserId(chatId, eventUserId) {
-  return eventUserId ?? (chatId ? chatUsers.get(chatId) : null) ?? lastFrontendUserId;
+  return eventUserId ?? (chatId ? chatUsers.get(chatId) ?? null : null);
 }
 function send(message, userId) {
   spindle.sendToFrontend(message, userId);
 }
 function settleBackground(operation) {
   void operation.catch(() => void 0);
+}
+function countersFor(userId) {
+  const current = diagnosticCounters.get(userId) ?? { revisionConflicts: 0, cleanupFailures: [] };
+  diagnosticCounters.set(userId, current);
+  return current;
+}
+function trackCleanup(userId, label, operation) {
+  void operation.catch((error) => {
+    const counters = countersFor(userId);
+    const message = `${label}: ${error instanceof Error ? error.message : "cleanup failed"}`;
+    counters.cleanupFailures = [...counters.cleanupFailures.slice(-19), message];
+    send({ type: "notice", tone: "warning", message: `${label} completed, but unused media cleanup needs attention.` }, userId);
+  });
 }
 function hasPermission(permission) {
   try {
@@ -1821,6 +2056,9 @@ async function mapWithConcurrency(items, limit, mapper) {
   return results;
 }
 async function variantViewsForProfiles(userId, profiles) {
+  const cacheKeys = profiles.map((profile) => `${userId}:${profile.characterId}:${profile.revision}`);
+  const cached = cacheKeys.map((key) => mediaViewCache.get(key));
+  if (cached.every(Boolean)) return Object.assign({}, ...cached);
   const variants = profiles.flatMap(allVariants);
   if (variants.length === 0) return {};
   if (!hasPermission("images")) return Object.fromEntries(variants.map((variant) => [variant.id, { ...variant, url: null, thumbUrl: null }]));
@@ -1849,16 +2087,28 @@ async function variantViewsForProfiles(userId, profiles) {
     async (imageId) => spindle.images.get(imageId, { onlyOwned: true, specificity: "full", userId }).catch(() => null)
   );
   for (const item of fetched) if (item) urls.set(item.id, item.url);
-  return Object.fromEntries(variants.map((variant) => {
+  const views = Object.fromEntries(variants.map((variant) => {
     const url = urls.get(variant.imageId) ?? null;
     const separator = url?.includes("?") ? "&" : "?";
     return [variant.id, { ...variant, url, thumbUrl: url ? `${url}${separator}size=sm` : null }];
   }));
+  for (const [index, profile] of profiles.entries()) {
+    const variantIds = new Set(allVariants(profile).map((variant) => variant.id));
+    mediaViewCache.set(cacheKeys[index], Object.fromEntries(
+      Object.entries(views).filter(([variantId]) => variantIds.has(variantId))
+    ));
+  }
+  while (mediaViewCache.size > 200) {
+    const oldestKey = mediaViewCache.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    mediaViewCache.delete(oldestKey);
+  }
+  return views;
 }
 async function buildState(userId, chatId, characterId) {
   const context = activeContexts.get(userId);
   const activeChatId = chatId === void 0 ? context?.chatId ?? null : chatId;
-  const activeCharacterId = characterId === void 0 ? context?.characterId ?? null : characterId;
+  let activeCharacterId = characterId === void 0 ? context?.characterId ?? null : characterId;
   const settings = await repository.getSettings(userId);
   let profile = null;
   let timeline = null;
@@ -1868,8 +2118,24 @@ async function buildState(userId, chatId, characterId) {
     const set = await profilesForChat(userId, activeChatId);
     profiles = set.profiles;
     timeline = await repository.getTimeline(userId, activeChatId);
+    const activeProfileIds = new Set(profiles.map((item) => item.characterId));
+    const characters = Object.fromEntries(
+      Object.entries(timeline.snapshot.characters).filter(([characterId2]) => activeProfileIds.has(characterId2))
+    );
+    const focusedCharacterIds = timeline.snapshot.focusedCharacterIds.filter((characterId2) => activeProfileIds.has(characterId2));
+    if (Object.keys(characters).length !== Object.keys(timeline.snapshot.characters).length || focusedCharacterIds.length !== timeline.snapshot.focusedCharacterIds.length) {
+      timeline = {
+        ...timeline,
+        snapshot: {
+          ...timeline.snapshot,
+          characters,
+          focusedCharacterIds
+        }
+      };
+    }
     const resolvedId = activeCharacterId ?? set.primaryCharacterId;
-    profile = profiles.find((item) => item.characterId === resolvedId) ?? null;
+    profile = profiles.find((item) => item.characterId === resolvedId) ?? profiles.find((item) => item.characterId === set.primaryCharacterId) ?? profiles[0] ?? null;
+    activeCharacterId = profile?.characterId ?? null;
     activeCharacterName = profile?.characterName ?? null;
   } else if (activeCharacterId) {
     activeCharacterName = await characterName(userId, activeCharacterId);
@@ -1889,7 +2155,7 @@ async function buildState(userId, chatId, characterId) {
     activeCharacterId,
     activeCharacterName,
     queueDepth: activeChatId ? queueDepth.get(queueKey(userId, activeChatId)) ?? 0 : 0,
-    lastDetection: lastDetection.get(userId) ?? { status: "idle", message: "No detection has run yet.", at: null }
+    lastDetection: activeChatId ? lastDetection.get(queueKey(userId, activeChatId)) ?? { status: "idle", message: "No detection has run yet.", at: null } : { status: "idle", message: "No detection has run yet.", at: null }
   };
 }
 async function sendState(userId, chatId, characterId) {
@@ -1916,16 +2182,16 @@ async function rebuildTimeline(timeline, catalog, settings, messages) {
 }
 async function analyzeLatest(userId, chatId, force = false) {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
-    lastDetection.set(userId, { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
-    await sendState(userId);
+    lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
+    await sendState(userId).catch(() => void 0);
     return;
   }
   const settings = await repository.getSettings(userId);
   if (!settings.detection.enabled && !force) return;
   const set = await profilesForChat(userId, chatId);
   if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
-    lastDetection.set(userId, { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
-    await sendState(userId);
+    lastDetection.set(queueKey(userId, chatId), { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
+    await sendState(userId).catch(() => void 0);
     return;
   }
   const messages = await normalizedMessages(chatId);
@@ -1934,25 +2200,36 @@ async function analyzeLatest(userId, chatId, force = false) {
   let timeline = await repository.getTimeline(userId, chatId);
   const expectedTimelineRevision = timeline.revision;
   const contentHash = await sha256(latest.content);
-  let record2 = findCachedDecision(timeline.decisions, {
+  const recentMessages = messages.slice(-settings.detection.contextMessages).map(({ role, content }) => ({ role, content }));
+  const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.characters).map(([characterId, state]) => [
+    characterId,
+    { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId }
+  ]));
+  const requestFingerprint = await sha256(JSON.stringify({
+    catalog: set.profiles,
+    detection: settings.detection,
+    overrides: timeline.manualOverrides,
+    recentMessages,
+    latest: { id: latest.id, swipeId: latest.swipeId, contentHash }
+  }));
+  let record2 = force ? null : findCachedDecision(timeline.decisions, {
     id: latest.id,
     swipeId: latest.swipeId,
     contentHash
-  });
-  lastDetection.set(userId, { status: "running", message: record2 ? "Restoring cached stage decision\u2026" : "Analyzing the latest reply\u2026", at: Date.now() });
-  await sendState(userId);
+  }, requestFingerprint);
+  lastDetection.set(queueKey(userId, chatId), { status: "running", message: record2 ? "Restoring cached stage decision\u2026" : "Analyzing the latest reply\u2026", at: Date.now() });
+  await sendState(userId).catch(() => void 0);
   if (!record2) {
-    const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.characters).map(([characterId, state]) => [
-      characterId,
-      { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId }
-    ]));
     const request = buildDetectorRequest(
       set.catalog,
-      messages.slice(-settings.detection.contextMessages).map(({ role, content }) => ({ role, content })),
+      recentMessages,
       currentStates,
-      settings
+      settings,
+      timeline.manualOverrides
     );
-    const response = await spindle.generate.quiet({ ...request, userId });
+    const generationInput = { ...request, userId };
+    Object.assign(generationInput, { signal: AbortSignal.timeout(6e4) });
+    const response = await spindle.generate.quiet(generationInput);
     const parsed = parseDetectorResponse(response);
     if (!parsed) throw new Error("The detector did not return a valid stage decision.");
     const decision = validateDecision(parsed, set.catalog);
@@ -1963,6 +2240,7 @@ async function analyzeLatest(userId, chatId, force = false) {
       messageId: latest.id,
       swipeId: latest.swipeId,
       contentHash,
+      requestFingerprint,
       decision,
       provider: response.provider ?? null,
       model: response.model ?? settings.detection.model,
@@ -1973,12 +2251,12 @@ async function analyzeLatest(userId, chatId, force = false) {
   timeline.manualOverrides = consumeOnceOverrides(timeline.manualOverrides);
   timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
-  lastDetection.set(userId, {
+  lastDetection.set(queueKey(userId, chatId), {
     status: "success",
     message: `Stage settled for ${record2.decision.focusedCharacterIds.length || record2.decision.characters.length} character(s).`,
     at: Date.now()
   });
-  await sendState(userId);
+  await sendState(userId).catch(() => void 0);
 }
 function scheduleAnalysis(userId, chatId, delay = 120, force = false) {
   const key = queueKey(userId, chatId);
@@ -1987,7 +2265,7 @@ function scheduleAnalysis(userId, chatId, delay = 120, force = false) {
   scheduled.set(key, setTimeout(() => {
     scheduled.delete(key);
     void enqueueAnalysis(userId, chatId, () => analyzeLatest(userId, chatId, force).catch(async (error) => {
-      lastDetection.set(userId, {
+      lastDetection.set(queueKey(userId, chatId), {
         status: "error",
         message: error instanceof Error ? error.message : "Stage detection failed.",
         at: Date.now()
@@ -1998,56 +2276,51 @@ function scheduleAnalysis(userId, chatId, delay = 120, force = false) {
 }
 async function importAssets(userId, message) {
   if (!hasPermission("images")) throw new Error("Images permission is required to import media.");
-  const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
+  if (message.baseProfile.characterId !== message.characterId) {
+    throw new Error("The import draft belongs to a different character.");
+  }
+  if (message.baseProfile.revision !== message.expectedRevision) {
+    throw new Error("The import draft revision does not match the expected profile revision.");
+  }
+  const current = await repository.getProfile(
+    userId,
+    message.characterId,
+    await characterName(userId, message.characterId)
+  );
+  if (current.revision !== message.expectedRevision) throw new RevisionConflict(current.revision);
   const candidates = [];
-  const errors = [];
-  let archiveManifest = null;
+  const newlyUploadedImageIds = [];
+  let committed = false;
   try {
-    for (const [index, uploadId] of message.uploadIds.entries()) {
-      send({ type: "import-progress", requestId: message.requestId, completed: index, total: message.uploadIds.length, message: "Reading staged uploads\u2026" }, userId);
-      const upload = await spindle.uploads.get(uploadId, userId);
+    for (const [index, staged] of message.uploads.entries()) {
+      send({ type: "import-progress", requestId: message.requestId, completed: index, total: message.uploads.length, message: "Reading staged uploads\u2026" }, userId);
+      const upload = await spindle.uploads.get(staged.id, userId);
       if (!upload) {
-        errors.push(`Upload ${uploadId} expired before it could be read.`);
-        continue;
+        throw new Error(`Upload ${staged.id} expired before it could be read.`);
       }
       try {
-        if (/\.zip$/i.test(upload.fileName)) {
-          const manifest = readLumiStageManifest(upload.data);
-          if (manifest) archiveManifest = manifest;
-          const extracted = extractArchive(upload.data);
-          candidates.push(...extracted.candidates);
-          errors.push(...extracted.errors);
-        } else {
-          candidates.push(directCandidate(upload.fileName, upload.data));
+        if (/\.zip$/i.test(staged.relativePath) || /\.zip$/i.test(upload.fileName)) {
+          throw new Error("Archives cannot be imported as media. Use Restore archive instead.");
         }
+        candidates.push(directCandidate(staged.relativePath || upload.fileName, upload.data));
       } finally {
-        await spindle.uploads.delete(uploadId, userId);
+        await spindle.uploads.delete(staged.id, userId);
       }
     }
+    if (!candidates.length) throw new Error("No supported media files were supplied.");
     assertUnambiguousCandidates(candidates, message.layout);
-    const existingByHash = new Map(allVariants(profile).map((variant) => [variant.contentHash, variant]));
-    const prepared = [];
-    const reusedByPath = /* @__PURE__ */ new Map();
-    let skipped = 0;
-    for (const candidate of candidates) {
-      const hash = await sha256(candidate.bytes);
-      const existing = existingByHash.get(hash);
-      if (existing) {
-        reusedByPath.set(candidate.path, {
-          imageId: existing.imageId,
-          contentHash: existing.contentHash,
-          fileName: candidate.fileName,
-          mimeType: candidate.mimeType
-        });
-        skipped += 1;
-        continue;
+    const existingByHash = new Map(
+      [...allVariants(current), ...allVariants(message.baseProfile)].map((variant) => [variant.contentHash, variant])
+    );
+    const candidateHashes = await Promise.all(candidates.map((candidate) => sha256(candidate.bytes)));
+    const preparedByHash = /* @__PURE__ */ new Map();
+    for (let index = 0; index < candidates.length; index += 1) {
+      const hash = candidateHashes[index];
+      if (!existingByHash.has(hash) && !preparedByHash.has(hash)) {
+        preparedByHash.set(hash, { candidate: candidates[index], hash });
       }
-      if (prepared.some((item) => item.hash === hash)) {
-        skipped += 1;
-        continue;
-      }
-      prepared.push({ candidate, hash });
     }
+    const prepared = [...preparedByHash.values()];
     const uploadItems = prepared.map(({ candidate }) => ({
       data: candidate.bytes,
       filename: candidate.fileName,
@@ -2056,12 +2329,27 @@ async function importAssets(userId, message) {
       strip_audio: candidate.mimeType.startsWith("video/")
     }));
     const results = uploadItems.length ? await spindle.images.uploadMany(uploadItems, { userId, concurrency: 8 }) : [];
-    const settled = settleHostUploads(prepared, results, message.layout);
-    for (const [path, reused] of reusedByPath) settled.uploadedByPath.set(path, reused);
-    errors.push(...settled.errors);
+    const storedByHash = /* @__PURE__ */ new Map();
+    for (const [hash, variant] of existingByHash) {
+      storedByHash.set(hash, {
+        imageId: variant.imageId,
+        contentHash: hash,
+        fileName: variant.fileName,
+        mimeType: variant.mimeType
+      });
+    }
     for (let index = 0; index < prepared.length; index += 1) {
       const result = results[index];
-      if (!result?.id) continue;
+      if (!result?.id) {
+        throw new Error(`${prepared[index].candidate.path}: ${result?.error ?? "Upload failed."}`);
+      }
+      newlyUploadedImageIds.push(result.id);
+      storedByHash.set(prepared[index].hash, {
+        imageId: result.id,
+        contentHash: prepared[index].hash,
+        fileName: prepared[index].candidate.fileName,
+        mimeType: prepared[index].candidate.mimeType
+      });
       send({
         type: "import-progress",
         requestId: message.requestId,
@@ -2070,30 +2358,167 @@ async function importAssets(userId, message) {
         message: `Stored ${index + 1} of ${prepared.length} media files\u2026`
       }, userId);
     }
-    const selectedOutfit = profile.outfits.find((item) => item.id === message.targetOutfitId);
+    const selectedOutfit = message.baseProfile.outfits.find((item) => item.id === message.targetOutfitId);
     const selectedExpression = selectedOutfit?.expressions.find((item) => item.id === message.targetExpressionId);
-    const imported = settled.imported.map((item) => ({
-      ...item,
-      target: {
-        outfitName: selectedOutfit?.name ?? item.target.outfitName,
-        expressionName: selectedExpression?.name ?? item.target.expressionName
-      }
-    }));
-    const next = archiveManifest ? hydrateArchiveProfile(archiveManifest, message.characterId, profile.characterName, settled.uploadedByPath) : mergeImportedAssets(profile, imported, profile.characterName).profile;
-    if (archiveManifest) next.revision = profile.revision + 1;
-    const saved = await repository.replaceProfile(userId, next);
-    const views = await variantViewsForProfiles(userId, [saved]);
+    if (message.targetOutfitId && !selectedOutfit) throw new Error("The selected outfit no longer exists in the Studio draft.");
+    if (message.targetExpressionId && !selectedExpression) throw new Error("The selected expression no longer exists in the Studio draft.");
+    const imported = candidates.map((candidate, index) => {
+      const stored = storedByHash.get(candidateHashes[index]);
+      if (!stored) throw new Error(`${candidate.path}: media storage did not return a reusable image.`);
+      return {
+        target: importTarget(candidate, message.layout),
+        targetOutfitId: selectedOutfit?.id,
+        targetExpressionId: selectedExpression?.id,
+        ...stored,
+        fileName: candidate.fileName,
+        mimeType: candidate.mimeType
+      };
+    });
+    const merged = mergeImportedAssets(
+      message.baseProfile,
+      imported,
+      message.baseProfile.characterName
+    );
+    const saved = await repository.saveProfile(
+      userId,
+      merged.profile,
+      message.expectedRevision,
+      message.baseProfile.characterName
+    );
+    committed = true;
+    send({
+      type: "operation-complete",
+      requestId: message.requestId,
+      revision: saved.revision,
+      result: { profile: saved, imported: merged.imported, skipped: merged.skipped, errors: [] }
+    }, userId);
+    const views = await variantViewsForProfiles(userId, [saved]).catch(() => ({}));
     send({
       type: "import-complete",
       requestId: message.requestId,
       profile: saved,
       variantViews: views,
-      imported: imported.length,
-      skipped,
-      errors
+      imported: merged.imported,
+      skipped: merged.skipped,
+      errors: []
     }, userId);
   } catch (error) {
+    if (!committed && newlyUploadedImageIds.length) {
+      await spindle.images.deleteMany(newlyUploadedImageIds, { userId }).catch((cleanupError) => {
+        const counters = countersFor(userId);
+        counters.cleanupFailures = [
+          ...counters.cleanupFailures.slice(-19),
+          `Failed import rollback: ${cleanupError instanceof Error ? cleanupError.message : "cleanup failed"}`
+        ];
+      });
+    }
     throw new Error(error instanceof Error ? error.message : "Import failed.");
+  }
+}
+async function restoreArchive(userId, message) {
+  if (!hasPermission("images")) throw new Error("Images permission is required to restore an archive.");
+  if (!message.confirmed) throw new Error("Archive restore requires explicit confirmation.");
+  if (!/\.lumistage\.zip$/i.test(message.upload.relativePath)) {
+    throw new Error("Restore accepts exactly one .lumistage.zip archive.");
+  }
+  const current = await repository.getProfile(
+    userId,
+    message.characterId,
+    await characterName(userId, message.characterId)
+  );
+  if (current.revision !== message.expectedRevision) throw new RevisionConflict(current.revision);
+  const newlyUploadedImageIds = [];
+  let committed = false;
+  try {
+    const upload = await spindle.uploads.get(message.upload.id, userId);
+    if (!upload) throw new Error("The staged archive expired before it could be read.");
+    let extracted;
+    try {
+      extracted = await extractLumiStageArchive(upload.data);
+      if (extracted.errors.length) throw new Error(extracted.errors.join("; "));
+    } finally {
+      await spindle.uploads.delete(message.upload.id, userId);
+    }
+    const { manifest, candidates } = extracted;
+    const candidateHashes = await Promise.all(candidates.map((candidate) => sha256(candidate.bytes)));
+    const existingByHash = new Map(allVariants(current).map((variant) => [variant.contentHash, variant]));
+    const preparedByHash = /* @__PURE__ */ new Map();
+    for (let index = 0; index < candidates.length; index += 1) {
+      const hash = candidateHashes[index];
+      if (!existingByHash.has(hash) && !preparedByHash.has(hash)) {
+        preparedByHash.set(hash, { candidate: candidates[index], hash });
+      }
+    }
+    const prepared = [...preparedByHash.values()];
+    const results = prepared.length ? await spindle.images.uploadMany(prepared.map(({ candidate }) => ({
+      data: candidate.bytes,
+      filename: candidate.fileName,
+      mime_type: candidate.mimeType,
+      owner_character_id: message.characterId,
+      strip_audio: candidate.mimeType.startsWith("video/")
+    })), { userId, concurrency: 8 }) : [];
+    const storedByHash = /* @__PURE__ */ new Map();
+    for (const [hash, variant] of existingByHash) {
+      storedByHash.set(hash, {
+        imageId: variant.imageId,
+        contentHash: hash,
+        fileName: variant.fileName,
+        mimeType: variant.mimeType
+      });
+    }
+    for (let index = 0; index < prepared.length; index += 1) {
+      const result = results[index];
+      if (!result?.id) throw new Error(`${prepared[index].candidate.path}: ${result?.error ?? "Upload failed."}`);
+      newlyUploadedImageIds.push(result.id);
+      storedByHash.set(prepared[index].hash, {
+        imageId: result.id,
+        contentHash: prepared[index].hash,
+        fileName: prepared[index].candidate.fileName,
+        mimeType: prepared[index].candidate.mimeType
+      });
+    }
+    const uploadedByPath = /* @__PURE__ */ new Map();
+    for (let index = 0; index < candidates.length; index += 1) {
+      const stored = storedByHash.get(candidateHashes[index]);
+      if (!stored) throw new Error(`${candidates[index].path}: media storage did not return a reusable image.`);
+      uploadedByPath.set(candidates[index].path, {
+        ...stored,
+        fileName: candidates[index].fileName,
+        mimeType: candidates[index].mimeType
+      });
+    }
+    const restored = hydrateArchiveProfile(
+      manifest,
+      message.characterId,
+      current.characterName,
+      uploadedByPath
+    );
+    const saved = await repository.saveProfile(userId, restored, message.expectedRevision, current.characterName);
+    committed = true;
+    send({
+      type: "operation-complete",
+      requestId: message.requestId,
+      revision: saved.revision,
+      result: { profile: saved }
+    }, userId);
+    const views = await variantViewsForProfiles(userId, [saved]).catch(() => ({}));
+    send({ type: "profile", profile: saved, variantViews: views }, userId);
+    const retainedImageIds = new Set(allVariants(saved).map((variant) => variant.imageId));
+    const removedImageIds = allVariants(current).filter((variant) => !retainedImageIds.has(variant.imageId)).map((variant) => variant.imageId);
+    if (removedImageIds.length) {
+      trackCleanup(userId, "Archive restore", deleteOwnedImagesIfUnreferenced(userId, removedImageIds));
+    }
+  } catch (error) {
+    if (!committed && newlyUploadedImageIds.length) {
+      await spindle.images.deleteMany(newlyUploadedImageIds, { userId }).catch((cleanupError) => {
+        const counters = countersFor(userId);
+        counters.cleanupFailures = [
+          ...counters.cleanupFailures.slice(-19),
+          `Failed restore rollback: ${cleanupError instanceof Error ? cleanupError.message : "cleanup failed"}`
+        ];
+      });
+    }
+    throw error;
   }
 }
 function archiveForProfile(profile) {
@@ -2125,7 +2550,8 @@ async function exportProfile(userId, characterId) {
   const urls = {};
   await mapWithConcurrency(archive.variants, 8, async (entry) => {
     const image = await spindle.images.get(entry.variant.imageId, { onlyOwned: true, specificity: "full", userId });
-    if (image?.url) urls[entry.path] = image.url;
+    if (!image?.url) throw new Error(`Export media is unavailable: ${entry.path}.`);
+    urls[entry.path] = image.url;
   });
   return { archive, urls };
 }
@@ -2143,6 +2569,10 @@ async function deleteOwnedImagesIfUnreferenced(userId, candidateImageIds) {
 }
 async function handleMessage(message, userId) {
   if (message.type === "ready" || message.type === "refresh") {
+    const prior = activeContexts.get(userId);
+    if (prior?.chatId && prior.chatId !== message.chatId && chatUsers.get(prior.chatId) === userId) {
+      chatUsers.delete(prior.chatId);
+    }
     activeContexts.set(userId, { chatId: message.chatId, characterId: message.characterId });
     if (message.chatId) chatUsers.set(message.chatId, userId);
     await sendState(userId, message.chatId, message.characterId);
@@ -2160,8 +2590,13 @@ async function handleMessage(message, userId) {
   }
   if (message.type === "save-settings") {
     const saved = await repository.saveSettings(userId, message.settings, message.expectedRevision);
-    send({ type: "saved", requestId: message.requestId, revision: saved.revision }, userId);
-    await sendState(userId);
+    send({
+      type: "operation-complete",
+      requestId: message.requestId,
+      revision: saved.revision,
+      result: { settings: saved }
+    }, userId);
+    await sendState(userId).catch(() => void 0);
     return;
   }
   if (message.type === "save-profile") {
@@ -2171,13 +2606,17 @@ async function handleMessage(message, userId) {
       message.profile.characterName
     );
     const saved = await repository.saveProfile(userId, message.profile, message.expectedRevision);
-    const retainedIds = new Set(allVariants(saved).map((variant) => variant.id));
-    const removedImageIds = allVariants(before).filter((variant) => !retainedIds.has(variant.id)).map((variant) => variant.imageId);
+    const retainedImageIds = new Set(allVariants(saved).map((variant) => variant.imageId));
+    const removedImageIds = allVariants(before).filter((variant) => !retainedImageIds.has(variant.imageId)).map((variant) => variant.imageId);
+    send({ type: "operation-complete", requestId: message.requestId, revision: saved.revision }, userId);
+    send({
+      type: "profile",
+      profile: saved,
+      variantViews: await variantViewsForProfiles(userId, [saved]).catch(() => ({}))
+    }, userId);
     if (removedImageIds.length && hasPermission("images")) {
-      await deleteOwnedImagesIfUnreferenced(userId, removedImageIds);
+      trackCleanup(userId, "Profile save", deleteOwnedImagesIfUnreferenced(userId, removedImageIds));
     }
-    send({ type: "saved", requestId: message.requestId, revision: saved.revision }, userId);
-    send({ type: "profile", profile: saved, variantViews: await variantViewsForProfiles(userId, [saved]) }, userId);
     return;
   }
   if (message.type === "save-chat-layout") {
@@ -2190,17 +2629,21 @@ async function handleMessage(message, userId) {
       updatedAt: Date.now()
     };
     const saved = await repository.saveTimeline(userId, next, message.expectedRevision);
-    send({ type: "saved", requestId: message.requestId, revision: saved.revision }, userId);
-    await sendState(userId);
+    send({ type: "operation-complete", requestId: message.requestId, revision: saved.revision }, userId);
+    await sendState(userId).catch(() => void 0);
     return;
   }
   if (message.type === "apply-manual") {
     const settings = await repository.getSettings(userId);
     const set = await profilesForChat(userId, message.chatId);
     const current = await repository.getTimeline(userId, message.chatId);
+    if (!isValidManualOverride(set.catalog, message.override)) {
+      throw new Error("The manual override does not match the active character catalog.");
+    }
     const timeline = applyManualOverride(current, set.catalog, message.override, settings);
-    await repository.saveTimeline(userId, timeline, current.revision);
-    await sendState(userId);
+    const saved = await repository.saveTimeline(userId, timeline, current.revision);
+    send({ type: "operation-complete", requestId: message.requestId, revision: saved.revision }, userId);
+    await sendState(userId).catch(() => void 0);
     return;
   }
   if (message.type === "clear-manual") {
@@ -2210,16 +2653,29 @@ async function handleMessage(message, userId) {
     const current = await repository.getTimeline(userId, message.chatId);
     let timeline = clearManualOverride(current, message.characterId);
     timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
-    await repository.saveTimeline(userId, timeline, current.revision);
-    await sendState(userId);
+    const saved = await repository.saveTimeline(userId, timeline, current.revision);
+    send({ type: "operation-complete", requestId: message.requestId, revision: saved.revision }, userId);
+    await sendState(userId).catch(() => void 0);
     return;
   }
   if (message.type === "analyze-now") {
-    scheduleAnalysis(userId, message.chatId, 0, true);
+    await enqueueAnalysis(userId, message.chatId, () => analyzeLatest(userId, message.chatId, true));
+    send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
   }
   if (message.type === "import-assets") {
     await importAssets(userId, message);
+    return;
+  }
+  if (message.type === "restore-archive") {
+    await restoreArchive(userId, message);
+    return;
+  }
+  if (message.type === "discard-uploads") {
+    await Promise.all(message.uploadIds.map(
+      (uploadId) => spindle.uploads.delete(uploadId, userId).catch(() => void 0)
+    ));
+    send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
   }
   if (message.type === "delete-variants") {
@@ -2227,9 +2683,22 @@ async function handleMessage(message, userId) {
     const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
     const selected = new Set(message.variantIds);
     const variants = allVariants(profile).filter((variant) => selected.has(variant.id));
-    const next = await repository.replaceProfile(userId, removeVariants(profile, selected));
-    await deleteOwnedImagesIfUnreferenced(userId, variants.map((variant) => variant.imageId));
-    send({ type: "profile", profile: next, variantViews: await variantViewsForProfiles(userId, [next]) }, userId);
+    const next = await repository.saveProfile(
+      userId,
+      removeVariants(profile, selected),
+      message.expectedRevision,
+      profile.characterName
+    );
+    send({ type: "operation-complete", requestId: message.requestId, revision: next.revision }, userId);
+    send({
+      type: "profile",
+      profile: next,
+      variantViews: await variantViewsForProfiles(userId, [next]).catch(() => ({}))
+    }, userId);
+    trackCleanup(userId, "Variant deletion", deleteOwnedImagesIfUnreferenced(
+      userId,
+      variants.map((variant) => variant.imageId)
+    ));
     return;
   }
   if (message.type === "request-export") {
@@ -2244,46 +2713,58 @@ async function handleMessage(message, userId) {
     const views = await variantViewsForProfiles(userId, diagnosticProfiles);
     const media = diagnosticProfiles.flatMap(allVariants);
     const settings = await repository.getSettings(userId);
+    const counters = countersFor(userId);
+    const estimatedCatalogTokens = Math.ceil(JSON.stringify(
+      buildCatalog(diagnosticProfiles).map((entry) => entry.profile)
+    ).length / 4);
+    const report = {
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      version: "1.0.0",
+      permissions: permissions(),
+      active: {
+        hasChat: !!context?.chatId,
+        hasCharacter: !!context?.characterId,
+        queueDepth: context?.chatId ? queueDepth.get(queueKey(userId, context.chatId)) ?? 0 : 0
+      },
+      persistence: {
+        revisionConflicts: counters.revisionConflicts,
+        cleanupFailures: [...counters.cleanupFailures]
+      },
+      connection: {
+        generationPermission: hasPermission("generation"),
+        selection: settings.detection.connectionId ? "configured" : "active-host-connection",
+        modelOverride: settings.detection.model ? "configured" : "none"
+      },
+      media: {
+        total: media.length,
+        missing: hasPermission("images") ? media.filter((variant) => !views[variant.id]?.url).length : null,
+        ownershipVerified: hasPermission("images")
+      },
+      catalog: {
+        characters: diagnosticProfiles.length,
+        outfits: diagnosticProfiles.reduce((sum, item) => sum + item.outfits.length, 0),
+        variants: media.length,
+        estimatedDetectorInputTokens: estimatedCatalogTokens,
+        oversized: estimatedCatalogTokens > 24e3,
+        issues: diagnosticProfiles.flatMap((item) => inspectProfile(item))
+      },
+      detector: context?.chatId ? lastDetection.get(queueKey(userId, context.chatId)) ?? null : null
+    };
     send({
       type: "diagnostics",
       requestId: message.requestId,
-      report: {
-        generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        version: "1.0.0",
-        permissions: permissions(),
-        active: {
-          hasChat: !!context?.chatId,
-          hasCharacter: !!context?.characterId,
-          queueDepth: context?.chatId ? queueDepth.get(queueKey(userId, context.chatId)) ?? 0 : 0
-        },
-        connection: {
-          generationPermission: hasPermission("generation"),
-          selection: settings.detection.connectionId ? "configured" : "active-host-connection",
-          modelOverride: settings.detection.model ? "configured" : "none"
-        },
-        media: {
-          total: media.length,
-          missing: hasPermission("images") ? media.filter((variant) => !views[variant.id]?.url).length : null,
-          ownershipVerified: hasPermission("images")
-        },
-        catalog: profile ? {
-          characters: 1,
-          outfits: profile.outfits.length,
-          variants: allVariants(profile).length,
-          issues: inspectProfile(profile)
-        } : null,
-        detector: lastDetection.get(userId) ?? null
-      }
+      report
     }, userId);
+    send({ type: "operation-complete", requestId: message.requestId, result: report }, userId);
   }
 }
 spindle.onFrontendMessage(async (payload, userId) => {
-  lastFrontendUserId = userId;
   const message = payload;
   try {
     await handleMessage(message, userId);
   } catch (error) {
     if (error instanceof RevisionConflict) {
+      countersFor(userId).revisionConflicts += 1;
       send({
         type: "error",
         requestId: "requestId" in message ? message.requestId : void 0,
@@ -2291,7 +2772,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
         message: error.message,
         currentRevision: error.currentRevision
       }, userId);
-      await sendState(userId);
+      await sendState(userId).catch(() => void 0);
       return;
     }
     send({
@@ -2353,6 +2834,9 @@ onEvent("CHAT_SWITCHED", (payload, eventUserId) => {
   const userId = resolveUserId(chatId, eventUserId);
   if (!userId) return;
   const previous = activeContexts.get(userId);
+  if (previous?.chatId && previous.chatId !== chatId && chatUsers.get(previous.chatId) === userId) {
+    chatUsers.delete(previous.chatId);
+  }
   activeContexts.set(userId, { chatId, characterId: previous?.characterId ?? null });
   if (chatId) chatUsers.set(chatId, userId);
   settleBackground(sendState(userId, chatId, previous?.characterId ?? null));
@@ -2361,8 +2845,15 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   const chatId = extractChatId(payload);
   const userId = resolveUserId(chatId, eventUserId);
   if (!chatId || !userId) return;
+  chatUsers.delete(chatId);
+  const key = queueKey(userId, chatId);
+  const timer = scheduled.get(key);
+  if (timer) clearTimeout(timer);
+  scheduled.delete(key);
+  queueDepth.delete(key);
+  lastDetection.delete(key);
   settleBackground(repository.deleteTimeline(userId, chatId));
 });
 spindle.permissions.onChanged(() => {
-  if (lastFrontendUserId) settleBackground(sendState(lastFrontendUserId));
+  for (const userId of activeContexts.keys()) settleBackground(sendState(userId));
 });

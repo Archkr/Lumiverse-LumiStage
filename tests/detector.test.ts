@@ -83,6 +83,8 @@ describe("detector contract", () => {
     expect(system).toContain("neutral-side.png");
     expect(system).toContain("variant-neutral-b");
     expect(system).toContain("Outfits are ordinary selectable states");
+    expect(request.reasoning).toEqual({ source: "off" });
+    expect((request.parameters as Record<string, unknown>).max_tokens).toBe(560);
     const tool = (request.tools as Array<Record<string, any>>)[0];
     const required = tool.parameters.properties.characters.items.required;
     expect(required).toEqual([
@@ -92,5 +94,39 @@ describe("detector contract", () => {
       "variantId",
       "confidence",
     ]);
+  });
+
+  it("rejects duplicate character decisions and scales one-call output for ensembles", () => {
+    const profile = profileA();
+    const catalog = buildCatalog([profile]);
+    const duplicate = {
+      schemaVersion: 2 as const,
+      focusedCharacterIds: ["character-a"],
+      characters: [
+        {
+          characterId: "character-a",
+          outfitId: "outfit-casual",
+          expressionId: "expression-happy",
+          variantId: "variant-expression-happy",
+          confidence: 1,
+        },
+        {
+          characterId: "character-a",
+          outfitId: "outfit-casual",
+          expressionId: "expression-happy",
+          variantId: "variant-expression-happy",
+          confidence: 1,
+        },
+      ],
+    };
+    expect(validateDecision(duplicate, catalog).characters).toEqual([]);
+    const ensembleCatalog = Array.from({ length: 12 }, (_, index) => {
+      const next = profileA();
+      next.characterId = `character-${index}`;
+      return buildCatalog([next])[0];
+    });
+    const request = buildDetectorRequest(ensembleCatalog, [], {}, defaultSettings(1));
+    expect((request.parameters as Record<string, unknown>).max_tokens).toBeGreaterThan(560);
+    expect((request.parameters as Record<string, unknown>).max_tokens).toBeLessThanOrEqual(2400);
   });
 });
