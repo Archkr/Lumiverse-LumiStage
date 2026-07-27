@@ -61,7 +61,37 @@ describe("detector contract", () => {
     expect(validated.characters).toEqual([]);
   });
 
-  it("sends every outfit, expression, and sprite filename in one catalog", () => {
+  it("resolves an exact filename from a different outfit back to stable IDs", () => {
+    const catalog = buildCatalog([profileA()]);
+    const decision = parseDetectorResponse({
+      tool_calls: [{
+        name: "set_stage_state",
+        args: {
+          focusedCharacterIds: ["Aster"],
+          characters: [{
+            characterId: "Aster",
+            outfitName: "Formal",
+            expressionName: "Composed",
+            fileName: "composed.png",
+            confidence: 0.95,
+          }],
+        },
+      }],
+    }, catalog);
+    expect(decision).toEqual({
+      schemaVersion: 2,
+      focusedCharacterIds: ["character-a"],
+      characters: [{
+        characterId: "character-a",
+        outfitId: "outfit-formal",
+        expressionId: "expression-formal",
+        variantId: "variant-expression-formal",
+        confidence: 0.95,
+      }],
+    });
+  });
+
+  it("sends every outfit, expression, and exact filename without verbose internal variant IDs", () => {
     const profile = profileA();
     const request = buildDetectorRequest(
       buildCatalog([profile]),
@@ -81,17 +111,19 @@ describe("detector contract", () => {
     expect(system).toContain("Neutral");
     expect(system).toContain("neutral-soft.png");
     expect(system).toContain("neutral-side.png");
-    expect(system).toContain("variant-neutral-b");
-    expect(system).toContain("Outfits are ordinary selectable states");
+    expect(system).not.toContain("variant-neutral-b");
+    expect(system).toContain("fileName is authoritative");
+    expect(system).toContain("You may switch away from the current outfit");
+    expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.reasoning).toEqual({ source: "off" });
     expect((request.parameters as Record<string, unknown>).max_tokens).toBe(560);
     const tool = (request.tools as Array<Record<string, any>>)[0];
     const required = tool.parameters.properties.characters.items.required;
     expect(required).toEqual([
       "characterId",
-      "outfitId",
-      "expressionId",
-      "variantId",
+      "outfitName",
+      "expressionName",
+      "fileName",
       "confidence",
     ]);
   });

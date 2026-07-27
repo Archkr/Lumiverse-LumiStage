@@ -1438,7 +1438,7 @@ function confidence(value) {
   const number = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.min(1, Math.max(0, number));
 }
-function normalizeCharacterDecision(value) {
+function legacyCharacterDecision(value) {
   const raw = asRecord(value);
   const characterId = requiredString(raw.characterId);
   const outfitId = requiredString(raw.outfitId);
@@ -1453,16 +1453,79 @@ function normalizeCharacterDecision(value) {
     confidence: confidence(raw.confidence)
   };
 }
-function normalizeDecision(value) {
+function normalizedKey2(value) {
+  return value.normalize("NFKC").trim().toLocaleLowerCase();
+}
+function selector(value, keys) {
+  const raw = asRecord(value);
+  for (const key of keys) {
+    const selected = requiredString(raw[key]);
+    if (selected) return selected;
+  }
+  return null;
+}
+function resolveCharacterId(value, catalog) {
+  const exact = catalog.find((entry) => entry.characterId === value);
+  if (exact) return exact.characterId;
+  const key = normalizedKey2(value);
+  const named = catalog.filter((entry) => normalizedKey2(entry.profile.characterName) === key);
+  return named.length === 1 ? named[0].characterId : null;
+}
+function resolveCharacterDecision(value, catalog) {
+  const raw = asRecord(value);
+  const characterSelector = selector(raw, ["characterId", "character", "characterName"]);
+  const fileSelector = selector(raw, ["fileName", "spriteFileName", "sprite", "variantId"]);
+  if (!characterSelector || !fileSelector) return null;
+  const characterId = resolveCharacterId(characterSelector, catalog);
+  const entry = catalog.find((candidate) => candidate.characterId === characterId);
+  if (!entry) return null;
+  const rawParts = fileSelector.replace(/\\/g, "/").split("/").filter(Boolean);
+  const selectedFileName = rawParts.at(-1) ?? fileSelector;
+  const outfitHint = selector(raw, ["outfitName", "outfit", "outfitId"]) ?? (rawParts.length >= 3 ? rawParts.at(-3) ?? null : null);
+  const expressionHint = selector(raw, ["expressionName", "expression", "expressionId"]) ?? (rawParts.length >= 2 ? rawParts.at(-2) ?? null : null);
+  const locations = entry.profile.outfits.flatMap(
+    (outfit2) => outfit2.expressions.flatMap(
+      (expression2) => expression2.variants.map((variant2) => ({ outfit: outfit2, expression: expression2, variant: variant2 }))
+    )
+  );
+  const direct = locations.find(({ variant: variant2 }) => variant2.id === fileSelector);
+  let matches = direct ? [direct] : locations.filter(({ variant: variant2 }) => normalizedKey2(variant2.fileName) === normalizedKey2(selectedFileName));
+  if (matches.length > 1 && outfitHint) {
+    const key = normalizedKey2(outfitHint);
+    const narrowed = matches.filter(
+      ({ outfit: outfit2 }) => outfit2.id === outfitHint || normalizedKey2(outfit2.name) === key
+    );
+    if (narrowed.length) matches = narrowed;
+  }
+  if (matches.length > 1 && expressionHint) {
+    const key = normalizedKey2(expressionHint);
+    const narrowed = matches.filter(
+      ({ expression: expression2 }) => expression2.id === expressionHint || normalizedKey2(expression2.name) === key
+    );
+    if (narrowed.length) matches = narrowed;
+  }
+  if (matches.length !== 1) return null;
+  const [{ outfit, expression, variant }] = matches;
+  return {
+    characterId: entry.characterId,
+    outfitId: outfit.id,
+    expressionId: expression.id,
+    variantId: variant.id,
+    confidence: confidence(raw.confidence)
+  };
+}
+function normalizeDecision(value, catalog = []) {
   const raw = asRecord(value);
   if (!Array.isArray(raw.characters) || !Array.isArray(raw.focusedCharacterIds)) return null;
-  const parsedCharacters = raw.characters.map(normalizeCharacterDecision);
+  const parsedCharacters = raw.characters.map(
+    (item) => catalog.length ? resolveCharacterDecision(item, catalog) : legacyCharacterDecision(item)
+  );
   if (parsedCharacters.some((item) => !item)) return null;
   const characters = parsedCharacters;
-  const focusValues = raw.focusedCharacterIds.filter(
-    (item) => typeof item === "string" && !!item
+  const focusValues = raw.focusedCharacterIds.map(
+    (item) => typeof item === "string" && item ? catalog.length ? resolveCharacterId(item, catalog) : item : null
   );
-  if (focusValues.length !== raw.focusedCharacterIds.length || !characters.length) return null;
+  if (focusValues.some((item) => !item) || !characters.length) return null;
   const focusedCharacterIds = [...new Set(focusValues)];
   return { schemaVersion: SCHEMA_VERSION, focusedCharacterIds, characters };
 }
@@ -1482,10 +1545,10 @@ function parseJsonText(value) {
     }
   }
 }
-function parseDetectorResponse(response) {
+function parseDetectorResponse(response, catalog = []) {
   const tool = response.tool_calls?.find((item) => item.name === "set_stage_state");
-  if (tool) return normalizeDecision(tool.args);
-  if (typeof response.content === "string") return normalizeDecision(parseJsonText(response.content));
+  if (tool) return normalizeDecision(tool.args, catalog);
+  if (typeof response.content === "string") return normalizeDecision(parseJsonText(response.content), catalog);
   return null;
 }
 function characterSummary(entry) {
@@ -1493,33 +1556,58 @@ function characterSummary(entry) {
     characterId: entry.characterId,
     name: entry.profile.characterName,
     outfits: entry.profile.outfits.map((outfit) => ({
-      outfitId: outfit.id,
-      name: outfit.name,
+      outfitName: outfit.name,
       expressions: outfit.expressions.map((expression) => ({
-        expressionId: expression.id,
-        name: expression.name,
-        sprites: expression.variants.map((variant) => ({
-          variantId: variant.id,
-          fileName: variant.fileName,
-          mediaKind: variant.mediaKind
-        }))
+        expressionName: expression.name,
+        files: expression.variants.map((variant) => variant.fileName)
       }))
     }))
   };
 }
-function buildDetectorRequest(catalog, recentMessages, currentStates, settings, overrides = {}) {
+function stateSummary(catalog, states) {
+  return Object.entries(states).flatMap(([characterId, state]) => {
+    const profile = catalog.find((entry) => entry.characterId === characterId)?.profile;
+    const outfit = profile?.outfits.find((item) => item.id === state.outfitId);
+    const expression = outfit?.expressions.find((item) => item.id === state.expressionId);
+    const variant = expression?.variants.find((item) => item.id === state.variantId);
+    return profile && outfit && expression ? [{
+      characterId,
+      outfitName: outfit.name,
+      expressionName: expression.name,
+      fileName: variant?.fileName ?? null
+    }] : [];
+  });
+}
+function overrideSummary(catalog, overrides) {
+  return Object.values(overrides).flatMap((override) => {
+    const profile = catalog.find((entry) => entry.characterId === override.characterId)?.profile;
+    const outfit = profile?.outfits.find((item) => item.id === override.outfitId);
+    const expression = outfit?.expressions.find((item) => item.id === override.expressionId);
+    const variant = expression?.variants.find((item) => item.id === override.variantId);
+    return profile && outfit ? [{
+      characterId: override.characterId,
+      scope: override.scope,
+      lock: override.lock,
+      outfitName: outfit.name,
+      expressionName: expression?.name ?? null,
+      fileName: variant?.fileName ?? null
+    }] : [];
+  });
+}
+function buildDetectorRequest(catalog, recentMessages, currentStates, settings, overrides = {}, enforceBudget = true) {
   const system = [
     "You direct the visible character sprite stage after a completed roleplay reply.",
-    "Choose only IDs present in the complete catalog. Never invent or rewrite an ID.",
-    "The catalog contains every outfit folder, every expression, and every sprite filename.",
-    "Choose the exact sprite variant whose filename and expression best match the visible emotion, action, and presentation.",
-    "Outfits are ordinary selectable states and may change whenever the latest scene supports a different outfit.",
+    "For each updated character, copy one exact fileName (including its extension) from the chosen catalog expression.",
+    "The fileName is authoritative. Never invent a filename and never substitute a label such as Character / Outfit / Emotion.",
+    "Return outfitName and expressionName exactly as listed so duplicate filenames can be resolved inside the right folder.",
+    "Outfits are selectable visual states. You may switch away from the current outfit whenever the completed scene supports another outfit.",
+    "Current states are context, not locks. Only entries under Manual locks constrain outfit or sprite selection.",
     "Classify all relevant group-chat characters in this one call and identify the visual focus.",
-    "Return one complete outfit, expression, and exact sprite variant for every character you update.",
+    "Use the exact characterId from the catalog for each character and focusedCharacterIds entry.",
     "Confidence is 0..1 for the complete visible-state match.",
     `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
-    `Current states: ${JSON.stringify(currentStates)}`,
-    `Manual locks: ${JSON.stringify(overrides)}`
+    `Current states: ${JSON.stringify(stateSummary(catalog, currentStates))}`,
+    `Manual locks: ${JSON.stringify(overrideSummary(catalog, overrides))}`
   ].join("\n");
   const messages = [
     { role: "system", content: system },
@@ -1529,15 +1617,50 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
       content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once."
     }
   ];
-  const estimatedInputTokens = Math.ceil(
-    messages.reduce((sum, message) => sum + message.role.length + message.content.length, 0) / 4
-  );
-  if (estimatedInputTokens > 24e3) {
+  const tools = [{
+    name: "set_stage_state",
+    description: "Select the exact sprite filename and its outfit/expression folder for each visible character.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["focusedCharacterIds", "characters"],
+      properties: {
+        focusedCharacterIds: { type: "array", items: { type: "string" } },
+        characters: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "characterId",
+              "outfitName",
+              "expressionName",
+              "fileName",
+              "confidence"
+            ],
+            properties: {
+              characterId: { type: "string" },
+              outfitName: { type: "string" },
+              expressionName: { type: "string" },
+              fileName: {
+                type: "string",
+                description: "Exact filename copied from the selected catalog expression, including extension."
+              },
+              confidence: { type: "number", minimum: 0, maximum: 1 }
+            }
+          }
+        }
+      }
+    }
+  }];
+  const estimatedInputTokens = Math.ceil((messages.reduce((sum, message) => sum + message.role.length + message.content.length, 0) + JSON.stringify(tools).length) / 4);
+  if (enforceBudget && estimatedInputTokens > 24e3) {
     throw new Error(
       `The detector catalog and context are too large (${estimatedInputTokens} estimated input tokens; limit 24000).`
     );
   }
   return {
+    estimatedInputTokens,
     messages,
     connection_id: settings.detection.connectionId ?? void 0,
     model: settings.detection.model ?? void 0,
@@ -1546,39 +1669,7 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
       max_tokens: Math.min(2400, Math.max(560, 560 + Math.max(0, catalog.length - 1) * 230))
     },
     reasoning: { source: "off" },
-    tools: [{
-      name: "set_stage_state",
-      description: "Select focused characters and exact sprite variants for the latest reply.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        required: ["focusedCharacterIds", "characters"],
-        properties: {
-          focusedCharacterIds: { type: "array", items: { type: "string" } },
-          characters: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: [
-                "characterId",
-                "outfitId",
-                "expressionId",
-                "variantId",
-                "confidence"
-              ],
-              properties: {
-                characterId: { type: "string" },
-                outfitId: { type: "string" },
-                expressionId: { type: "string" },
-                variantId: { type: "string" },
-                confidence: { type: "number", minimum: 0, maximum: 1 }
-              }
-            }
-          }
-        }
-      }
-    }]
+    tools
   };
 }
 function validateDecision(decision, catalog) {
@@ -2193,7 +2284,8 @@ async function normalizedMessages(chatId) {
     id: message.id,
     role: message.role,
     content: typeof message.content === "string" ? message.content : "",
-    swipeId: Number.isFinite(message.swipe_id) ? message.swipe_id : 0
+    swipeId: Number.isFinite(message.swipe_id) ? message.swipe_id : 0,
+    __isChatHistory: true
   }));
 }
 async function rebuildTimeline(timeline, catalog, settings, messages) {
@@ -2225,7 +2317,7 @@ async function analyzeLatest(userId, chatId, force = false) {
   let timeline = await repository.getTimeline(userId, chatId);
   const expectedTimelineRevision = timeline.revision;
   const contentHash = await sha256(latest.content);
-  const recentMessages = messages.slice(-settings.detection.contextMessages).map(({ role, content }) => ({ role, content }));
+  const recentMessages = messages.filter((message) => message.__isChatHistory === true).slice(-settings.detection.contextMessages).map(({ role, content }) => ({ role, content }));
   const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.characters).map(([characterId, state]) => [
     characterId,
     { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId }
@@ -2244,18 +2336,25 @@ async function analyzeLatest(userId, chatId, force = false) {
   }, requestFingerprint);
   lastDetection.set(queueKey(userId, chatId), { status: "running", message: record2 ? "Restoring cached stage decision\u2026" : "Analyzing the latest reply\u2026", at: Date.now() });
   await sendState(userId).catch(() => void 0);
+  let detectorInputTokens = null;
   if (!record2) {
-    const request = buildDetectorRequest(
+    const builtRequest = buildDetectorRequest(
       set.catalog,
       recentMessages,
       currentStates,
       settings,
       timeline.manualOverrides
     );
+    const {
+      estimatedInputTokens,
+      ...request
+    } = builtRequest;
+    detectorInputTokens = typeof estimatedInputTokens === "number" ? estimatedInputTokens : null;
     const generationInput = { ...request, userId };
     Object.assign(generationInput, { signal: AbortSignal.timeout(6e4) });
     const response = await spindle.generate.quiet(generationInput);
-    const parsed = parseDetectorResponse(response);
+    detectorInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
+    const parsed = parseDetectorResponse(response, set.catalog);
     if (!parsed) throw new Error("The detector did not return a valid stage decision.");
     const decision = validateDecision(parsed, set.catalog);
     if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
@@ -2278,7 +2377,7 @@ async function analyzeLatest(userId, chatId, force = false) {
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
   lastDetection.set(queueKey(userId, chatId), {
     status: "success",
-    message: `Stage settled for ${record2.decision.focusedCharacterIds.length || record2.decision.characters.length} character(s).`,
+    message: `Stage settled for ${record2.decision.focusedCharacterIds.length || record2.decision.characters.length} character(s).${detectorInputTokens ? ` Detector input: ${detectorInputTokens.toLocaleString()} tokens.` : ""}`,
     at: Date.now()
   });
   await sendState(userId).catch(() => void 0);
@@ -2740,9 +2839,15 @@ async function handleMessage(message, userId) {
     const media = diagnosticProfiles.flatMap(allVariants);
     const settings = await repository.getSettings(userId);
     const counters = countersFor(userId);
-    const estimatedCatalogTokens = Math.ceil(JSON.stringify(
-      buildCatalog(diagnosticProfiles).map((entry) => entry.profile)
-    ).length / 4);
+    const estimatedRequest = buildDetectorRequest(
+      buildCatalog(diagnosticProfiles),
+      [],
+      {},
+      settings,
+      {},
+      false
+    );
+    const estimatedCatalogTokens = typeof estimatedRequest.estimatedInputTokens === "number" ? estimatedRequest.estimatedInputTokens : 0;
     const report = {
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       version: "1.0.0",

@@ -346,9 +346,9 @@ describe("operator-scoped backend runtime", () => {
           focusedCharacterIds: ["character-a"],
           characters: [{
             characterId: "character-a",
-            outfitId: automaticOutfit.id,
-            expressionId: automaticExpression.id,
-            variantId: automaticVariant.id,
+            outfitName: automaticOutfit.name,
+            expressionName: automaticExpression.name,
+            fileName: automaticVariant.fileName,
             confidence: 1,
           }],
         },
@@ -376,6 +376,29 @@ describe("operator-scoped backend runtime", () => {
     }, "user-a");
     await vi.waitFor(() => {
       expect(generateQuiet).toHaveBeenCalledTimes(1);
+    }, { timeout: 2_000 });
+    const detectorRequest = generateQuiet.mock.calls[0][0];
+    expect(detectorRequest.messages.map((message: { role: string }) => message.role)).toEqual([
+      "system",
+      "assistant",
+      "user",
+    ]);
+    expect(JSON.stringify(detectorRequest.messages)).not.toContain("__isChatHistory");
+    expect(JSON.stringify(detectorRequest.messages)).not.toContain("variant-");
+    await vi.waitFor(() => {
+      const settledState = [...sendToFrontend.mock.calls]
+        .reverse()
+        .map(([message]) => message)
+        .find((message) =>
+          message.type === "state"
+          && message.state.snapshot?.characters?.["character-a"]?.variantId === automaticVariant.id
+        );
+      expect(settledState).toBeTruthy();
+      expect(settledState.state.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+        outfitId: automaticOutfit.id,
+        expressionId: automaticExpression.id,
+        variantId: automaticVariant.id,
+      }));
     }, { timeout: 2_000 });
 
     await handleFrontend({ type: "open-connections" }, "user-a");

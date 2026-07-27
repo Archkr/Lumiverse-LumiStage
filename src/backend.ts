@@ -346,7 +346,15 @@ async function sendState(userId: string, chatId?: string | null, characterId?: s
   send({ type: "state", state: await buildState(userId, chatId, characterId) }, userId);
 }
 
-async function normalizedMessages(chatId: string): Promise<Array<{ id: string; role: string; content: string; swipeId: number }>> {
+interface NormalizedChatMessage {
+  id: string;
+  role: string;
+  content: string;
+  swipeId: number;
+  __isChatHistory: true;
+}
+
+async function normalizedMessages(chatId: string): Promise<NormalizedChatMessage[]> {
   if (!hasPermission("chat_mutation")) return [];
   const messages = await spindle.chat.getMessages(chatId);
   return messages.map((message) => ({
@@ -354,6 +362,7 @@ async function normalizedMessages(chatId: string): Promise<Array<{ id: string; r
     role: message.role,
     content: typeof message.content === "string" ? message.content : "",
     swipeId: Number.isFinite(message.swipe_id) ? message.swipe_id : 0,
+    __isChatHistory: true,
   }));
 }
 
@@ -361,7 +370,7 @@ async function rebuildTimeline(
   timeline: ChatTimelineV2,
   catalog: CatalogEntry[],
   settings: Awaited<ReturnType<LumiStageRepository["getSettings"]>>,
-  messages: Array<{ id: string; role: string; content: string; swipeId: number }>,
+  messages: NormalizedChatMessage[],
 ): Promise<ChatTimelineV2> {
   const keys: TimelineMessageKey[] = await Promise.all(messages.map(async (message) => ({
     id: message.id,
@@ -393,6 +402,7 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
   const expectedTimelineRevision = timeline.revision;
   const contentHash = await sha256(latest.content);
   const recentMessages = messages
+    .filter((message) => message.__isChatHistory === true)
     .slice(-settings.detection.contextMessages)
     .map(({ role, content }) => ({ role, content }));
   const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.characters).map(([characterId, state]) => [
@@ -415,20 +425,31 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
   lastDetection.set(queueKey(userId, chatId), { status: "running", message: record ? "Restoring cached stage decision…" : "Analyzing the latest reply…", at: Date.now() });
   await sendState(userId).catch(() => undefined);
 
+  let detectorInputTokens: number | null = null;
   if (!record) {
-    const request = buildDetectorRequest(
+    const builtRequest = buildDetectorRequest(
       set.catalog,
       recentMessages,
       currentStates,
       settings,
       timeline.manualOverrides,
     );
+    const {
+      estimatedInputTokens,
+      ...request
+    } = builtRequest;
+    detectorInputTokens = typeof estimatedInputTokens === "number"
+      ? estimatedInputTokens
+      : null;
     const generationInput = { ...request, userId };
     Object.assign(generationInput, { signal: AbortSignal.timeout(60_000) });
     const response = await (spindle.generate.quiet as unknown as (
       input: Record<string, unknown>,
     ) => Promise<DetectorResponse>)(generationInput);
-    const parsed = parseDetectorResponse(response);
+    detectorInputTokens = response.usage?.prompt_tokens
+      ?? response.usage?.input_tokens
+      ?? detectorInputTokens;
+    const parsed = parseDetectorResponse(response, set.catalog);
     if (!parsed) throw new Error("The detector did not return a valid stage decision.");
     const decision = validateDecision(parsed, set.catalog);
     if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
@@ -452,7 +473,9 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
   lastDetection.set(queueKey(userId, chatId), {
     status: "success",
-    message: `Stage settled for ${record.decision.focusedCharacterIds.length || record.decision.characters.length} character(s).`,
+    message: `Stage settled for ${record.decision.focusedCharacterIds.length || record.decision.characters.length} character(s).${
+      detectorInputTokens ? ` Detector input: ${detectorInputTokens.toLocaleString()} tokens.` : ""
+    }`,
     at: Date.now(),
   });
   await sendState(userId).catch(() => undefined);
@@ -963,9 +986,17 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     const media = diagnosticProfiles.flatMap(allVariants);
     const settings = await repository.getSettings(userId);
     const counters = countersFor(userId);
-    const estimatedCatalogTokens = Math.ceil(JSON.stringify(
-      buildCatalog(diagnosticProfiles).map((entry) => entry.profile),
-    ).length / 4);
+    const estimatedRequest = buildDetectorRequest(
+      buildCatalog(diagnosticProfiles),
+      [],
+      {},
+      settings,
+      {},
+      false,
+    );
+    const estimatedCatalogTokens = typeof estimatedRequest.estimatedInputTokens === "number"
+      ? estimatedRequest.estimatedInputTokens
+      : 0;
     const report = {
       generatedAt: new Date().toISOString(),
       version: "1.0.0",

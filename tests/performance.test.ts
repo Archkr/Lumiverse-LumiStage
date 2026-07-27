@@ -47,11 +47,18 @@ function ensembleProfile(index: number): CharacterProfileV2 {
 }
 
 describe("bounded large-library operations", () => {
-  it("fails fast when the complete detector catalog exceeds the input budget", () => {
+  it("keeps a 2,000-sprite filename catalog compact and still rejects genuinely oversized input", () => {
     const profile = largeProfile(2000);
     const started = performance.now();
-    expect(() => buildDetectorRequest(buildCatalog([profile]), [], {}, defaultSettings(1)))
-      .toThrow(/estimated input tokens; limit 24000/);
+    const request = buildDetectorRequest(buildCatalog([profile]), [], {}, defaultSettings(1));
+    expect(request.estimatedInputTokens).toEqual(expect.any(Number));
+    expect(request.estimatedInputTokens as number).toBeLessThan(12_000);
+    expect(() => buildDetectorRequest(
+      buildCatalog([largeProfile(6000)]),
+      [],
+      {},
+      defaultSettings(1),
+    )).toThrow(/estimated input tokens; limit 24000/);
     const elapsed = performance.now() - started;
     expect(elapsed).toBeLessThan(1000);
   });

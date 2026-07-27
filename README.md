@@ -53,7 +53,7 @@ It supports solo characters, group scenes, automatic LLM direction, manual locks
 | **Safe additive imports** | Import individual files or folder trees into the current Studio draft without replacing unrelated outfits. |
 | **Exact manual control** | Apply a sprite once, lock an outfit while expressions change, or lock one exact state. |
 | **Completed-reply automation** | Runs only after a successful assistant message finishes; streaming updates do not trigger expression changes. |
-| **One-call direction** | Sends the complete active catalog to one structured detector call and receives stable IDs back. |
+| **One-call direction** | Sends the complete active filename catalog to one structured detector call, then resolves the selected files back to stable IDs. |
 | **Confidence-safe state** | A malformed or low-confidence result preserves the complete prior stage, including focus. |
 | **Solo and ensemble staging** | Displays one character at full strength or composes focused and supporting characters in group scenes. |
 | **Timeline replay** | Reconciles edits, deletions, swipes, and regenerations against message and content fingerprints. |
@@ -88,9 +88,9 @@ Completed assistant reply
 One structured detector call
           │
           ├── character ID
-          ├── outfit ID
-          ├── expression ID
-          ├── exact variant ID
+          ├── outfit name
+          ├── expression name
+          ├── exact filename
           ├── focus
           └── confidence
           │
@@ -105,7 +105,7 @@ Live Stage + floating stage
 2. Open a chat containing one or more configured characters.
 3. After a successful assistant generation commits its final message, LumiStage reads the configured recent context.
 4. The detector receives the active character catalog and current stage state in one call.
-5. LumiStage validates every returned ID and applies the configured confidence threshold to the complete decision.
+5. LumiStage validates every returned character and exact filename, resolves the selected folder back to stable IDs, and applies the configured confidence threshold to the complete decision.
 6. The accepted state is saved to the chat timeline and rendered on every LumiStage surface.
 7. Edits, swipes, deletions, and regenerations reconcile the timeline instead of leaving stale sprites behind.
 
@@ -317,18 +317,22 @@ Stopped or failed generations do not change the automatic expression.
 
 Edits and swipes of already committed messages can still reconcile the saved timeline. **Analyze now** remains an explicit manual force action.
 
+LumiStage reads persisted rows from `spindle.chat.getMessages`, marks them internally as `__isChatHistory: true`, and filters context through that marker. Only each selected row’s `role` and `content` enter the detector request. Lumiverse preset prompt blocks are not part of this history payload. The quiet call still inherits the selected connection’s generation parameters, but not its assembled preset messages.
+
 ### Detector contract
 
 The detector:
 
-- receives every active character, outfit, expression, filename, and exact variant ID;
+- receives every active character, outfit, expression, and exact filename without sending verbose internal outfit/expression/variant UUIDs;
 - receives current stage state and active manual locks;
 - makes one structured generation call;
+- must copy the exact selected filename, including its extension, rather than inventing a `Character / Outfit / Emotion` label;
+- may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
 - uses inherited reasoning disabled;
 - has a 60-second abort;
 - scales output allowance from 560 to 2,400 tokens for larger ensembles;
 - fails clearly before generation when estimated input exceeds 24,000 tokens;
-- rejects invented IDs, duplicate character decisions, and mismatched outfit/expression/variant combinations.
+- rejects unknown filenames, duplicate character decisions, and ambiguous folder/file combinations.
 
 ### Confidence behavior
 
@@ -623,6 +627,7 @@ Regression coverage includes:
 - archive validation and restore;
 - ownership-safe deletion;
 - whole-state confidence preservation;
+- exact-filename detector resolution and outfit changes;
 - manual locks and forced cache bypass;
 - multi-character isolation and group pruning;
 - Direct Stage scroll rows;
