@@ -5,7 +5,7 @@
   "author": "Archkr",
   "github": "https://github.com/Archkr/Lumiverse-LumiStage",
   "homepage": "https://github.com/Archkr/Lumiverse-LumiStage",
-  "description": "A cinematic, independent expression studio with editable outfits, inline batch controls, automation, and an ensemble sprite stage.",
+  "description": "An independent expression studio with editable outfits, batch controls, automation, and an ensemble sprite stage.",
   "permissions": [
     "generation",
     "chats",
