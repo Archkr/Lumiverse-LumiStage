@@ -52,6 +52,7 @@ const repository = new LumiStageRepository(spindle.userStorage);
 const activeContexts = new Map<string, { chatId: string | null; characterId: string | null }>();
 const chatUsers = new Map<string, string>();
 const generationUsers = new Map<string, { userId: string; chatId: string }>();
+const activeGenerations = new Map<string, Set<string>>();
 const scheduled = new Map<string, ReturnType<typeof setTimeout>>();
 const analysisQueues = new Map<string, Promise<void>>();
 const queueDepth = new Map<string, number>();
@@ -142,6 +143,33 @@ async function connectionViews(userId: string): Promise<LlmConnectionView[]> {
 
 function queueKey(userId: string, chatId: string): string {
   return `${userId}:${chatId}`;
+}
+
+function markGenerationStarted(generationId: string, userId: string, chatId: string): void {
+  generationUsers.set(generationId, { userId, chatId });
+  const key = queueKey(userId, chatId);
+  const generations = activeGenerations.get(key) ?? new Set<string>();
+  generations.add(generationId);
+  activeGenerations.set(key, generations);
+  const timer = scheduled.get(key);
+  if (timer) clearTimeout(timer);
+  scheduled.delete(key);
+}
+
+function markGenerationFinished(generationId: string | null): { userId: string; chatId: string } | null {
+  if (!generationId) return null;
+  const remembered = generationUsers.get(generationId) ?? null;
+  generationUsers.delete(generationId);
+  if (!remembered) return null;
+  const key = queueKey(remembered.userId, remembered.chatId);
+  const generations = activeGenerations.get(key);
+  generations?.delete(generationId);
+  if (!generations?.size) activeGenerations.delete(key);
+  return remembered;
+}
+
+function generationInProgress(userId: string, chatId: string): boolean {
+  return Boolean(activeGenerations.get(queueKey(userId, chatId))?.size);
 }
 
 function enqueueAnalysis(userId: string, chatId: string, operation: () => Promise<void>): Promise<void> {
@@ -432,6 +460,7 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
 
 function scheduleAnalysis(userId: string, chatId: string, delay = 120, force = false): void {
   const key = queueKey(userId, chatId);
+  if (!force && generationInProgress(userId, chatId)) return;
   const old = scheduled.get(key);
   if (old) clearTimeout(old);
   scheduled.set(key, setTimeout(() => {
@@ -1011,7 +1040,7 @@ onEvent("GENERATION_STARTED", (payload, eventUserId) => {
   const userId = resolveUserId(chatId, eventUserId);
   if (!chatId || !generationId || !userId) return;
   chatUsers.set(chatId, userId);
-  generationUsers.set(generationId, { userId, chatId });
+  markGenerationStarted(generationId, userId, chatId);
 });
 
 onEvent("GENERATION_ENDED", (payload, eventUserId) => {
@@ -1019,14 +1048,15 @@ onEvent("GENERATION_ENDED", (payload, eventUserId) => {
   const remembered = generationId ? generationUsers.get(generationId) : null;
   const chatId = extractChatId(payload) ?? remembered?.chatId ?? null;
   const userId = resolveUserId(chatId, eventUserId ?? remembered?.userId);
-  if (generationId) generationUsers.delete(generationId);
+  markGenerationFinished(generationId);
   if (!chatId || !userId || readString(payload, ["error"]) || !readString(payload, ["messageId", "message_id"])) return;
+  if (generationInProgress(userId, chatId)) return;
   scheduleAnalysis(userId, chatId);
 });
 
 onEvent("GENERATION_STOPPED", (payload) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
-  if (generationId) generationUsers.delete(generationId);
+  markGenerationFinished(generationId);
 });
 
 for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"] as const) {
@@ -1078,6 +1108,10 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   const timer = scheduled.get(key);
   if (timer) clearTimeout(timer);
   scheduled.delete(key);
+  activeGenerations.delete(key);
+  for (const [generationId, context] of generationUsers) {
+    if (context.userId === userId && context.chatId === chatId) generationUsers.delete(generationId);
+  }
   queueDepth.delete(key);
   lastDetection.delete(key);
   settleBackground(repository.deleteTimeline(userId, chatId));

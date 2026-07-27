@@ -1942,6 +1942,7 @@ var repository = new LumiStageRepository(spindle.userStorage);
 var activeContexts = /* @__PURE__ */ new Map();
 var chatUsers = /* @__PURE__ */ new Map();
 var generationUsers = /* @__PURE__ */ new Map();
+var activeGenerations = /* @__PURE__ */ new Map();
 var scheduled = /* @__PURE__ */ new Map();
 var analysisQueues = /* @__PURE__ */ new Map();
 var queueDepth = /* @__PURE__ */ new Map();
@@ -2013,6 +2014,30 @@ async function connectionViews(userId) {
 }
 function queueKey(userId, chatId) {
   return `${userId}:${chatId}`;
+}
+function markGenerationStarted(generationId, userId, chatId) {
+  generationUsers.set(generationId, { userId, chatId });
+  const key = queueKey(userId, chatId);
+  const generations = activeGenerations.get(key) ?? /* @__PURE__ */ new Set();
+  generations.add(generationId);
+  activeGenerations.set(key, generations);
+  const timer = scheduled.get(key);
+  if (timer) clearTimeout(timer);
+  scheduled.delete(key);
+}
+function markGenerationFinished(generationId) {
+  if (!generationId) return null;
+  const remembered = generationUsers.get(generationId) ?? null;
+  generationUsers.delete(generationId);
+  if (!remembered) return null;
+  const key = queueKey(remembered.userId, remembered.chatId);
+  const generations = activeGenerations.get(key);
+  generations?.delete(generationId);
+  if (!generations?.size) activeGenerations.delete(key);
+  return remembered;
+}
+function generationInProgress(userId, chatId) {
+  return Boolean(activeGenerations.get(queueKey(userId, chatId))?.size);
 }
 function enqueueAnalysis(userId, chatId, operation) {
   const key = queueKey(userId, chatId);
@@ -2260,6 +2285,7 @@ async function analyzeLatest(userId, chatId, force = false) {
 }
 function scheduleAnalysis(userId, chatId, delay = 120, force = false) {
   const key = queueKey(userId, chatId);
+  if (!force && generationInProgress(userId, chatId)) return;
   const old = scheduled.get(key);
   if (old) clearTimeout(old);
   scheduled.set(key, setTimeout(() => {
@@ -2789,20 +2815,21 @@ onEvent("GENERATION_STARTED", (payload, eventUserId) => {
   const userId = resolveUserId(chatId, eventUserId);
   if (!chatId || !generationId || !userId) return;
   chatUsers.set(chatId, userId);
-  generationUsers.set(generationId, { userId, chatId });
+  markGenerationStarted(generationId, userId, chatId);
 });
 onEvent("GENERATION_ENDED", (payload, eventUserId) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
   const remembered = generationId ? generationUsers.get(generationId) : null;
   const chatId = extractChatId(payload) ?? remembered?.chatId ?? null;
   const userId = resolveUserId(chatId, eventUserId ?? remembered?.userId);
-  if (generationId) generationUsers.delete(generationId);
+  markGenerationFinished(generationId);
   if (!chatId || !userId || readString(payload, ["error"]) || !readString(payload, ["messageId", "message_id"])) return;
+  if (generationInProgress(userId, chatId)) return;
   scheduleAnalysis(userId, chatId);
 });
 onEvent("GENERATION_STOPPED", (payload) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
-  if (generationId) generationUsers.delete(generationId);
+  markGenerationFinished(generationId);
 });
 for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"]) {
   onEvent(event, (payload, eventUserId) => {
@@ -2850,6 +2877,10 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   const timer = scheduled.get(key);
   if (timer) clearTimeout(timer);
   scheduled.delete(key);
+  activeGenerations.delete(key);
+  for (const [generationId, context] of generationUsers) {
+    if (context.userId === userId && context.chatId === chatId) generationUsers.delete(generationId);
+  }
   queueDepth.delete(key);
   lastDetection.delete(key);
   settleBackground(repository.deleteTimeline(userId, chatId));

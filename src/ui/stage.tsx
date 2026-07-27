@@ -6,13 +6,18 @@ import { Icon } from "./icons";
 import { useStableMedia } from "./media";
 import { useClientState } from "./primitives";
 
-function StageCharacter({ state, client }: { state: CharacterStageStateV2; client: LumiStageClient }) {
+function StageCharacter(props: {
+  state: CharacterStageStateV2;
+  client: LumiStageClient;
+  idle: boolean;
+}) {
+  const { state, client } = props;
   const { backend } = useClientState(client);
   const view = state.variantId ? backend.variantViews[state.variantId] : null;
   const media = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
   const appearance = client.effectiveAppearance();
   return (
-    <figure class="ls-stage-character" data-focused={state.focused}>
+    <figure class="ls-stage-character" data-focused={state.focused} data-idle={props.idle}>
       <div class="ls-stage-character-frame">
         {media.src && (view?.mediaKind === "video"
           ? <video key={media.src} src={media.src} muted loop playsInline autoPlay aria-label={state.label} onError={media.clear} />
@@ -43,6 +48,7 @@ export function Stage(props: {
     !!character.variantId && !!backend.variantViews[character.variantId]?.url
   )
     .sort((a, b) => Number(a.focused) - Number(b.focused));
+  const hasExplicitFocus = characters.some((character) => character.focused);
   const style = {
     "--ls2-stage-opacity": appearance.opacity,
     "--ls2-stage-transition": `${appearance.transitionMs}ms`,
@@ -95,7 +101,14 @@ export function Stage(props: {
         </div>
         {characters.length ? (
           <div class="ls-stage-ensemble">
-            {characters.map((character) => <StageCharacter key={character.characterId} state={character} client={props.client} />)}
+            {characters.map((character) => (
+              <StageCharacter
+                key={character.characterId}
+                state={character}
+                client={props.client}
+                idle={hasExplicitFocus && !character.focused}
+              />
+            ))}
           </div>
         ) : (
           <div class="ls-stage-waiting">

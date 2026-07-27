@@ -59,4 +59,13 @@ describe("replacement frontend design contract", () => {
     expect(styles).toContain("env(safe-area-inset-bottom)");
     expect(styles).toContain(":focus-visible");
   });
+
+  it("keeps stage sprites full-strength and gives the Direct Stage catalog real scroll rows", () => {
+    expect(styles).not.toContain("opacity: .68");
+    expect(styles).toContain('.ls-stage-character[data-idle="true"]');
+    expect(styles).toMatch(/\.ls-stage-character\s*\{[^}]*opacity:\s*1/);
+    expect(styles).toMatch(/\.ls-picker-expression-grid\s*\{[^}]*grid-auto-rows:\s*160px/);
+    expect(styles).toMatch(/\.ls-picker-expression-grid\s*\{[^}]*overflow-y:\s*auto/);
+    expect(styles).toMatch(/\.ls-picker-expression\s*\{[^}]*height:\s*160px/);
+  });
 });

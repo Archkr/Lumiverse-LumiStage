@@ -3,7 +3,9 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 describe("operator-scoped backend runtime", () => {
   it("keeps character selection scoped to the active user", async () => {
     type FrontendHandler = (payload: unknown, userId: string) => Promise<void>;
+    type EventHandler = (payload: unknown, userId?: string) => void;
     const handlers: { frontend?: FrontendHandler } = {};
+    const eventHandlers = new Map<string, EventHandler>();
     const charactersGet = vi.fn(async () => ({ id: "character-a", name: "Aster" }));
     const chatsGet = vi.fn(async () => ({ id: "chat-a", character_id: "character-a" }));
     const connectionsList = vi.fn(async () => [{
@@ -18,6 +20,8 @@ describe("operator-scoped backend runtime", () => {
     const sendToFrontend = vi.fn();
     const staged = new Map<string, { fileName: string; data: Uint8Array }>();
     const deleteMany = vi.fn(async () => undefined);
+    const chatGetMessages = vi.fn(async (): Promise<Array<Record<string, unknown>>> => []);
+    const generateQuiet = vi.fn();
     const uploadMany = vi.fn(async (items: unknown[]): Promise<Array<{ id?: string; error?: string }>> =>
       items.map((_item, index) => ({ id: `stored-image-${uploadMany.mock.calls.length}-${index}` })),
     );
@@ -40,15 +44,18 @@ describe("operator-scoped backend runtime", () => {
         deleteMany,
       },
       chats: { get: chatsGet },
-      chat: { getMessages: vi.fn(async () => []) },
+      chat: { getMessages: chatGetMessages },
       connections: { list: connectionsList },
-      generate: { quiet: vi.fn() },
+      generate: { quiet: generateQuiet },
       uploads: {
         get: vi.fn(async (id: string) => staged.get(id) ?? null),
         delete: vi.fn(async (id: string) => { staged.delete(id); }),
       },
       ui: { openDrawerTab },
-      on: vi.fn(() => vi.fn()),
+      on: vi.fn((event: string, handler: EventHandler) => {
+        eventHandlers.set(event, handler);
+        return vi.fn();
+      }),
       onFrontendMessage: vi.fn((handler: FrontendHandler) => {
         handlers.frontend = handler;
         return vi.fn();
@@ -318,6 +325,58 @@ describe("operator-scoped backend runtime", () => {
       type: "request-diagnostics",
       requestId: "diagnostics",
     }, "diagnostics");
+
+    const automaticOutfit = thirdImport.profile.outfits.find(
+      (outfit: { id: string }) => outfit.id === "outfit-second",
+    );
+    const automaticExpression = automaticOutfit.expressions.find(
+      (expression: { id: string }) => expression.id === "expression-second",
+    );
+    const automaticVariant = automaticExpression.variants[0];
+    chatGetMessages.mockResolvedValue([{
+      id: "assistant-final",
+      role: "assistant",
+      content: "Aster smiles after the reply is complete.",
+      swipe_id: 0,
+    }]);
+    generateQuiet.mockResolvedValue({
+      tool_calls: [{
+        name: "set_stage_state",
+        args: {
+          focusedCharacterIds: ["character-a"],
+          characters: [{
+            characterId: "character-a",
+            outfitId: automaticOutfit.id,
+            expressionId: automaticExpression.id,
+            variantId: automaticVariant.id,
+            confidence: 1,
+          }],
+        },
+      }],
+    });
+    eventHandlers.get("GENERATION_STARTED")?.({
+      generationId: "generation-one",
+      chatId: "chat-a",
+    }, "user-a");
+    eventHandlers.get("MESSAGE_EDITED")?.({
+      chatId: "chat-a",
+      message: {
+        id: "assistant-final",
+        role: "assistant",
+        content: "Aster smiles after the reply is complete.",
+      },
+    }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 360));
+    expect(generateQuiet).not.toHaveBeenCalled();
+
+    eventHandlers.get("GENERATION_ENDED")?.({
+      generationId: "generation-one",
+      chatId: "chat-a",
+      messageId: "assistant-final",
+    }, "user-a");
+    await vi.waitFor(() => {
+      expect(generateQuiet).toHaveBeenCalledTimes(1);
+    }, { timeout: 2_000 });
 
     await handleFrontend({ type: "open-connections" }, "user-a");
     expect(openDrawerTab).toHaveBeenCalledWith("connections", { userId: "user-a" });
