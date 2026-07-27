@@ -620,7 +620,6 @@ export function applyBatchMutation(
     }
   }
   repairDefaults(next);
-  next.revision += 1;
   next.updatedAt = now;
   return next;
 }

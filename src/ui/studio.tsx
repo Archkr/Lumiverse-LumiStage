@@ -971,7 +971,9 @@ function SettingsView({ client }: { client: LumiStageClient }) {
   ];
   async function save() {
     try {
-      const saved = await client.saveSettings(draft);
+      const expectedRevision = Math.max(draft.revision, backend.settings.revision);
+      const candidate = { ...structuredClone(draft), revision: expectedRevision };
+      const saved = await client.saveSettings(candidate, expectedRevision);
       setDraft(structuredClone(saved));
       setDirty(false);
       setConflict(false);
@@ -986,12 +988,12 @@ function SettingsView({ client }: { client: LumiStageClient }) {
         kicker="Configuration"
         title="Settings"
         description="Connection, detection, stage presentation, archives, and health in one focused workspace."
-        actions={<Button variant="primary" icon="check" disabled={!dirty || conflict} onClick={() => void save()}>Save settings</Button>}
+        actions={<Button variant="primary" icon="check" disabled={!dirty} onClick={() => void save()}>Save settings</Button>}
       />
       {conflict && (
         <div class="ls-validation-note" data-tone="warning">
           <Icon name="warning" size={16} />
-          <span>Settings changed elsewhere. Your draft is preserved; reload before editing or saving against the new revision.</span>
+          <span>Settings changed elsewhere. Save applies your preserved draft to the latest revision, or reload to discard it.</span>
           <Button size="small" onClick={() => {
             setDraft(structuredClone(backend.settings));
             setDirty(false);
@@ -1164,25 +1166,37 @@ export function StudioWorkspace(props: {
   const [future, setFuture] = useState<CharacterProfileV2[]>([]);
   const [dirty, setDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const [baseRevision, setBaseRevision] = useState(backendProfile?.revision ?? 0);
 
   useEffect(() => {
-    if (backendProfile?.characterId === draft?.characterId && backendProfile?.revision === draft?.revision) return;
-    if (dirty && backendProfile?.characterId === draft?.characterId) {
+    if (
+      backendProfile
+      && backendProfile.characterId === draft?.characterId
+      && backendProfile.revision <= baseRevision
+    ) return;
+    if (
+      dirty
+      && backendProfile
+      && backendProfile.characterId === draft?.characterId
+      && backendProfile.revision > baseRevision
+    ) {
       setConflict(true);
       return;
     }
     setDraft(backendProfile ? structuredClone(backendProfile) : null);
+    setBaseRevision(backendProfile?.revision ?? 0);
     setHistory([]);
     setFuture([]);
     setDirty(false);
     setConflict(false);
-  }, [backendProfile?.characterId, backendProfile?.revision, draft?.characterId, draft?.revision, dirty]);
+  }, [backendProfile?.characterId, backendProfile?.revision, draft?.characterId, baseRevision, dirty]);
 
   function update(mutator: (profile: CharacterProfileV2) => void) {
     if (!draft) return;
     const before = structuredClone(draft);
     const next = structuredClone(draft);
     mutator(next);
+    next.revision = baseRevision;
     next.updatedAt = Date.now();
     setHistory((items) => [...items.slice(-39), before]);
     setFuture([]);
@@ -1194,12 +1208,13 @@ export function StudioWorkspace(props: {
     if (!draft) return;
     setHistory((items) => [...items.slice(-39), structuredClone(draft)]);
     setFuture([]);
-    setDraft(structuredClone(profile));
+    setDraft({ ...structuredClone(profile), revision: baseRevision });
     setDirty(true);
   }
 
   function acceptCommitted(profile: CharacterProfileV2) {
     setDraft(structuredClone(profile));
+    setBaseRevision(profile.revision);
     setHistory([]);
     setFuture([]);
     setDirty(false);
@@ -1231,13 +1246,14 @@ export function StudioWorkspace(props: {
       props.client.notify("error", blocking[0].message);
       return;
     }
-    if (conflict) {
-      props.client.notify("warning", "Reload the newer profile before saving this draft.");
-      return;
-    }
     try {
-      await props.client.saveProfile(draft);
+      const expectedRevision = Math.max(baseRevision, backendProfile?.revision ?? baseRevision);
+      const candidate = { ...structuredClone(draft), revision: expectedRevision };
+      const revision = await props.client.saveProfile(candidate, expectedRevision);
+      setDraft({ ...candidate, revision });
+      setBaseRevision(revision);
       setDirty(false);
+      setConflict(false);
       props.client.notify("success", "Character library saved.");
     } catch (error) {
       props.client.notify("error", error instanceof Error ? error.message : "Could not save the library.");
@@ -1285,7 +1301,7 @@ export function StudioWorkspace(props: {
               size="small"
               icon="check"
               variant="primary"
-              disabled={!dirty || state.busy || conflict || !!draft && inspectProfile(draft).some((issue) => issue.severity === "error")}
+              disabled={!dirty || state.busy || !!draft && inspectProfile(draft).some((issue) => issue.severity === "error")}
               onClick={() => void saveProfile()}
             >
               {state.busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
@@ -1298,7 +1314,7 @@ export function StudioWorkspace(props: {
         {conflict && (
           <div class="ls-validation-note" data-tone="warning">
             <Icon name="warning" size={16} />
-            <span>The backend has a newer profile. Your unsaved Studio draft is preserved.</span>
+            <span>The backend changed while you were editing. Save applies your preserved draft to the latest revision, or reload to discard it.</span>
             <Button size="small" onClick={() => backendProfile && acceptCommitted(backendProfile)}>Reload profile</Button>
           </div>
         )}

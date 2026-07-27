@@ -298,25 +298,31 @@ export class LumiStageClient {
     }
   }
 
-  async saveSettings(settings: LumiStageSettingsV2): Promise<LumiStageSettingsV2> {
+  async saveSettings(
+    settings: LumiStageSettingsV2,
+    expectedRevision = settings.revision,
+  ): Promise<LumiStageSettingsV2> {
     const requestId = createId("save");
     const result = await this.request<{ settings?: LumiStageSettingsV2 }>({
       type: "save-settings",
       requestId,
       settings,
-      expectedRevision: settings.revision,
+      expectedRevision,
     });
     this.refresh(this.ui.backend.activeChatId, this.ui.backend.activeCharacterId);
-    return result.settings ?? { ...settings, revision: settings.revision + 1 };
+    return result.settings ?? { ...settings, revision: expectedRevision + 1 };
   }
 
-  async saveProfile(profile: CharacterProfileV2): Promise<number> {
+  async saveProfile(
+    profile: CharacterProfileV2,
+    expectedRevision = profile.revision,
+  ): Promise<number> {
     const requestId = createId("save");
     const revision = await this.request<number>({
       type: "save-profile",
       requestId,
       profile,
-      expectedRevision: profile.revision,
+      expectedRevision,
     });
     this.refresh(this.ui.backend.activeChatId, profile.characterId);
     return revision;

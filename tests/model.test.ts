@@ -249,6 +249,7 @@ describe("expression-slot batch operations", () => {
       expressionIds: ["expression-happy"],
       outfitId: "outfit-formal",
     }, 10);
+    expect(moved.revision).toBe(profile.revision);
     expect(moved.outfits[0].expressions.some((item) => item.id === "expression-happy")).toBe(false);
     expect(moved.outfits[1].expressions.find((item) => item.name === "Happy")?.variants).toHaveLength(1);
   });
@@ -261,6 +262,7 @@ describe("expression-slot batch operations", () => {
       expressionIds: [source.id],
       outfitId: "outfit-formal",
     }, 10);
+    expect(copied.revision).toBe(profile.revision);
     const clone = copied.outfits[1].expressions.find((item) => item.name === source.name);
     expect(clone?.id).not.toBe(source.id);
     expect(clone?.variants[0].id).not.toBe(source.variants[0].id);
