@@ -1,178 +1,236 @@
 import { describe, expect, it } from "vitest";
 import {
-  allAssets,
+  allVariants,
   applyBatchMutation,
   applyDecision,
-  applyManualOverride,
   buildCatalog,
-  consumeOnceOverrides,
+  createProfile,
   createTimeline,
   defaultSettings,
   normalizeProfile,
   normalizeSettings,
-  resolveActorState,
+  resolveCharacterState,
 } from "../src/model";
-import { assetReferenceCount, mergeImportedAssets } from "../src/importer";
-import { decision, profileA } from "./fixtures";
+import { profileA, profileB } from "./fixtures";
 
-describe("versioned schema normalization", () => {
-  it("repairs invalid settings and clamps performance values", () => {
+describe("V2 schema normalization and migration", () => {
+  it("normalizes settings to one confidence gate", () => {
     const settings = normalizeSettings({
-      schemaVersion: 999,
       revision: -3,
-      detection: { contextMessages: 500, temperature: -4, stateConfidence: 8, outfitConfidence: -1 },
-      appearance: { transition: "spin", width: 20, height: 9000, opacity: 4, idleOpacity: 0 },
-      preloadAdjacent: 99,
-    }, 42);
-    expect(settings.schemaVersion).toBe(1);
+      detection: {
+        enabled: true,
+        contextMessages: 80,
+        temperature: -1,
+        stateConfidence: 0.72,
+      },
+    }, 10);
+    expect(settings.schemaVersion).toBe(2);
     expect(settings.revision).toBe(0);
     expect(settings.detection.contextMessages).toBe(20);
     expect(settings.detection.temperature).toBe(0);
-    expect(settings.appearance.transition).toBe("crossfade");
-    expect(settings.appearance.width).toBe(180);
-    expect(settings.appearance.height).toBe(1000);
-    expect(settings.preloadAdjacent).toBe(12);
+    expect(settings.detection.confidence).toBe(0.72);
   });
 
-  it("restores missing hierarchy levels and valid defaults", () => {
-    const profile = normalizeProfile({ actors: [{ id: "actor", name: "A", outfits: [] }] }, "character", "A", 5);
-    expect(profile.schemaVersion).toBe(1);
-    expect(profile.defaultActorId).toBe("actor");
-    expect(profile.actors[0].outfits[0].expressions[0].name).toBe("Neutral");
+  it("hoists a legacy single owner while preserving IDs and media", () => {
+    const legacy = {
+      schemaVersion: 1,
+      revision: 7,
+      characterName: "Aster",
+      defaultActorId: "legacy-owner",
+      actors: [{
+        id: "legacy-owner",
+        name: "Aster",
+        defaultOutfitId: "legacy-outfit",
+        outfits: [{
+          id: "legacy-outfit",
+          name: "Casual",
+          defaultExpressionId: "legacy-expression",
+          expressions: [{
+            id: "legacy-expression",
+            name: "Happy",
+            enabled: false,
+            priority: 999,
+            aliases: ["joy"],
+            tags: ["smile"],
+            cues: ["grins"],
+            assets: [{
+              id: "legacy-asset",
+              imageId: "legacy-image",
+              contentHash: "legacy-hash",
+              fileName: "happy.png",
+              mimeType: "image/png",
+              enabled: false,
+              priority: 12,
+              createdAt: 4,
+            }],
+          }],
+        }],
+      }],
+    };
+    const migrated = normalizeProfile(legacy, "character-a", "Aster", 20);
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.defaultOutfitId).toBe("legacy-outfit");
+    expect(migrated.outfits[0].expressions[0]).toEqual(expect.objectContaining({
+      id: "legacy-expression",
+      name: "Happy",
+    }));
+    expect(migrated.outfits[0].expressions[0].variants[0]).toEqual(expect.objectContaining({
+      id: "legacy-asset",
+      imageId: "legacy-image",
+    }));
+    expect(migrated.outfits[0].expressions[0]).not.toHaveProperty("aliases");
+    expect(migrated.outfits[0].expressions[0]).not.toHaveProperty("priority");
+    expect(migrated.outfits[0].expressions[0].variants[0]).not.toHaveProperty("enabled");
   });
 
-  it("flattens legacy pose folders into their outfit without losing media", () => {
-    const legacy = profileA() as unknown as Record<string, unknown>;
-    const actor = (legacy.actors as Array<Record<string, unknown>>)[0];
-    const outfit = (actor.outfits as Array<Record<string, unknown>>)[0];
-    const expressions = outfit.expressions;
-    delete outfit.expressions;
-    outfit.poses = [{ id: "legacy-pose", defaultExpressionId: "expression-neutral", expressions }];
-    outfit.defaultPoseId = "legacy-pose";
-    const normalized = normalizeProfile(legacy, "character-a", "Aster", 5);
-    expect(normalized.actors[0].outfits[0].expressions.map((item) => item.id)).toContain("expression-happy");
-    expect(allAssets(normalized).length).toBe(allAssets(profileA()).length);
+  it("uses collision-safe outfit names when migrating multiple legacy owners", () => {
+    const expression = {
+      id: "expression",
+      name: "Neutral",
+      assets: [{ id: "asset", imageId: "image", contentHash: "hash", fileName: "neutral.png", mimeType: "image/png" }],
+    };
+    const migrated = normalizeProfile({
+      actors: [
+        { id: "a", name: "Aster", outfits: [{ id: "oa", name: "Default", expressions: [expression] }] },
+        { id: "b", name: "Briar", outfits: [{ id: "ob", name: "Default", expressions: [{ ...expression, id: "expression-b" }] }] },
+      ],
+    }, "character", "Card");
+    expect(migrated.outfits.map((item) => item.name)).toEqual(["Aster / Default", "Briar / Default"]);
+    expect(allVariants(migrated)).toHaveLength(2);
+  });
+
+  it("creates the minimal default hierarchy", () => {
+    const profile = createProfile("character", "Aster", 5);
+    expect(profile.outfits).toHaveLength(1);
+    expect(profile.outfits[0].expressions[0].name).toBe("Neutral");
+    expect(profile.outfits[0].expressions[0].variants).toEqual([]);
   });
 });
 
-describe("hierarchical state resolution", () => {
-  it("changes outfits from catalog selection without a separate cue field", () => {
+describe("state resolution", () => {
+  it("applies outfit, expression, and exact variant together at the confidence gate", () => {
     const profile = profileA();
     const entry = buildCatalog([profile])[0];
     const settings = defaultSettings(1);
-    const formal = resolveActorState(entry, null, {
-      actorId: "actor-a",
+    const previous = resolveCharacterState(entry, null, null, null, settings, true);
+    const low = resolveCharacterState(entry, previous, {
+      characterId: "character-a",
       outfitId: "outfit-formal",
       expressionId: "expression-formal",
-      confidence: 0.95,
-    }, null, settings, true)!;
-    const changed = resolveActorState(entry, formal, {
-      actorId: "actor-a",
-      outfitId: "outfit-casual",
-      expressionId: "expression-happy",
-      confidence: 0.99,
-    }, null, settings, true)!;
-    expect(changed.outfitId).toBe("outfit-casual");
-    expect(changed.expressionId).toBe("expression-happy");
-  });
-
-  it("gates expressions at 0.60 and outfit selections at 0.85", () => {
-    const entry = buildCatalog([profileA()])[0];
-    const settings = defaultSettings(1);
-    const initial = resolveActorState(entry, null, decision().actors[0], null, settings, true)!;
-    const low = resolveActorState(entry, initial, {
-      ...decision().actors[0],
-      expressionId: "expression-soft",
+      variantId: "variant-expression-formal",
       confidence: 0.59,
-    }, null, settings, true)!;
-    expect(low.expressionId).toBe("expression-happy");
-
-    const high = resolveActorState(entry, initial, {
-      ...decision().actors[0],
+    }, null, settings, true);
+    expect(low?.outfitId).toBe("outfit-casual");
+    const high = resolveCharacterState(entry, previous, {
+      characterId: "character-a",
       outfitId: "outfit-formal",
       expressionId: "expression-formal",
-      confidence: 0.85,
-    }, null, settings, true)!;
-    expect(high.outfitId).toBe("outfit-formal");
-    expect(high.expressionId).toBe("expression-formal");
+      variantId: "variant-expression-formal",
+      confidence: 0.6,
+    }, null, settings, true);
+    expect(high).toEqual(expect.objectContaining({
+      outfitId: "outfit-formal",
+      expressionId: "expression-formal",
+      variantId: "variant-expression-formal",
+    }));
   });
 
-  it("manual locks always win and once-overrides are consumed", () => {
+  it("lets an outfit lock constrain automation while a state lock wins completely", () => {
     const profile = profileA();
-    const catalog = buildCatalog([profile]);
+    const entry = buildCatalog([profile])[0];
     const settings = defaultSettings(1);
-    let timeline = createTimeline("chat", 1);
-    timeline = applyManualOverride(timeline, catalog, {
-      actorId: "actor-a",
-      outfitId: "outfit-casual",
-      expressionId: "expression-soft",
-      scope: "locked",
-      createdAt: 2,
-    }, settings, 2);
-    const automated = applyDecision(timeline.snapshot, catalog, decision({
+    const previous = resolveCharacterState(entry, null, null, null, settings, true);
+    const decision = {
+      characterId: "character-a",
       outfitId: "outfit-formal",
       expressionId: "expression-formal",
+      variantId: "variant-expression-formal",
       confidence: 1,
-    }), timeline.manualOverrides, settings, 3);
-    expect(automated.actors["actor-a"].expressionId).toBe("expression-soft");
-    expect(consumeOnceOverrides({
-      locked: { actorId: "actor-a", scope: "locked", createdAt: 1 },
-      once: { actorId: "actor-b", scope: "once", createdAt: 1 },
-    })).toEqual({ locked: { actorId: "actor-a", scope: "locked", createdAt: 1 } });
+    };
+    const outfitLocked = resolveCharacterState(entry, previous, decision, {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 1,
+    }, settings, true);
+    expect(outfitLocked).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+    }));
+    const stateLocked = resolveCharacterState(entry, previous, decision, {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-neutral",
+      variantId: "variant-neutral-b",
+      scope: "locked",
+      lock: "state",
+      createdAt: 1,
+    }, settings, true);
+    expect(stateLocked?.variantId).toBe("variant-neutral-b");
+  });
+
+  it("composes group-chat character states by real character ID", () => {
+    const profiles = [profileA(), profileB()];
+    const timeline = createTimeline("chat", 1);
+    const snapshot = applyDecision(timeline.snapshot, buildCatalog(profiles), {
+      schemaVersion: 2,
+      focusedCharacterIds: ["character-b"],
+      characters: [{
+        characterId: "character-b",
+        outfitId: "outfit-b",
+        expressionId: "expression-b",
+        variantId: "variant-b",
+        confidence: 1,
+      }],
+    }, {}, defaultSettings(1), 2);
+    expect(Object.keys(snapshot.characters).sort()).toEqual(["character-a", "character-b"]);
+    expect(snapshot.characters["character-b"].focused).toBe(true);
+    expect(snapshot.characters["character-a"].focused).toBe(false);
   });
 });
 
-describe("batch and deduplication", () => {
-  it("supports reversible batch mutations without mutating the prior profile", () => {
+describe("expression-slot batch operations", () => {
+  it("moves slots and merges variants into matching destination names", () => {
     const profile = profileA();
-    const original = structuredClone(profile);
-    const assetId = allAssets(profile)[0].id;
-    const changed = applyBatchMutation(profile, { type: "set-enabled", assetIds: [assetId], enabled: false }, 10);
-    expect(allAssets(changed).find((item) => item.id === assetId)?.enabled).toBe(false);
-    expect(profile).toEqual(original);
-    expect(structuredClone(original)).toEqual(profile);
-  });
-
-  it("batch-adds metadata, duplicates, moves, and session-trashes selected media", () => {
-    const profile = profileA();
-    const selected = allAssets(profile)[0];
-    const expression = profile.actors[0].outfits[0].expressions[0];
-    let changed = applyBatchMutation(profile, {
-      type: "add-aliases",
-      expressionIds: [expression.id],
-      aliases: ["resting", "calm"],
-    }, 2);
-    expect(changed.actors[0].outfits[0].expressions[0].aliases).toEqual(["resting", "calm"]);
-    changed = applyBatchMutation(changed, { type: "duplicate", assetIds: [selected.id] }, 3);
-    const duplicates = allAssets(changed).filter((item) => item.contentHash === selected.contentHash);
-    expect(duplicates).toHaveLength(2);
-    const duplicateId = duplicates.find((item) => item.id !== selected.id)!.id;
-    changed = applyBatchMutation(changed, {
+    profile.outfits[1].expressions.push({
+      id: "existing-happy",
+      name: "Happy",
+      order: 1,
+      variants: [],
+    });
+    const moved = applyBatchMutation(profile, {
       type: "move",
-      assetIds: [duplicateId],
+      expressionIds: ["expression-happy"],
       outfitId: "outfit-formal",
-    }, 4);
-    const formalAssets = changed.actors[0].outfits[1].expressions.flatMap((item) => item.assets);
-    expect(formalAssets.some((item) => item.id === duplicateId)).toBe(true);
-    const trashed = applyBatchMutation(changed, { type: "delete", assetIds: [duplicateId] }, 5);
-    expect(allAssets(trashed).some((item) => item.id === duplicateId)).toBe(false);
-    expect(allAssets(changed).some((item) => item.id === duplicateId)).toBe(true);
+    }, 10);
+    expect(moved.outfits[0].expressions.some((item) => item.id === "expression-happy")).toBe(false);
+    expect(moved.outfits[1].expressions.find((item) => item.name === "Happy")?.variants).toHaveLength(1);
   });
 
-  it("deduplicates imported content hashes and counts cross-profile references", () => {
+  it("copies with independent records that reference the same owned images", () => {
     const profile = profileA();
-    const existing = allAssets(profile)[0];
-    const result = mergeImportedAssets(profile, [{
-      target: { actorName: "Aster", outfitName: "Casual", expressionName: "Neutral" },
-      imageId: "duplicate-image",
-      contentHash: existing.contentHash,
-      fileName: "copy.png",
-      mimeType: "image/png",
-    }], profile.characterName, 10);
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toBe(1);
-    const second = structuredClone(profile);
-    allAssets(second)[0].imageId = existing.imageId;
-    expect(assetReferenceCount([profile, second], existing.imageId)).toBe(2);
+    const source = profile.outfits[0].expressions[0];
+    const copied = applyBatchMutation(profile, {
+      type: "copy",
+      expressionIds: [source.id],
+      outfitId: "outfit-formal",
+    }, 10);
+    const clone = copied.outfits[1].expressions.find((item) => item.name === source.name);
+    expect(clone?.id).not.toBe(source.id);
+    expect(clone?.variants[0].id).not.toBe(source.variants[0].id);
+    expect(clone?.variants[0].imageId).toBe(source.variants[0].imageId);
+  });
+
+  it("deletes complete expression slots and repairs defaults", () => {
+    const profile = profileA();
+    const deleted = applyBatchMutation(profile, {
+      type: "delete",
+      expressionIds: ["expression-neutral"],
+    }, 10);
+    expect(deleted.outfits[0].expressions.map((item) => item.id)).not.toContain("expression-neutral");
+    expect(deleted.outfits[0].defaultExpressionId).toBe("expression-happy");
   });
 });

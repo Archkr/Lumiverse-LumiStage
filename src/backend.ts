@@ -1,7 +1,7 @@
 import type { SpindleAPI } from "lumiverse-spindle-types";
 import { sha256 } from "./ids";
 import {
-  allAssets,
+  allVariants,
   applyManualOverride,
   buildCatalog,
   clearManualOverride,
@@ -17,7 +17,7 @@ import {
   hydrateArchiveProfile,
   mergeImportedAssets,
   readLumiStageManifest,
-  removeAssets,
+  removeVariants,
   settleHostUploads,
   unreferencedImageIds,
   type ImportCandidate,
@@ -34,16 +34,16 @@ import {
 } from "./timeline";
 import {
   SCHEMA_VERSION,
-  type ArchiveAssetEntry,
-  type AssetView,
+  type ArchiveVariantEntryV2,
   type BackendToFrontend,
-  type CharacterProfileV1,
-  type ChatTimelineV1,
+  type CharacterProfileV2,
+  type ChatTimelineV2,
   type FrontendState,
   type FrontendToBackend,
   type LlmConnectionView,
-  type LumiStageArchiveV1,
+  type LumiStageArchiveV2,
   type PermissionState,
+  type VariantView,
 } from "./types";
 
 declare const spindle: SpindleAPI;
@@ -145,7 +145,7 @@ async function characterName(userId: string, characterId: string): Promise<strin
 
 interface ProfileSet {
   chat: Record<string, unknown>;
-  profiles: CharacterProfileV1[];
+  profiles: CharacterProfileV2[];
   catalog: CatalogEntry[];
   primaryCharacterId: string | null;
 }
@@ -155,7 +155,7 @@ async function profilesForChat(userId: string, chatId: string): Promise<ProfileS
   const chatDto = await spindle.chats.get(chatId, userId);
   if (!chatDto) return { chat: {}, profiles: [], catalog: [], primaryCharacterId: null };
   const { characterIds: ids, primaryCharacterId } = resolveChatCharacterIds(chatDto as unknown as Record<string, unknown>);
-  const profiles: CharacterProfileV1[] = [];
+  const profiles: CharacterProfileV2[] = [];
   for (const characterId of ids) profiles.push(await repository.getProfile(userId, characterId, await characterName(userId, characterId)));
   return {
     chat: chatDto as unknown as Record<string, unknown>,
@@ -177,10 +177,10 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item
   return results;
 }
 
-async function assetViewsForProfiles(userId: string, profiles: CharacterProfileV1[]): Promise<Record<string, AssetView>> {
-  const assets = profiles.flatMap(allAssets);
-  if (assets.length === 0) return {};
-  if (!hasPermission("images")) return Object.fromEntries(assets.map((asset) => [asset.id, { ...asset, url: null, thumbUrl: null }]));
+async function variantViewsForProfiles(userId: string, profiles: CharacterProfileV2[]): Promise<Record<string, VariantView>> {
+  const variants = profiles.flatMap(allVariants);
+  if (variants.length === 0) return {};
+  if (!hasPermission("images")) return Object.fromEntries(variants.map((variant) => [variant.id, { ...variant, url: null, thumbUrl: null }]));
 
   const urls = new Map<string, string>();
   for (const profile of profiles) {
@@ -201,16 +201,16 @@ async function assetViewsForProfiles(userId: string, profiles: CharacterProfileV
     } while (offset < total);
   }
 
-  const missing = [...new Set(assets.map((asset) => asset.imageId).filter((id) => !urls.has(id)))];
+  const missing = [...new Set(variants.map((variant) => variant.imageId).filter((id) => !urls.has(id)))];
   const fetched = await mapWithConcurrency(missing, 12, async (imageId) =>
     spindle.images.get(imageId, { onlyOwned: true, specificity: "full", userId } as never).catch(() => null),
   );
   for (const item of fetched) if (item) urls.set(item.id, item.url);
 
-  return Object.fromEntries(assets.map((asset) => {
-    const url = urls.get(asset.imageId) ?? null;
+  return Object.fromEntries(variants.map((variant) => {
+    const url = urls.get(variant.imageId) ?? null;
     const separator = url?.includes("?") ? "&" : "?";
-    return [asset.id, { ...asset, url, thumbUrl: url ? `${url}${separator}size=sm` : null }];
+    return [variant.id, { ...variant, url, thumbUrl: url ? `${url}${separator}size=sm` : null }];
   }));
 }
 
@@ -219,9 +219,9 @@ async function buildState(userId: string, chatId?: string | null, characterId?: 
   const activeChatId = chatId === undefined ? context?.chatId ?? null : chatId;
   const activeCharacterId = characterId === undefined ? context?.characterId ?? null : characterId;
   const settings = await repository.getSettings(userId);
-  let profile: CharacterProfileV1 | null = null;
-  let timeline: ChatTimelineV1 | null = null;
-  let profiles: CharacterProfileV1[] = [];
+  let profile: CharacterProfileV2 | null = null;
+  let timeline: ChatTimelineV2 | null = null;
+  let profiles: CharacterProfileV2[] = [];
   let activeCharacterName: string | null = null;
 
   if (activeChatId) {
@@ -243,7 +243,7 @@ async function buildState(userId: string, chatId?: string | null, characterId?: 
     stageProfiles: profiles,
     timeline,
     snapshot: timeline?.snapshot ?? null,
-    assetViews: await assetViewsForProfiles(userId, profiles),
+    variantViews: await variantViewsForProfiles(userId, profiles),
     connections: await connectionViews(userId),
     permissions: permissions(),
     activeChatId,
@@ -270,11 +270,11 @@ async function normalizedMessages(chatId: string): Promise<Array<{ id: string; r
 }
 
 async function rebuildTimeline(
-  timeline: ChatTimelineV1,
+  timeline: ChatTimelineV2,
   catalog: CatalogEntry[],
   settings: Awaited<ReturnType<LumiStageRepository["getSettings"]>>,
   messages: Array<{ id: string; role: string; content: string; swipeId: number }>,
-): Promise<ChatTimelineV1> {
+): Promise<ChatTimelineV2> {
   const keys: TimelineMessageKey[] = await Promise.all(messages.map(async (message) => ({
     id: message.id,
     role: message.role,
@@ -293,8 +293,8 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
   const settings = await repository.getSettings(userId);
   if (!settings.detection.enabled && !force) return;
   const set = await profilesForChat(userId, chatId);
-  if (set.catalog.length === 0 || !set.profiles.some((profile) => allAssets(profile).some((asset) => asset.enabled))) {
-    lastDetection.set(userId, { status: "error", message: "No enabled LumiStage media is configured for this chat.", at: Date.now() });
+  if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
+    lastDetection.set(userId, { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
     await sendState(userId);
     return;
   }
@@ -314,9 +314,9 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
   await sendState(userId);
 
   if (!record) {
-    const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.actors).map(([actorId, state]) => [
-      actorId,
-      { outfitId: state.outfitId, expressionId: state.expressionId },
+    const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.characters).map(([characterId, state]) => [
+      characterId,
+      { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId },
     ]));
     const request = buildDetectorRequest(
       set.catalog,
@@ -328,7 +328,9 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
     const parsed = parseDetectorResponse(response);
     if (!parsed) throw new Error("The detector did not return a valid stage decision.");
     const decision = validateDecision(parsed, set.catalog);
-    if (decision.actors.length === 0 && decision.focusedActorIds.length === 0) throw new Error("The detector returned no valid actors.");
+    if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
+      throw new Error("The detector returned no valid characters.");
+    }
     record = {
       messageId: latest.id,
       swipeId: latest.swipeId,
@@ -341,12 +343,12 @@ async function analyzeLatest(userId: string, chatId: string, force = false): Pro
     timeline.decisions = upsertDecision(timeline.decisions, record);
   }
 
-  timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
   timeline.manualOverrides = consumeOnceOverrides(timeline.manualOverrides);
+  timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
   lastDetection.set(userId, {
     status: "success",
-    message: `Stage settled for ${record.decision.focusedActorIds.length || record.decision.actors.length} actor(s).`,
+    message: `Stage settled for ${record.decision.focusedCharacterIds.length || record.decision.characters.length} character(s).`,
     at: Date.now(),
   });
   await sendState(userId);
@@ -372,12 +374,9 @@ function scheduleAnalysis(userId: string, chatId: string, delay = 120, force = f
 async function importAssets(userId: string, message: Extract<FrontendToBackend, { type: "import-assets" }>): Promise<void> {
   if (!hasPermission("images")) throw new Error("Images permission is required to import media.");
   const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
-  const defaultActor = profile.actors.find((actor) => actor.id === message.targetActorId)
-    ?? profile.actors.find((actor) => actor.id === profile.defaultActorId)
-    ?? profile.actors[0];
   const candidates: ImportCandidate[] = [];
   const errors: string[] = [];
-  let archiveManifest: LumiStageArchiveV1 | null = null;
+  let archiveManifest: ReturnType<typeof readLumiStageManifest> = null;
 
   try {
     for (const [index, uploadId] of message.uploadIds.entries()) {
@@ -402,8 +401,8 @@ async function importAssets(userId: string, message: Extract<FrontendToBackend, 
       }
     }
 
-    assertUnambiguousCandidates(candidates, message.layout, defaultActor?.name ?? profile.characterName);
-    const existingByHash = new Map(allAssets(profile).map((asset) => [asset.contentHash, asset]));
+    assertUnambiguousCandidates(candidates, message.layout);
+    const existingByHash = new Map(allVariants(profile).map((variant) => [variant.contentHash, variant]));
     const prepared: Array<{ candidate: ImportCandidate; hash: string }> = [];
     const reusedByPath = new Map<string, { imageId: string; contentHash: string; fileName: string; mimeType: string }>();
     let skipped = 0;
@@ -440,7 +439,7 @@ async function importAssets(userId: string, message: Extract<FrontendToBackend, 
       ) => Promise<Array<{ id?: string; error?: string }>>)(uploadItems, { userId, concurrency: 8 })
       : [];
 
-    const settled = settleHostUploads(prepared, results, message.layout, defaultActor?.name ?? profile.characterName);
+    const settled = settleHostUploads(prepared, results, message.layout);
     for (const [path, reused] of reusedByPath) settled.uploadedByPath.set(path, reused);
     errors.push(...settled.errors);
     for (let index = 0; index < prepared.length; index += 1) {
@@ -455,18 +454,27 @@ async function importAssets(userId: string, message: Extract<FrontendToBackend, 
       }, userId);
     }
 
+    const selectedOutfit = profile.outfits.find((item) => item.id === message.targetOutfitId);
+    const selectedExpression = selectedOutfit?.expressions.find((item) => item.id === message.targetExpressionId);
+    const imported = settled.imported.map((item) => ({
+      ...item,
+      target: {
+        outfitName: selectedOutfit?.name ?? item.target.outfitName,
+        expressionName: selectedExpression?.name ?? item.target.expressionName,
+      },
+    }));
     const next = archiveManifest
       ? hydrateArchiveProfile(archiveManifest, message.characterId, profile.characterName, settled.uploadedByPath)
-      : mergeImportedAssets(profile, settled.imported, profile.characterName).profile;
+      : mergeImportedAssets(profile, imported, profile.characterName).profile;
     if (archiveManifest) next.revision = profile.revision + 1;
     const saved = await repository.replaceProfile(userId, next);
-    const views = await assetViewsForProfiles(userId, [saved]);
+    const views = await variantViewsForProfiles(userId, [saved]);
     send({
       type: "import-complete",
       requestId: message.requestId,
       profile: saved,
-      assetViews: views,
-      imported: settled.imported.length,
+      variantViews: views,
+      imported: imported.length,
       skipped,
       errors,
     }, userId);
@@ -475,18 +483,17 @@ async function importAssets(userId: string, message: Extract<FrontendToBackend, 
   }
 }
 
-function archiveForProfile(profile: CharacterProfileV1): LumiStageArchiveV1 {
-  const assets: ArchiveAssetEntry[] = [];
-  for (const actor of profile.actors) for (const outfit of actor.outfits) {
-    for (const expression of outfit.expressions) for (const asset of expression.assets) {
-      const extension = asset.fileName.includes(".") ? asset.fileName.split(".").pop() : asset.mimeType.split("/").pop();
-      assets.push({
-        path: `assets/${asset.contentHash}.${extension || "bin"}`,
+function archiveForProfile(profile: CharacterProfileV2): LumiStageArchiveV2 {
+  const variants: ArchiveVariantEntryV2[] = [];
+  for (const outfit of profile.outfits) {
+    for (const expression of outfit.expressions) for (const variant of expression.variants) {
+      const extension = variant.fileName.includes(".") ? variant.fileName.split(".").pop() : variant.mimeType.split("/").pop();
+      variants.push({
+        path: `assets/${variant.contentHash}.${extension || "bin"}`,
         characterId: profile.characterId,
-        actorId: actor.id,
         outfitId: outfit.id,
         expressionId: expression.id,
-        asset,
+        variant,
       });
     }
   }
@@ -495,20 +502,36 @@ function archiveForProfile(profile: CharacterProfileV1): LumiStageArchiveV1 {
     kind: "lumistage-archive",
     exportedAt: Date.now(),
     profile,
-    assets,
+    variants,
   };
 }
 
-async function exportProfile(userId: string, characterId: string): Promise<{ archive: LumiStageArchiveV1; urls: Record<string, string> }> {
+async function exportProfile(userId: string, characterId: string): Promise<{ archive: LumiStageArchiveV2; urls: Record<string, string> }> {
   if (!hasPermission("images")) throw new Error("Images permission is required to export media.");
   const profile = await repository.getProfile(userId, characterId, await characterName(userId, characterId));
   const archive = archiveForProfile(profile);
   const urls: Record<string, string> = {};
-  await mapWithConcurrency(archive.assets, 8, async (entry) => {
-    const image = await spindle.images.get(entry.asset.imageId, { onlyOwned: true, specificity: "full", userId } as never);
+  await mapWithConcurrency(archive.variants, 8, async (entry) => {
+    const image = await spindle.images.get(entry.variant.imageId, { onlyOwned: true, specificity: "full", userId } as never);
     if (image?.url) urls[entry.path] = image.url;
   });
   return { archive, urls };
+}
+
+async function deleteOwnedImagesIfUnreferenced(
+  userId: string,
+  candidateImageIds: Iterable<string>,
+): Promise<void> {
+  const profiles = await repository.listProfiles(userId);
+  const unreferenced = unreferencedImageIds(profiles, candidateImageIds);
+  const deletable = await confirmExtensionOwnedImageIds(
+    unreferenced,
+    (imageId) => spindle.images.get(
+      imageId,
+      { onlyOwned: true, specificity: "metadata", userId } as never,
+    ),
+  );
+  if (deletable.length) await spindle.images.deleteMany(deletable, { userId });
 }
 
 async function handleMessage(message: FrontendToBackend, userId: string): Promise<void> {
@@ -521,7 +544,7 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
   if (message.type === "character-editor") {
     if (!message.characterId) return;
     const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
-    send({ type: "profile", profile, assetViews: await assetViewsForProfiles(userId, [profile]) }, userId);
+    send({ type: "profile", profile, variantViews: await variantViewsForProfiles(userId, [profile]) }, userId);
     return;
   }
   if (message.type === "open-connections") {
@@ -535,15 +558,27 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     return;
   }
   if (message.type === "save-profile") {
+    const before = await repository.getProfile(
+      userId,
+      message.profile.characterId,
+      message.profile.characterName,
+    );
     const saved = await repository.saveProfile(userId, message.profile, message.expectedRevision);
+    const retainedIds = new Set(allVariants(saved).map((variant) => variant.id));
+    const removedImageIds = allVariants(before)
+      .filter((variant) => !retainedIds.has(variant.id))
+      .map((variant) => variant.imageId);
+    if (removedImageIds.length && hasPermission("images")) {
+      await deleteOwnedImagesIfUnreferenced(userId, removedImageIds);
+    }
     send({ type: "saved", requestId: message.requestId, revision: saved.revision }, userId);
-    send({ type: "profile", profile: saved, assetViews: await assetViewsForProfiles(userId, [saved]) }, userId);
+    send({ type: "profile", profile: saved, variantViews: await variantViewsForProfiles(userId, [saved]) }, userId);
     return;
   }
   if (message.type === "save-chat-layout") {
     const timeline = await repository.getTimeline(userId, message.chatId);
     if (timeline.revision !== message.expectedRevision) throw new RevisionConflict(timeline.revision);
-    const next: ChatTimelineV1 = {
+    const next: ChatTimelineV2 = {
       ...timeline,
       revision: timeline.revision + 1,
       layoutOverride: message.layoutOverride ? structuredClone(message.layoutOverride) : null,
@@ -568,7 +603,7 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     const settings = await repository.getSettings(userId);
     const messages = await normalizedMessages(message.chatId);
     const current = await repository.getTimeline(userId, message.chatId);
-    let timeline = clearManualOverride(current, message.actorId);
+    let timeline = clearManualOverride(current, message.characterId);
     timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
     await repository.saveTimeline(userId, timeline, current.revision);
     await sendState(userId);
@@ -582,21 +617,14 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     await importAssets(userId, message);
     return;
   }
-  if (message.type === "delete-assets") {
+  if (message.type === "delete-variants") {
     if (!hasPermission("images")) throw new Error("Images permission is required to delete media.");
     const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
-    const selected = new Set(message.assetIds);
-    const assets = allAssets(profile).filter((asset) => selected.has(asset.id));
-    const next = removeAssets(profile, selected);
-    await repository.replaceProfile(userId, next);
-    const profiles = await repository.listProfiles(userId);
-    const unreferenced = unreferencedImageIds(profiles, assets.map((asset) => asset.imageId));
-    const deletable = await confirmExtensionOwnedImageIds(
-      unreferenced,
-      (imageId) => spindle.images.get(imageId, { onlyOwned: true, specificity: "metadata", userId } as never),
-    );
-    if (deletable.length) await spindle.images.deleteMany(deletable, { userId });
-    send({ type: "profile", profile: next, assetViews: await assetViewsForProfiles(userId, [next]) }, userId);
+    const selected = new Set(message.variantIds);
+    const variants = allVariants(profile).filter((variant) => selected.has(variant.id));
+    const next = await repository.replaceProfile(userId, removeVariants(profile, selected));
+    await deleteOwnedImagesIfUnreferenced(userId, variants.map((variant) => variant.imageId));
+    send({ type: "profile", profile: next, variantViews: await variantViewsForProfiles(userId, [next]) }, userId);
     return;
   }
   if (message.type === "request-export") {
@@ -612,8 +640,8 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         ? [await repository.getProfile(userId, context.characterId, await characterName(userId, context.characterId))]
         : [];
     const profile = diagnosticProfiles.find((item) => item.characterId === context?.characterId) ?? diagnosticProfiles[0] ?? null;
-    const views = await assetViewsForProfiles(userId, diagnosticProfiles);
-    const media = diagnosticProfiles.flatMap(allAssets);
+    const views = await variantViewsForProfiles(userId, diagnosticProfiles);
+    const media = diagnosticProfiles.flatMap(allVariants);
     const settings = await repository.getSettings(userId);
     send({
       type: "diagnostics",
@@ -634,13 +662,13 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         },
         media: {
           total: media.length,
-          missing: hasPermission("images") ? media.filter((asset) => !views[asset.id]?.url).length : null,
+          missing: hasPermission("images") ? media.filter((variant) => !views[variant.id]?.url).length : null,
           ownershipVerified: hasPermission("images"),
         },
         catalog: profile ? {
-          actors: profile.actors.length,
-          outfits: profile.actors.reduce((sum, actor) => sum + actor.outfits.length, 0),
-          assets: allAssets(profile).length,
+          characters: 1,
+          outfits: profile.outfits.length,
+          variants: allVariants(profile).length,
           issues: inspectProfile(profile),
         } : null,
         detector: lastDetection.get(userId) ?? null,

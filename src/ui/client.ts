@@ -5,12 +5,12 @@ import { createId } from "../ids";
 import { createProfile, createTimeline, defaultSettings } from "../model";
 import type {
   BackendToFrontend,
-  CharacterProfileV1,
+  CharacterProfileV2,
   FrontendState,
   FrontendToBackend,
-  ImportLayout,
-  LumiStageSettingsV1,
-  ManualOverride,
+  ImportLayoutV2,
+  LumiStageSettingsV2,
+  ManualOverrideV2,
 } from "../types";
 
 type Listener = () => void;
@@ -28,7 +28,7 @@ const EMPTY_BACKEND: FrontendState = {
   stageProfiles: [],
   timeline: null,
   snapshot: null,
-  assetViews: {},
+  variantViews: {},
   connections: [],
   permissions: {
     generation: false,
@@ -128,7 +128,7 @@ export class LumiStageClient {
       const stageProfiles = this.ui.backend.stageProfiles.some((profile) => profile.characterId === message.profile.characterId)
         ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === message.profile.characterId ? message.profile : profile)
         : [...this.ui.backend.stageProfiles, message.profile];
-      this.emit({ backend: { ...this.ui.backend, profile: message.profile, stageProfiles, assetViews: { ...this.ui.backend.assetViews, ...message.assetViews } } });
+      this.emit({ backend: { ...this.ui.backend, profile: message.profile, stageProfiles, variantViews: { ...this.ui.backend.variantViews, ...message.variantViews } } });
       return;
     }
     if (message.type === "snapshot") {
@@ -137,7 +137,7 @@ export class LumiStageClient {
           ...this.ui.backend,
           timeline: message.timeline,
           snapshot: message.timeline.snapshot,
-          assetViews: { ...this.ui.backend.assetViews, ...message.assetViews },
+          variantViews: { ...this.ui.backend.variantViews, ...message.variantViews },
         },
       });
       return;
@@ -155,7 +155,7 @@ export class LumiStageClient {
         ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === message.profile.characterId ? message.profile : profile)
         : [...this.ui.backend.stageProfiles, message.profile];
       this.emit({
-        backend: { ...this.ui.backend, profile: message.profile, stageProfiles, assetViews: { ...this.ui.backend.assetViews, ...message.assetViews } },
+        backend: { ...this.ui.backend, profile: message.profile, stageProfiles, variantViews: { ...this.ui.backend.variantViews, ...message.variantViews } },
       });
       this.settle(message.requestId, message);
       const suffix = message.errors.length ? ` ${message.errors.length} file(s) need attention.` : "";
@@ -181,7 +181,7 @@ export class LumiStageClient {
     }
   }
 
-  async saveSettings(settings: LumiStageSettingsV1): Promise<void> {
+  async saveSettings(settings: LumiStageSettingsV2): Promise<void> {
     const requestId = createId("save");
     await this.request<number>({
       type: "save-settings",
@@ -192,7 +192,7 @@ export class LumiStageClient {
     this.refresh(this.ui.backend.activeChatId, this.ui.backend.activeCharacterId);
   }
 
-  async saveProfile(profile: CharacterProfileV1): Promise<void> {
+  async saveProfile(profile: CharacterProfileV2): Promise<void> {
     const requestId = createId("save");
     await this.request<number>({
       type: "save-profile",
@@ -210,7 +210,7 @@ export class LumiStageClient {
     };
   }
 
-  async saveChatLayout(layoutOverride: Partial<LumiStageSettingsV1["appearance"]> | null): Promise<void> {
+  async saveChatLayout(layoutOverride: Partial<LumiStageSettingsV2["appearance"]> | null): Promise<void> {
     const timeline = this.ui.backend.timeline;
     const chatId = this.ui.backend.activeChatId;
     if (!timeline || !chatId) throw new Error("Open a chat before saving a chat-specific layout.");
@@ -225,7 +225,7 @@ export class LumiStageClient {
     this.refresh(chatId, this.ui.backend.activeCharacterId);
   }
 
-  async saveAppearance(patch: Partial<LumiStageSettingsV1["appearance"]>): Promise<void> {
+  async saveAppearance(patch: Partial<LumiStageSettingsV2["appearance"]>): Promise<void> {
     if (this.ui.backend.timeline?.layoutOverride) {
       await this.saveChatLayout({ ...this.effectiveAppearance(), ...patch });
       return;
@@ -234,18 +234,18 @@ export class LumiStageClient {
     await this.saveSettings({ ...settings, appearance: { ...settings.appearance, ...patch } });
   }
 
-  async applyManual(override: ManualOverride): Promise<void> {
+  async applyManual(override: ManualOverrideV2): Promise<void> {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) throw new Error("Open a chat before changing the live stage.");
     const requestId = createId("manual");
     await this.request({ type: "apply-manual", requestId, chatId, override });
   }
 
-  async clearManual(actorId: string): Promise<void> {
+  async clearManual(characterId: string): Promise<void> {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) return;
     const requestId = createId("manual");
-    await this.request({ type: "clear-manual", requestId, chatId, actorId });
+    await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
 
   analyzeNow(): void {
@@ -277,7 +277,12 @@ export class LumiStageClient {
     });
   }
 
-  async importFiles(files: File[], layout: ImportLayout, targetActorId?: string): Promise<void> {
+  async importFiles(
+    files: File[],
+    layout: ImportLayoutV2,
+    targetOutfitId?: string,
+    targetExpressionId?: string,
+  ): Promise<void> {
     const characterId = this.ui.backend.profile?.characterId ?? this.ui.backend.activeCharacterId;
     if (!characterId) throw new Error("Choose a character before importing media.");
     if (!files.length) return;
@@ -303,15 +308,16 @@ export class LumiStageClient {
       characterId,
       uploadIds,
       layout,
-      targetActorId,
+      targetOutfitId,
+      targetExpressionId,
     }, 10 * 60_000);
   }
 
-  async deleteAssets(assetIds: string[]): Promise<void> {
+  async deleteVariants(variantIds: string[]): Promise<void> {
     const characterId = this.ui.backend.profile?.characterId;
-    if (!characterId || !assetIds.length) return;
+    if (!characterId || !variantIds.length) return;
     const requestId = createId("delete");
-    await this.request({ type: "delete-assets", requestId, characterId, assetIds });
+    await this.request({ type: "delete-variants", requestId, characterId, variantIds });
   }
 
   async exportProfile(): Promise<void> {
@@ -358,7 +364,7 @@ export class LumiStageClient {
     return this.request<Record<string, unknown>>({ type: "request-diagnostics", requestId });
   }
 
-  ensureDraftProfile(characterId: string, characterName: string): CharacterProfileV1 {
+  ensureDraftProfile(characterId: string, characterName: string): CharacterProfileV2 {
     return this.ui.backend.profile ?? createProfile(characterId, characterName);
   }
 

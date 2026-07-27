@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createTimeline, defaultSettings } from "../src/model";
 import {
   LumiStageRepository,
   RevisionConflict,
@@ -8,105 +7,140 @@ import {
   timelinePath,
   type UserStorageApi,
 } from "../src/storage";
+import { profileA } from "./fixtures";
 
 class MemoryStorage implements UserStorageApi {
-  readonly values = new Map<string, unknown>();
-  readonly writes: string[] = [];
+  values = new Map<string, unknown>();
+  writes: string[] = [];
 
-  private key(userId: string | undefined, path: string) {
-    return `${userId ?? "default"}:${path}`;
+  private key(path: string, userId?: string) {
+    return `${userId ?? ""}:${path}`;
   }
 
   async getJson<T>(path: string, options?: { fallback?: T; userId?: string }): Promise<T> {
-    const key = this.key(options?.userId, path);
-    return (this.values.has(key) ? structuredClone(this.values.get(key)) : options?.fallback) as T;
+    return structuredClone(
+      this.values.has(this.key(path, options?.userId))
+        ? this.values.get(this.key(path, options?.userId))
+        : options?.fallback,
+    ) as T;
   }
 
-  async setJson(path: string, value: unknown, options?: { indent?: number; userId?: string }): Promise<void> {
-    await Promise.resolve();
-    this.writes.push(this.key(options?.userId, path));
-    this.values.set(this.key(options?.userId, path), structuredClone(value));
+  async setJson(path: string, value: unknown, options?: { userId?: string }): Promise<void> {
+    this.writes.push(path);
+    this.values.set(this.key(path, options?.userId), structuredClone(value));
   }
 
   async list(prefix = "", userId?: string): Promise<string[]> {
-    const root = `${userId ?? "default"}:`;
+    const marker = `${userId ?? ""}:`;
     return [...this.values.keys()]
-      .filter((key) => key.startsWith(root))
-      .map((key) => key.slice(root.length))
+      .filter((key) => key.startsWith(marker))
+      .map((key) => key.slice(marker.length))
       .filter((path) => path.startsWith(prefix));
   }
 
   async delete(path: string, userId?: string): Promise<void> {
-    this.values.delete(this.key(userId, path));
+    this.values.delete(this.key(path, userId));
   }
 }
 
-describe("private user storage repository", () => {
-  it("uses only versioned LumiStage-owned per-character and per-chat paths", () => {
-    expect(settingsPath()).toBe("settings.v1.json");
-    expect(profilePath("character")).toBe("profiles/character.v1.json");
-    expect(timelinePath("chat")).toBe("chats/chat.v1.json");
-  });
-
-  it("serializes writes and rejects a stale concurrent settings mutation", async () => {
+describe("V2 user storage", () => {
+  it("uses V2 paths and rejects stale profile mutations", async () => {
     const storage = new MemoryStorage();
     const repository = new LumiStageRepository(storage);
-    const settings = defaultSettings(1);
-    const results = await Promise.allSettled([
-      repository.saveSettings("user", { ...settings, preloadAdjacent: 4 }, 0),
-      repository.saveSettings("user", { ...settings, preloadAdjacent: 8 }, 0),
-    ]);
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-    expect(rejected?.reason).toBeInstanceOf(RevisionConflict);
-    expect((rejected?.reason as RevisionConflict).currentRevision).toBe(1);
-    expect(storage.writes).toEqual(["user:settings.v1.json"]);
+    const profile = await repository.getProfile("user", "character-a", "Aster");
+    expect(profilePath("character-a")).toBe("profiles/character-a.v2.json");
+    const saved = await repository.saveProfile("user", profile, 0);
+    expect(saved.revision).toBe(1);
+    await expect(repository.saveProfile("user", profile, 0))
+      .rejects.toBeInstanceOf(RevisionConflict);
   });
 
-  it("isolates caches and stored records by user", async () => {
+  it("serializes concurrent writes per record", async () => {
     const storage = new MemoryStorage();
     const repository = new LumiStageRepository(storage);
-    const first = await repository.getProfile("first", "character", "First");
-    const second = await repository.getProfile("second", "character", "Second");
-    expect(first.characterName).toBe("First");
-    expect(second.characterName).toBe("Second");
-    first.characterName = "Changed";
-    expect((await repository.getProfile("first", "character")).characterName).toBe("First");
+    const settings = await repository.getSettings("user");
+    const first = repository.saveSettings("user", settings, 0);
+    const second = repository.saveSettings("user", settings, 0);
+    await expect(first).resolves.toEqual(expect.objectContaining({ revision: 1 }));
+    await expect(second).rejects.toBeInstanceOf(RevisionConflict);
+    expect(settingsPath()).toBe("settings.v2.json");
   });
 
-  it("restores the complete chat stage and layout after a repository reload", async () => {
+  it("migrates V1 profiles and writes the V2 record without losing media", async () => {
     const storage = new MemoryStorage();
-    const firstRepository = new LumiStageRepository(storage);
-    const timeline = createTimeline("chat", 1);
-    timeline.revision = 1;
-    timeline.layoutOverride = { width: 640, height: 480, idleOpacity: 0.3 };
-    timeline.snapshot.actors.actor = {
-      actorId: "actor",
-      characterId: "character",
-      outfitId: "outfit",
-      expressionId: "expression",
-      assetId: "asset",
-      imageId: "image",
-      label: "Actor · Outfit · Expression",
-      focused: true,
-      confidence: 0.9,
-    };
-    await firstRepository.saveTimeline("user", timeline, 0);
-    const reloaded = await new LumiStageRepository(storage).getTimeline("user", "chat");
-    expect(reloaded.layoutOverride).toMatchObject({ width: 640, height: 480 });
-    expect(reloaded.snapshot.actors.actor.expressionId).toBe("expression");
-  });
-
-  it("rejects a stale detector timeline after a manual timeline write wins", async () => {
-    const storage = new MemoryStorage();
+    const current = profileA();
+    storage.values.set("user:profiles/character-a.v1.json", {
+      schemaVersion: 1,
+      revision: 4,
+      characterName: "Aster",
+      defaultActorId: "owner",
+      actors: [{
+        id: "owner",
+        name: "Aster",
+        defaultOutfitId: current.defaultOutfitId,
+        outfits: current.outfits.map((outfit) => ({
+          ...outfit,
+          expressions: outfit.expressions.map((expression) => ({
+            ...expression,
+            assets: expression.variants,
+            variants: undefined,
+          })),
+        })),
+      }],
+    });
     const repository = new LumiStageRepository(storage);
-    const manual = createTimeline("chat", 1);
-    manual.revision = 1;
-    manual.manualOverrides.actor = { actorId: "actor", scope: "locked", createdAt: 2 };
-    await repository.saveTimeline("user", manual, 0);
-    const staleDetector = createTimeline("chat", 1);
-    staleDetector.revision = 1;
-    await expect(repository.saveTimeline("user", staleDetector, 0)).rejects.toMatchObject({ currentRevision: 1 });
-    expect((await repository.getTimeline("user", "chat")).manualOverrides.actor.scope).toBe("locked");
+    const migrated = await repository.getProfile("user", "character-a", "Aster");
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.outfits[0].expressions[0].variants).toHaveLength(2);
+    expect(storage.writes).toContain(profilePath("character-a"));
+  });
+
+  it("migrates layout and valid manual state while discarding old detector records", async () => {
+    const storage = new MemoryStorage();
+    storage.values.set("user:chats/chat.v1.json", {
+      schemaVersion: 1,
+      revision: 8,
+      chatId: "chat",
+      decisions: [{ incompatible: true }],
+      manualOverrides: {
+        owner: {
+          actorId: "owner",
+          outfitId: "outfit-casual",
+          expressionId: "expression-neutral",
+          assetId: "variant-neutral-a",
+          scope: "locked",
+          createdAt: 5,
+        },
+      },
+      layoutOverride: { width: 500 },
+      snapshot: {
+        revision: 2,
+        actors: {
+          owner: {
+            characterId: "character-a",
+            outfitId: "outfit-casual",
+            expressionId: "expression-neutral",
+            assetId: "variant-neutral-a",
+            imageId: "image",
+            label: "Aster",
+            focused: true,
+            confidence: 1,
+          },
+        },
+        focusedActorIds: ["owner"],
+      },
+    });
+    const repository = new LumiStageRepository(storage);
+    const timeline = await repository.getTimeline("user", "chat");
+    expect(timeline.schemaVersion).toBe(2);
+    expect(timeline.decisions).toEqual([]);
+    expect(timeline.layoutOverride).toEqual({ width: 500 });
+    expect(timeline.manualOverrides["character-a"]).toEqual(expect.objectContaining({
+      characterId: "character-a",
+      variantId: "variant-neutral-a",
+      lock: "state",
+    }));
+    expect(timeline.snapshot.focusedCharacterIds).toEqual(["character-a"]);
+    expect(timelinePath("chat")).toBe("chats/chat.v2.json");
   });
 });

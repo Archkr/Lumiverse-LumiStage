@@ -1,139 +1,122 @@
 import type {
-  ActorProfile,
-  CharacterProfileV1,
-  DecisionRecord,
-  DetectionActorDecision,
-  ExpressionState,
-  OutfitFolder,
-  StageAsset,
+  CharacterProfileV2,
+  DecisionRecordV2,
+  DetectionCharacterDecisionV2,
+  ExpressionSlotV2,
+  OutfitFolderV2,
+  StageVariantV2,
 } from "../src/types";
 
-export function asset(id: string, hash = id): StageAsset {
+export function variant(id: string, fileName = `${id}.png`): StageVariantV2 {
   return {
     id,
     imageId: `image-${id}`,
-    contentHash: hash,
-    fileName: `${id}.png`,
+    contentHash: `hash-${id}`,
+    fileName,
     mimeType: "image/png",
     mediaKind: "image",
-    enabled: true,
-    priority: 0,
-    createdAt: 100,
+    order: 0,
+    createdAt: 1,
   };
 }
 
-function expression(id: string, name: string, media: StageAsset[] = [asset(`asset-${id}`)]): ExpressionState {
-  return {
-    id,
-    name,
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
-    order: 0,
-    assets: media,
-  };
+export function expression(
+  id: string,
+  name: string,
+  variants: StageVariantV2[] = [variant(`variant-${id}`, `${name.toLocaleLowerCase()}.png`)],
+): ExpressionSlotV2 {
+  return { id, name, order: 0, variants };
 }
 
-function outfit(id: string, name: string, expressions: ExpressionState[]): OutfitFolder {
+export function outfit(
+  id: string,
+  name: string,
+  expressions: ExpressionSlotV2[],
+): OutfitFolderV2 {
+  expressions.forEach((item, order) => { item.order = order; });
   return {
     id,
     name,
-    aliases: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
     order: 0,
-    allowAutoSwitch: true,
     defaultExpressionId: expressions[0]?.id ?? null,
     expressions,
   };
 }
 
-export function profileA(): CharacterProfileV1 {
-  const actor: ActorProfile = {
-    id: "actor-a",
-    name: "Aster",
-    aliases: ["A"],
-    enabled: true,
-    order: 0,
-    defaultOutfitId: "outfit-casual",
-    outfits: [
-      outfit("outfit-casual", "Casual", [
-        expression("expression-neutral", "Neutral"),
-        expression("expression-happy", "Happy"),
-        expression("expression-soft", "Sitting softly"),
+export function profileA(): CharacterProfileV2 {
+  const outfits = [
+    outfit("outfit-casual", "Casual", [
+      expression("expression-neutral", "Neutral", [
+        variant("variant-neutral-a", "neutral-soft.png"),
+        { ...variant("variant-neutral-b", "neutral-side.png"), order: 1 },
       ]),
-      outfit("outfit-formal", "Formal", [expression("expression-formal", "Composed stance")]),
-    ],
-  };
+      expression("expression-happy", "Happy"),
+      expression("expression-angry", "Angry"),
+    ]),
+    outfit("outfit-formal", "Formal", [
+      expression("expression-formal", "Composed"),
+    ]),
+  ];
+  outfits.forEach((item, order) => { item.order = order; });
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 0,
     characterId: "character-a",
     characterName: "Aster",
-    defaultActorId: actor.id,
-    actors: [actor],
+    defaultOutfitId: "outfit-casual",
+    outfits,
     createdAt: 1,
     updatedAt: 1,
   };
 }
 
-export function profileB(): CharacterProfileV1 {
-  const actor: ActorProfile = {
-    id: "actor-b",
-    name: "Bryn",
-    aliases: [],
-    enabled: true,
-    order: 0,
-    defaultOutfitId: "outfit-b",
-    outfits: [
-      outfit("outfit-b", "Default", [expression("expression-b", "Alert")]),
-    ],
-  };
+export function profileB(): CharacterProfileV2 {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 0,
     characterId: "character-b",
-    characterName: "Bryn",
-    defaultActorId: actor.id,
-    actors: [actor],
+    characterName: "Briar",
+    defaultOutfitId: "outfit-b",
+    outfits: [
+      outfit("outfit-b", "Default", [
+        expression("expression-b", "Alert", [variant("variant-b", "alert.png")]),
+      ]),
+    ],
     createdAt: 1,
     updatedAt: 1,
   };
 }
 
-export function decision(
-  actor: Partial<DetectionActorDecision> = {},
-  focusedActorIds = ["actor-a"],
-) {
+export function decisionA(
+  patch: Partial<DetectionCharacterDecisionV2> = {},
+): DetectionCharacterDecisionV2 {
   return {
-    schemaVersion: 1 as const,
-    focusedActorIds,
-    actors: [{
-      actorId: "actor-a",
-      outfitId: "outfit-casual",
-      expressionId: "expression-happy",
-      confidence: 0.9,
-      ...actor,
-    }],
+    characterId: "character-a",
+    outfitId: "outfit-casual",
+    expressionId: "expression-happy",
+    variantId: "variant-expression-happy",
+    confidence: 0.9,
+    ...patch,
   };
 }
 
-export function record(
+export function recordA(
   messageId: string,
   swipeId: number,
   contentHash: string,
-  actor: Partial<DetectionActorDecision> = {},
-): DecisionRecord {
+  patch: Partial<DetectionCharacterDecisionV2> = {},
+): DecisionRecordV2 {
   return {
     messageId,
     swipeId,
     contentHash,
-    decision: decision(actor),
-    provider: "mock",
-    model: "mock-model",
-    createdAt: 100 + swipeId,
+    decision: {
+      schemaVersion: 2,
+      focusedCharacterIds: ["character-a"],
+      characters: [decisionA(patch)],
+    },
+    provider: "test",
+    model: "test-model",
+    createdAt: 5,
   };
 }

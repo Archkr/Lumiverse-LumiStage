@@ -8,6 +8,15 @@ const forbidden = [
   "expression_groups",
   "EXPRESSION_CHANGED",
 ];
+const rejectedModelTokens = [
+  "aliases",
+  "cues",
+  "tags",
+  "poses",
+  "priority",
+  "allowAutoSwitch",
+  "outfitConfidence",
+];
 
 async function filesUnder(path) {
   const info = await stat(path);
@@ -27,6 +36,11 @@ for (const file of targets) {
   for (const token of forbidden) {
     if (text.includes(token)) violations.push(`${file}: forbidden core-expression reference ${JSON.stringify(token)}`);
   }
+  if (file.includes(`${resolve(root, "src")}`) || file.includes(`${resolve(root, "dist")}`)) {
+    for (const token of rejectedModelTokens) {
+      if (text.includes(token)) violations.push(`${file}: rejected LumiStage model concept ${JSON.stringify(token)}`);
+    }
+  }
 }
 
 const manifest = JSON.parse(await readFile(resolve(root, "spindle.json"), "utf8"));
@@ -40,6 +54,8 @@ if (manifest.minimum_lumiverse_version !== "1.1.0") violations.push("spindle.jso
 const backend = await readFile(resolve(root, "src/backend.ts"), "utf8");
 const frontend = await readFile(resolve(root, "src/frontend.tsx"), "utf8");
 const frontendBundle = await readFile(resolve(root, "dist/frontend.js"), "utf8");
+const studio = await readFile(resolve(root, "src/ui/studio.tsx"), "utf8");
+const controls = await readFile(resolve(root, "src/ui/host-controls.tsx"), "utf8");
 if (!/export\s+function\s+setup\s*\(/.test(frontend)) violations.push("frontend: Spindle requires a named setup export");
 if (!/\bsetup\b/.test(frontendBundle) || !/export\s*\{/.test(frontendBundle)) {
   violations.push("dist/frontend.js: production bundle is missing a named setup export");
@@ -50,6 +66,26 @@ if (!backend.includes("spindle.characters.get(characterId, userId)")) violations
 if (!backend.includes("spindle.chats.get(chatId, userId)")) violations.push("backend: chat reads must carry operator userId");
 if (!backend.includes("spindle.connections.list(userId)")) violations.push("backend: connection reads must carry operator userId");
 if (!backend.includes("{ ...request, userId }")) violations.push("backend: detector generation must carry operator userId");
+if (!frontend.includes("width: 1440") || !frontend.includes("maxHeight: 980")) {
+  violations.push("frontend: full Studio must use the large host modal");
+}
+if (!studio.includes("DrawerDashboard") || !studio.includes("StudioWorkspace")) {
+  violations.push("frontend: missing separated dashboard and Studio workspace");
+}
+if (!controls.includes("mountModelCombobox") || !controls.includes("mountSwitch")) {
+  violations.push("frontend: settings must mount Lumiverse native controls");
+}
+for (const file of [
+  resolve(root, "src/types.ts"),
+  resolve(root, "src/detector.ts"),
+  resolve(root, "src/importer.ts"),
+  resolve(root, "src/ui/studio.tsx"),
+]) {
+  const text = await readFile(file, "utf8");
+  if (/\bactor(?:s|Id)?\b/i.test(text)) {
+    violations.push(`${file}: internal owner layer survived outside the V1 migration reader`);
+  }
+}
 if (backend.includes('onEvent("GENERATION_STARTED"') && backend.match(/GENERATION_STARTED[\s\S]{0,800}scheduleAnalysis/)) {
   violations.push("backend: detection must not run when generation starts");
 }

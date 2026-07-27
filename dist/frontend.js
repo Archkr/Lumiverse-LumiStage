@@ -1955,7 +1955,7 @@ function _regeneratorRuntime() {
     };
   }, e3.values = values, Context.prototype = { constructor: Context, reset: function reset(e4) {
     if (this.prev = 0, this.next = 0, this.sent = this._sent = t3, this.done = false, this.delegate = null, this.method = "next", this.arg = t3, this.tryEntries.forEach(resetTryEntry), !e4) for (var r4 in this) "t" === r4.charAt(0) && n2.call(this, r4) && !isNaN(+r4.slice(1)) && (this[r4] = t3);
-  }, stop: function stop() {
+  }, stop: function stop2() {
     this.done = true;
     var t4 = this.tryEntries[0].completion;
     if ("throw" === t4.type) throw t4.arg;
@@ -3442,7 +3442,7 @@ function _regeneratorRuntime2() {
     };
   }, e3.values = values, Context.prototype = { constructor: Context, reset: function reset(e4) {
     if (this.prev = 0, this.next = 0, this.sent = this._sent = t3, this.done = false, this.delegate = null, this.method = "next", this.arg = t3, this.tryEntries.forEach(resetTryEntry), !e4) for (var r4 in this) "t" === r4.charAt(0) && n2.call(this, r4) && !isNaN(+r4.slice(1)) && (this[r4] = t3);
-  }, stop: function stop() {
+  }, stop: function stop2() {
     this.done = true;
     var t4 = this.tryEntries[0].completion;
     if ("throw" === t4.type) throw t4.arg;
@@ -4085,7 +4085,7 @@ function normalizedKey(value) {
 }
 
 // src/types.ts
-var SCHEMA_VERSION = 1;
+var SCHEMA_VERSION = 2;
 var DEFAULT_SETTINGS = {
   schemaVersion: SCHEMA_VERSION,
   revision: 0,
@@ -4095,8 +4095,7 @@ var DEFAULT_SETTINGS = {
     model: null,
     contextMessages: 5,
     temperature: 0.1,
-    stateConfidence: 0.6,
-    outfitConfidence: 0.85
+    confidence: 0.6
   },
   appearance: {
     transition: "crossfade",
@@ -4122,61 +4121,56 @@ var DEFAULT_SETTINGS = {
 function defaultSettings(now = Date.now()) {
   return structuredClone({ ...DEFAULT_SETTINGS, updatedAt: now });
 }
-function createExpression(name = "Neutral", now = Date.now()) {
+function createExpression(name = "Neutral") {
   return {
     id: createId("expression"),
     name: cleanName(name, "Neutral"),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
     order: 0,
-    assets: []
+    variants: []
   };
 }
-function createOutfit(name = "Default", now = Date.now()) {
-  const expression = createExpression("Neutral", now);
+function createOutfit(name = "Default") {
+  const expression = createExpression("Neutral");
   return {
     id: createId("outfit"),
     name: cleanName(name),
-    aliases: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
     order: 0,
-    allowAutoSwitch: true,
     defaultExpressionId: expression.id,
     expressions: [expression]
   };
 }
-function createActor(name, now = Date.now()) {
-  const outfit = createOutfit("Default", now);
-  return {
-    id: createId("actor"),
-    name: cleanName(name, "Actor"),
-    aliases: [],
-    enabled: true,
-    order: 0,
-    defaultOutfitId: outfit.id,
-    outfits: [outfit]
-  };
-}
 function createProfile(characterId, characterName = "Character", now = Date.now()) {
-  const actor = createActor(characterName, now);
+  const outfit = createOutfit("Default");
   return {
     schemaVersion: SCHEMA_VERSION,
     revision: 0,
     characterId,
     characterName: cleanName(characterName, "Character"),
-    defaultActorId: actor.id,
-    actors: [actor],
+    defaultOutfitId: outfit.id,
+    outfits: [outfit],
     createdAt: now,
     updatedAt: now
   };
 }
+function mergeVariants(target, source) {
+  const ids = new Set(target.variants.map((item) => item.id));
+  const hashes = new Set(target.variants.map((item) => item.contentHash));
+  for (const variant of source.variants) {
+    if (ids.has(variant.id) || hashes.has(variant.contentHash)) continue;
+    target.variants.push({ ...variant, order: target.variants.length });
+    ids.add(variant.id);
+    hashes.add(variant.contentHash);
+  }
+}
 function emptySnapshot(chatId, now = Date.now()) {
-  return { schemaVersion: SCHEMA_VERSION, chatId, revision: 0, actors: {}, focusedActorIds: [], updatedAt: now };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    chatId,
+    revision: 0,
+    characters: {},
+    focusedCharacterIds: [],
+    updatedAt: now
+  };
 }
 function createTimeline(chatId, now = Date.now()) {
   return {
@@ -4190,112 +4184,115 @@ function createTimeline(chatId, now = Date.now()) {
     updatedAt: now
   };
 }
-function allAssets(profile) {
-  return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap((outfit) => outfit.expressions.flatMap((expression) => expression.assets))
+function allVariants(profile) {
+  return profile.outfits.flatMap(
+    (outfit) => outfit.expressions.flatMap((expression) => expression.variants)
   );
 }
-function allExpressions(profile) {
-  return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap((outfit) => outfit.expressions)
-  );
+function uniqueCopyName(outfit, base) {
+  const used = new Set(outfit.expressions.map((item) => normalizedKey(item.name)));
+  if (!used.has(normalizedKey(`${base} copy`))) return `${base} copy`;
+  let suffix = 2;
+  while (used.has(normalizedKey(`${base} copy ${suffix}`))) suffix += 1;
+  return `${base} copy ${suffix}`;
 }
-function mutateExpressions(profile, ids, mutate) {
+function cloneExpression(expression, order) {
   return {
-    ...profile,
-    actors: profile.actors.map((actor) => ({
-      ...actor,
-      outfits: actor.outfits.map((outfit) => ({
-        ...outfit,
-        expressions: outfit.expressions.map((expression) => ids.has(expression.id) ? mutate(expression) : expression)
-      }))
+    ...structuredClone(expression),
+    id: createId("expression"),
+    order,
+    variants: expression.variants.map((variant, index) => ({
+      ...variant,
+      id: createId("variant"),
+      order: index
     }))
   };
 }
-function applyBatchMutation(profile, mutation, now = Date.now()) {
-  let next = structuredClone(profile);
-  if (mutation.type === "set-enabled" || mutation.type === "set-priority" || mutation.type === "delete") {
-    const ids = new Set(mutation.assetIds);
-    for (const actor of next.actors) for (const outfit of actor.outfits) {
-      for (const expression of outfit.expressions) {
-        if (mutation.type === "delete") expression.assets = expression.assets.filter((asset) => !ids.has(asset.id));
-        else expression.assets = expression.assets.map((asset) => {
-          if (!ids.has(asset.id)) return asset;
-          return mutation.type === "set-enabled" ? { ...asset, enabled: mutation.enabled } : { ...asset, priority: mutation.priority };
-        });
-      }
-    }
-  } else if (mutation.type === "add-tags" || mutation.type === "add-aliases") {
-    const ids = new Set(mutation.expressionIds);
-    next = mutateExpressions(next, ids, (expression) => mutation.type === "add-tags" ? {
-      ...expression,
-      tags: [.../* @__PURE__ */ new Set([...expression.tags, ...mutation.tags.map((tag) => tag.trim()).filter(Boolean)])]
-    } : {
-      ...expression,
-      aliases: [.../* @__PURE__ */ new Set([...expression.aliases, ...mutation.aliases.map((alias) => alias.trim()).filter(Boolean)])]
+function mergeExpressionInto(outfit, expression) {
+  const match = outfit.expressions.find(
+    (item) => normalizedKey(item.name) === normalizedKey(expression.name)
+  );
+  if (match) mergeVariants(match, expression);
+  else outfit.expressions.push({ ...expression, order: outfit.expressions.length });
+  outfit.defaultExpressionId ??= match?.id ?? expression.id;
+}
+function repairDefaults(profile) {
+  profile.outfits.forEach((outfit, outfitOrder) => {
+    outfit.order = outfitOrder;
+    outfit.expressions.forEach((expression, expressionOrder) => {
+      expression.order = expressionOrder;
+      expression.variants.forEach((variant, variantOrder) => {
+        variant.order = variantOrder;
+      });
     });
-  } else if (mutation.type === "rename") {
-    const ids = new Set(mutation.expressionIds);
-    if (!mutation.find) return profile;
-    next = mutateExpressions(next, ids, (expression) => ({
-      ...expression,
-      name: cleanName(expression.name.split(mutation.find).join(mutation.replace), expression.name)
-    }));
-  } else if (mutation.type === "move") {
-    const assetIds = new Set(mutation.assetIds);
-    const moving = [];
-    for (const expression of allExpressions(next)) {
-      const assets = expression.assets.filter((asset) => assetIds.has(asset.id));
-      if (assets.length) moving.push({ expression, assets });
+    if (!outfit.expressions.some((item) => item.id === outfit.defaultExpressionId)) {
+      outfit.defaultExpressionId = outfit.expressions[0]?.id ?? null;
     }
-    for (const expression of allExpressions(next)) {
-      expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
+  });
+  if (!profile.outfits.some((item) => item.id === profile.defaultOutfitId)) {
+    profile.defaultOutfitId = profile.outfits[0]?.id ?? null;
+  }
+}
+function applyBatchMutation(profile, mutation, now = Date.now()) {
+  const next = structuredClone(profile);
+  const ids = new Set(mutation.expressionIds);
+  if (mutation.type === "delete") {
+    for (const outfit of next.outfits) {
+      outfit.expressions = outfit.expressions.filter((item) => !ids.has(item.id));
     }
-    for (const actor of next.actors) {
-      const outfit = actor.outfits.find((item) => item.id === mutation.outfitId);
-      if (outfit) {
-        for (const item of moving) {
-          const match = outfit.expressions.find((expression) => normalizedKey(expression.name) === normalizedKey(item.expression.name));
-          if (match) match.assets.push(...item.assets);
-          else outfit.expressions.push({
-            ...structuredClone(item.expression),
-            id: createId("expression"),
-            assets: item.assets,
-            order: outfit.expressions.length
-          });
+  } else {
+    const destination = next.outfits.find((item) => item.id === mutation.outfitId);
+    if (!destination) return profile;
+    const selected = next.outfits.flatMap(
+      (outfit) => outfit.expressions.filter((expression) => ids.has(expression.id)).map((expression) => ({
+        sourceOutfitId: outfit.id,
+        expression
+      }))
+    );
+    if (mutation.type === "move") {
+      for (const outfit of next.outfits) {
+        if (outfit.id === destination.id) continue;
+        outfit.expressions = outfit.expressions.filter((item) => !ids.has(item.id));
+      }
+      for (const item of selected) {
+        if (item.sourceOutfitId === destination.id) continue;
+        mergeExpressionInto(destination, item.expression);
+      }
+    } else {
+      for (const item of selected) {
+        const clone = cloneExpression(item.expression, destination.expressions.length);
+        if (item.sourceOutfitId === destination.id) {
+          clone.name = uniqueCopyName(destination, item.expression.name);
+          destination.expressions.push(clone);
+        } else {
+          mergeExpressionInto(destination, clone);
         }
       }
     }
-  } else if (mutation.type === "duplicate") {
-    const ids = new Set(mutation.assetIds);
-    for (const expression of allExpressions(next)) {
-      const copies = expression.assets.filter((asset) => ids.has(asset.id)).map((asset) => ({
-        ...asset,
-        id: createId("asset"),
-        fileName: asset.fileName.replace(/(\.[^.]+)?$/, " copy$1"),
-        createdAt: now
-      }));
-      expression.assets.push(...copies);
-    }
   }
+  repairDefaults(next);
   next.revision += 1;
   next.updatedAt = now;
   return next;
 }
 function inspectProfile(profile) {
   const issues = [];
-  const hashes = /* @__PURE__ */ new Map();
-  for (const actor of profile.actors) {
-    if (!actor.outfits.some((item) => item.enabled)) issues.push({ severity: "error", code: "actor-no-outfit", message: `${actor.name} has no enabled outfit.` });
-    const aliases = actor.aliases.map(normalizedKey);
-    if (new Set(aliases).size !== aliases.length) issues.push({ severity: "warning", code: "duplicate-alias", message: `${actor.name} contains duplicate aliases.` });
-    for (const outfit of actor.outfits) for (const expression of outfit.expressions) {
-      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${expression.name} has no media.` });
-      for (const asset of expression.assets) hashes.set(asset.contentHash, (hashes.get(asset.contentHash) ?? 0) + 1);
-    }
+  if (!profile.outfits.length) {
+    issues.push({ severity: "error", code: "no-outfits", message: `${profile.characterName} has no outfits.` });
   }
-  for (const [hash, count] of hashes) if (count > 1) {
-    issues.push({ severity: "warning", code: "duplicate-content", message: `${count} media references share hash ${hash.slice(0, 10)}\u2026` });
+  for (const outfit of profile.outfits) {
+    if (!outfit.expressions.length) {
+      issues.push({ severity: "warning", code: "empty-outfit", message: `${outfit.name} has no expressions.` });
+    }
+    const names = outfit.expressions.map((item) => normalizedKey(item.name));
+    if (new Set(names).size !== names.length) {
+      issues.push({ severity: "warning", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+    }
+    for (const expression of outfit.expressions) {
+      if (!expression.variants.length) {
+        issues.push({ severity: "info", code: "empty-expression", message: `${outfit.name} / ${expression.name} has no sprite variants.` });
+      }
+    }
   }
   return issues;
 }
@@ -4307,7 +4304,7 @@ var EMPTY_BACKEND = {
   stageProfiles: [],
   timeline: null,
   snapshot: null,
-  assetViews: {},
+  variantViews: {},
   connections: [],
   permissions: {
     generation: false,
@@ -4395,7 +4392,7 @@ var LumiStageClient = class {
     }
     if (message.type === "profile") {
       const stageProfiles = this.ui.backend.stageProfiles.some((profile) => profile.characterId === message.profile.characterId) ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === message.profile.characterId ? message.profile : profile) : [...this.ui.backend.stageProfiles, message.profile];
-      this.emit({ backend: { ...this.ui.backend, profile: message.profile, stageProfiles, assetViews: { ...this.ui.backend.assetViews, ...message.assetViews } } });
+      this.emit({ backend: { ...this.ui.backend, profile: message.profile, stageProfiles, variantViews: { ...this.ui.backend.variantViews, ...message.variantViews } } });
       return;
     }
     if (message.type === "snapshot") {
@@ -4404,7 +4401,7 @@ var LumiStageClient = class {
           ...this.ui.backend,
           timeline: message.timeline,
           snapshot: message.timeline.snapshot,
-          assetViews: { ...this.ui.backend.assetViews, ...message.assetViews }
+          variantViews: { ...this.ui.backend.variantViews, ...message.variantViews }
         }
       });
       return;
@@ -4420,7 +4417,7 @@ var LumiStageClient = class {
     if (message.type === "import-complete") {
       const stageProfiles = this.ui.backend.stageProfiles.some((profile) => profile.characterId === message.profile.characterId) ? this.ui.backend.stageProfiles.map((profile) => profile.characterId === message.profile.characterId ? message.profile : profile) : [...this.ui.backend.stageProfiles, message.profile];
       this.emit({
-        backend: { ...this.ui.backend, profile: message.profile, stageProfiles, assetViews: { ...this.ui.backend.assetViews, ...message.assetViews } }
+        backend: { ...this.ui.backend, profile: message.profile, stageProfiles, variantViews: { ...this.ui.backend.variantViews, ...message.variantViews } }
       });
       this.settle(message.requestId, message);
       const suffix = message.errors.length ? ` ${message.errors.length} file(s) need attention.` : "";
@@ -4499,11 +4496,11 @@ var LumiStageClient = class {
     const requestId = createId("manual");
     await this.request({ type: "apply-manual", requestId, chatId, override });
   }
-  async clearManual(actorId) {
+  async clearManual(characterId) {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) return;
     const requestId = createId("manual");
-    await this.request({ type: "clear-manual", requestId, chatId, actorId });
+    await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
   analyzeNow() {
     const chatId = this.ui.backend.activeChatId;
@@ -4532,7 +4529,7 @@ var LumiStageClient = class {
       upload.start();
     });
   }
-  async importFiles(files, layout, targetActorId) {
+  async importFiles(files, layout, targetOutfitId, targetExpressionId) {
     const characterId = this.ui.backend.profile?.characterId ?? this.ui.backend.activeCharacterId;
     if (!characterId) throw new Error("Choose a character before importing media.");
     if (!files.length) return;
@@ -4558,14 +4555,15 @@ var LumiStageClient = class {
       characterId,
       uploadIds,
       layout,
-      targetActorId
+      targetOutfitId,
+      targetExpressionId
     }, 10 * 6e4);
   }
-  async deleteAssets(assetIds) {
+  async deleteVariants(variantIds) {
     const characterId = this.ui.backend.profile?.characterId;
-    if (!characterId || !assetIds.length) return;
+    if (!characterId || !variantIds.length) return;
     const requestId = createId("delete");
-    await this.request({ type: "delete-assets", requestId, characterId, assetIds });
+    await this.request({ type: "delete-variants", requestId, characterId, variantIds });
   }
   async exportProfile() {
     const characterId = this.ui.backend.profile?.characterId;
@@ -4724,7 +4722,7 @@ var paths = {
     /* @__PURE__ */ u2("circle", { cx: "8.5", cy: "9", r: "1.5" }),
     /* @__PURE__ */ u2("path", { d: "m4 17 5-5 4 4 2-2 5 4" })
   ] }),
-  actors: /* @__PURE__ */ u2(S, { children: [
+  characters: /* @__PURE__ */ u2(S, { children: [
     /* @__PURE__ */ u2("circle", { cx: "9", cy: "8", r: "3" }),
     /* @__PURE__ */ u2("path", { d: "M3.5 20a5.5 5.5 0 0 1 11 0" }),
     /* @__PURE__ */ u2("circle", { cx: "17", cy: "9", r: "2.3" }),
@@ -4903,10 +4901,224 @@ function D2(n2, t3) {
   return "function" == typeof t3 ? t3(n2) : t3;
 }
 
+// src/ui/host-controls.tsx
+function HostSwitch(props) {
+  const root = A2(null);
+  const handle = A2(null);
+  const latest = A2(props);
+  latest.current = props;
+  h2(() => {
+    if (!root.current) return;
+    handle.current = props.client.ctx.components.mountSwitch(root.current, {
+      checked: props.checked,
+      size: "sm",
+      disabled: props.disabled,
+      ariaLabel: props.label,
+      onChange: (value) => latest.current.onChange(value)
+    });
+    return () => {
+      handle.current?.destroy();
+      handle.current = null;
+    };
+  }, [props.client]);
+  h2(() => {
+    handle.current?.update({
+      checked: props.checked,
+      disabled: props.disabled,
+      ariaLabel: props.label
+    });
+  }, [props.checked, props.disabled, props.label]);
+  return /* @__PURE__ */ u2("div", { class: "ls-native-control ls-native-switch", ref: root });
+}
+function HostSelect(props) {
+  const root = A2(null);
+  const handle = A2(null);
+  const latest = A2(props);
+  latest.current = props;
+  h2(() => {
+    if (!root.current) return;
+    handle.current = props.client.ctx.components.mountSelect(root.current, {
+      value: props.value,
+      options: props.options,
+      placeholder: props.placeholder,
+      clearable: props.clearable,
+      clearLabel: props.clearLabel,
+      disabled: props.disabled,
+      ariaLabel: props.label,
+      searchThreshold: 7,
+      portal: true,
+      className: props.compact ? "ls-host-select-compact" : "ls-host-select",
+      onChange: (value) => latest.current.onChange(value)
+    });
+    return () => {
+      handle.current?.destroy();
+      handle.current = null;
+    };
+  }, [props.client]);
+  h2(() => {
+    handle.current?.update({
+      value: props.value,
+      options: props.options,
+      placeholder: props.placeholder,
+      clearable: props.clearable,
+      clearLabel: props.clearLabel,
+      disabled: props.disabled,
+      ariaLabel: props.label
+    });
+  }, [
+    props.value,
+    props.options,
+    props.placeholder,
+    props.clearable,
+    props.clearLabel,
+    props.disabled,
+    props.label
+  ]);
+  return /* @__PURE__ */ u2("div", { class: "ls-native-control", ref: root });
+}
+function HostModelPicker(props) {
+  const root = A2(null);
+  const handle = A2(null);
+  const latest = A2(props);
+  latest.current = props;
+  h2(() => {
+    if (!root.current) return;
+    handle.current = props.client.ctx.components.mountModelCombobox(root.current, {
+      value: props.value,
+      connection: props.connectionId ? { kind: "llm", id: props.connectionId } : { kind: "llm" },
+      appearance: "standard",
+      placeholder: "Use connection default",
+      emptyMessage: "No models returned by this connection.",
+      browseHint: "Search the selected connection's model catalog",
+      disabled: props.disabled,
+      onChange: (value) => latest.current.onChange(value)
+    });
+    return () => {
+      handle.current?.destroy();
+      handle.current = null;
+    };
+  }, [props.client, props.connectionId]);
+  h2(() => {
+    handle.current?.update({ value: props.value, disabled: props.disabled });
+  }, [props.value, props.disabled]);
+  return /* @__PURE__ */ u2("div", { class: "ls-native-control", ref: root });
+}
+function HostNumber(props) {
+  const root = A2(null);
+  const handle = A2(null);
+  const latest = A2(props);
+  latest.current = props;
+  h2(() => {
+    if (!root.current) return;
+    handle.current = props.client.ctx.components.mountNumberStepper(root.current, {
+      value: props.value,
+      min: props.min,
+      max: props.max,
+      step: props.step ?? 1,
+      integer: Number.isInteger(props.step ?? 1),
+      onChange: (value) => {
+        if (value !== null) latest.current.onChange(value);
+      }
+    });
+    return () => {
+      handle.current?.destroy();
+      handle.current = null;
+    };
+  }, [props.client]);
+  h2(() => {
+    handle.current?.update({
+      value: props.value,
+      min: props.min,
+      max: props.max,
+      step: props.step ?? 1
+    });
+  }, [props.value, props.min, props.max, props.step]);
+  return /* @__PURE__ */ u2("div", { class: "ls-native-control", ref: root });
+}
+function HostRange(props) {
+  const root = A2(null);
+  const handle = A2(null);
+  const latest = A2(props);
+  latest.current = props;
+  h2(() => {
+    if (!root.current) return;
+    handle.current = props.client.ctx.components.mountRangeSlider(root.current, {
+      value: props.value,
+      min: props.min,
+      max: props.max,
+      step: props.step,
+      label: props.label,
+      hint: props.hint,
+      format: props.suffix ? { suffix: props.suffix } : void 0,
+      onCommit: (value) => latest.current.onChange(value)
+    });
+    return () => {
+      handle.current?.destroy();
+      handle.current = null;
+    };
+  }, [props.client]);
+  h2(() => {
+    handle.current?.update({
+      value: props.value,
+      min: props.min,
+      max: props.max,
+      step: props.step,
+      label: props.label,
+      hint: props.hint,
+      format: props.suffix ? { suffix: props.suffix } : void 0
+    });
+  }, [props.value, props.min, props.max, props.step, props.label, props.hint, props.suffix]);
+  return /* @__PURE__ */ u2("div", { class: "ls-native-control", ref: root });
+}
+function HostPagination(props) {
+  const root = A2(null);
+  const handle = A2(null);
+  const latest = A2(props);
+  latest.current = props;
+  h2(() => {
+    if (!root.current) return;
+    handle.current = props.client.ctx.components.mountPagination(root.current, {
+      currentPage: props.page,
+      totalPages: props.pages,
+      totalItems: props.total,
+      perPage: props.perPage,
+      perPageOptions: [24, 48, 96],
+      onPageChange: (page) => latest.current.onPage(page),
+      onPerPageChange: (value) => latest.current.onPerPage(value)
+    });
+    return () => {
+      handle.current?.destroy();
+      handle.current = null;
+    };
+  }, [props.client]);
+  h2(() => {
+    handle.current?.update({
+      currentPage: props.page,
+      totalPages: props.pages,
+      totalItems: props.total,
+      perPage: props.perPage
+    });
+  }, [props.page, props.pages, props.total, props.perPage]);
+  return /* @__PURE__ */ u2("div", { class: "ls-native-control ls-native-pagination", ref: root });
+}
+function HostBadge(props) {
+  const root = A2(null);
+  h2(() => {
+    if (!root.current) return;
+    const handle = props.client.ctx.components.mountBadge(root.current, {
+      text: props.text,
+      color: props.color ?? "neutral",
+      size: "pill"
+    });
+    return () => handle.destroy();
+  }, [props.client, props.text, props.color]);
+  return /* @__PURE__ */ u2("span", { class: "ls-native-badge", ref: root });
+}
+
 // src/ui/media.tsx
 function Media(props) {
   if (!props.src) {
-    return /* @__PURE__ */ u2("div", { class: `ls2-media-fallback ${props.class ?? ""}`, children: [
+    return /* @__PURE__ */ u2("div", { class: `ls-media-fallback ${props.class ?? ""}`, children: [
       /* @__PURE__ */ u2(Icon, { name: "image", size: 22 }),
       /* @__PURE__ */ u2("span", { children: "Media unavailable" })
     ] });
@@ -4952,7 +5164,7 @@ function Button(props) {
     "button",
     {
       type: props.type ?? "button",
-      class: `ls2-button ls2-button-${props.variant ?? "default"} ls2-button-${props.size ?? "default"} ${props.class ?? ""}`,
+      class: `ls-button ls-button-${props.variant ?? "default"} ls-button-${props.size ?? "default"} ${props.class ?? ""}`,
       onClick: props.onClick,
       disabled: props.disabled,
       title: props.title,
@@ -4968,7 +5180,7 @@ function IconButton(props) {
     "button",
     {
       type: "button",
-      class: "ls2-icon-button",
+      class: "ls-icon-button",
       "data-active": props.active,
       "data-danger": props.danger,
       onClick: props.onClick,
@@ -4979,84 +5191,40 @@ function IconButton(props) {
     }
   );
 }
-function Surface(props) {
-  return /* @__PURE__ */ u2("section", { class: `ls2-surface ${props.class ?? ""}`, "data-tone": props.tone ?? "default", "data-padding": props.padding ?? "default", children: props.children });
-}
 function Field(props) {
-  return /* @__PURE__ */ u2("label", { class: `ls2-field ${props.class ?? ""}`, children: [
-    /* @__PURE__ */ u2("span", { class: "ls2-field-label", children: props.label }),
+  return /* @__PURE__ */ u2("label", { class: `ls-field ${props.class ?? ""}`, children: [
+    /* @__PURE__ */ u2("span", { class: "ls-field-label", children: props.label }),
     props.children,
-    props.hint && /* @__PURE__ */ u2("span", { class: "ls2-field-hint", children: props.hint })
-  ] });
-}
-function Toggle(props) {
-  return /* @__PURE__ */ u2("label", { class: "ls2-toggle-row", "data-disabled": props.disabled, children: [
-    /* @__PURE__ */ u2("span", { class: "ls2-toggle-copy", children: [
-      /* @__PURE__ */ u2("strong", { children: props.label }),
-      props.hint && /* @__PURE__ */ u2("small", { children: props.hint })
-    ] }),
-    /* @__PURE__ */ u2("input", { type: "checkbox", checked: props.checked, disabled: props.disabled, onChange: (event) => props.onChange(event.currentTarget.checked) }),
-    /* @__PURE__ */ u2("span", { class: "ls2-toggle-track", "aria-hidden": "true", children: /* @__PURE__ */ u2("span", {}) })
+    props.hint && /* @__PURE__ */ u2("span", { class: "ls-field-hint", children: props.hint })
   ] });
 }
 function Status({ tone = "neutral", children }) {
-  return /* @__PURE__ */ u2("span", { class: "ls2-status", "data-tone": tone, children: [
-    /* @__PURE__ */ u2("span", { class: "ls2-status-dot" }),
+  return /* @__PURE__ */ u2("span", { class: "ls-status", "data-tone": tone, children: [
+    /* @__PURE__ */ u2("span", { class: "ls-status-dot" }),
     children
   ] });
 }
-function ViewHeader(props) {
-  return /* @__PURE__ */ u2("header", { class: "ls2-view-header", children: [
-    /* @__PURE__ */ u2("div", { class: "ls2-view-heading", children: [
-      props.eyebrow && /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: props.eyebrow }),
-      /* @__PURE__ */ u2("h2", { children: props.title }),
-      /* @__PURE__ */ u2("p", { children: props.description })
-    ] }),
-    props.actions && /* @__PURE__ */ u2("div", { class: "ls2-view-actions", children: props.actions })
-  ] });
-}
-function SectionTitle(props) {
-  return /* @__PURE__ */ u2("div", { class: "ls2-section-title", children: [
-    /* @__PURE__ */ u2("div", { children: [
-      /* @__PURE__ */ u2("h3", { children: props.title }),
-      props.description && /* @__PURE__ */ u2("p", { children: props.description })
-    ] }),
-    props.trailing && /* @__PURE__ */ u2("div", { class: "ls2-section-trailing", children: props.trailing })
-  ] });
-}
 function EmptyState(props) {
-  return /* @__PURE__ */ u2("div", { class: "ls2-empty", children: [
-    /* @__PURE__ */ u2("div", { class: "ls2-empty-icon", children: /* @__PURE__ */ u2(Icon, { name: props.icon, size: 24 }) }),
+  return /* @__PURE__ */ u2("div", { class: "ls-empty", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-empty-icon", children: /* @__PURE__ */ u2(Icon, { name: props.icon, size: 24 }) }),
     /* @__PURE__ */ u2("strong", { children: props.title }),
     /* @__PURE__ */ u2("p", { children: props.description }),
-    props.action && /* @__PURE__ */ u2("div", { class: "ls2-empty-action", children: props.action })
-  ] });
-}
-function InlineNotice({ tone = "accent", children }) {
-  return /* @__PURE__ */ u2("div", { class: "ls2-notice", "data-tone": tone, role: "status", children: [
-    /* @__PURE__ */ u2(Icon, { name: tone === "warning" || tone === "danger" ? "warning" : tone === "success" ? "success" : "info", size: 16 }),
-    /* @__PURE__ */ u2("div", { children })
+    props.action && /* @__PURE__ */ u2("div", { class: "ls-empty-action", children: props.action })
   ] });
 }
 function ProgressNotice({ client }) {
   const { notice, progress } = useClientState(client);
   if (!notice && !progress) return null;
-  return /* @__PURE__ */ u2("div", { class: "ls2-global-notice", "data-tone": notice?.tone ?? "info", role: "status", children: [
-    /* @__PURE__ */ u2("div", { class: "ls2-global-notice-copy", children: notice?.message ?? progress?.message }),
-    progress && progress.total > 0 && /* @__PURE__ */ u2("div", { class: "ls2-progress", children: /* @__PURE__ */ u2("span", { style: { width: `${Math.min(100, progress.completed / progress.total * 100)}%` } }) })
+  return /* @__PURE__ */ u2("div", { class: "ls-global-notice", "data-tone": notice?.tone ?? "info", role: "status", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-global-notice-copy", children: notice?.message ?? progress?.message }),
+    progress && progress.total > 0 && /* @__PURE__ */ u2("div", { class: "ls-progress", children: /* @__PURE__ */ u2("span", { style: { width: `${Math.min(100, progress.completed / progress.total * 100)}%` } }) })
   ] });
 }
-function Segmented(props) {
-  return /* @__PURE__ */ u2("div", { class: "ls2-segmented", role: "radiogroup", "aria-label": props.label, children: props.options.map((option) => /* @__PURE__ */ u2("button", { type: "button", role: "radio", "aria-checked": props.value === option.value, "data-active": props.value === option.value, onClick: () => props.onChange(option.value), children: [
-    option.icon && /* @__PURE__ */ u2(Icon, { name: option.icon, size: 14 }),
-    /* @__PURE__ */ u2("span", { children: option.label })
-  ] })) });
-}
 function Toolbar({ children, class: className }) {
-  return /* @__PURE__ */ u2("div", { class: `ls2-toolbar ${className ?? ""}`, children });
+  return /* @__PURE__ */ u2("div", { class: `ls-toolbar ${className ?? ""}`, children });
 }
 function SearchInput(props) {
-  return /* @__PURE__ */ u2("label", { class: "ls2-search", children: [
+  return /* @__PURE__ */ u2("label", { class: "ls-search", children: [
     /* @__PURE__ */ u2(Icon, { name: "search", size: 16 }),
     /* @__PURE__ */ u2("input", { value: props.value, onInput: (event) => props.onInput(event.currentTarget.value), placeholder: props.placeholder, "aria-label": props.label ?? props.placeholder }),
     props.value && /* @__PURE__ */ u2("button", { type: "button", onClick: () => props.onInput(""), "aria-label": "Clear search", children: /* @__PURE__ */ u2(Icon, { name: "close", size: 14 }) })
@@ -5064,9 +5232,6 @@ function SearchInput(props) {
 }
 
 // src/ui/modals.tsx
-function cleanList(value) {
-  return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
-}
 function showTextPrompt(client, options, onSubmit) {
   const modal = client.ctx.ui.showModal({ title: options.title, width: 460, maxHeight: 430 });
   function Prompt() {
@@ -5084,38 +5249,52 @@ function showTextPrompt(client, options, onSubmit) {
         setBusy(false);
       }
     }
-    return /* @__PURE__ */ u2("form", { class: "ls2-modal", onSubmit: submit, children: [
-      /* @__PURE__ */ u2(Field, { label: options.label, children: /* @__PURE__ */ u2("input", { class: "ls2-input", autoFocus: true, value, placeholder: options.placeholder, onInput: (event) => setValue(event.currentTarget.value) }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-modal-actions", children: [
+    return /* @__PURE__ */ u2("form", { class: "ls-modal-form", onSubmit: submit, children: [
+      /* @__PURE__ */ u2(Field, { label: options.label, children: /* @__PURE__ */ u2(
+        "input",
+        {
+          class: "ls-input",
+          autoFocus: true,
+          value,
+          placeholder: options.placeholder,
+          onInput: (event) => setValue(event.currentTarget.value)
+        }
+      ) }),
+      /* @__PURE__ */ u2("div", { class: "ls-modal-actions", children: [
         /* @__PURE__ */ u2(Button, { variant: "ghost", onClick: () => modal.dismiss(), children: "Cancel" }),
-        /* @__PURE__ */ u2(Button, { type: "submit", variant: "primary", disabled: !value.trim() || busy, children: options.submitLabel ?? "Create" })
+        /* @__PURE__ */ u2(Button, { type: "submit", variant: "primary", disabled: !value.trim() || busy, children: options.submitLabel ?? "Save" })
       ] })
     ] });
   }
   R(/* @__PURE__ */ u2(Prompt, {}), modal.root);
   modal.onDismiss(() => R(null, modal.root));
 }
-function showImportModal(client, profile) {
-  const modal = client.ctx.ui.showModal({ title: "Import media", width: 660, maxHeight: 760, persistent: true });
+function showImportModal(client, profile, target) {
+  const modal = client.ctx.ui.showModal({
+    title: "Import LumiStage media",
+    width: 720,
+    maxHeight: 820,
+    persistent: true
+  });
   function Importer() {
     const [files, setFiles] = d2([]);
-    const [layout, setLayout] = d2("outfit-expression");
+    const [layout, setLayout] = d2("automatic");
     const [dragging, setDragging] = d2(false);
     const [busy, setBusy] = d2(false);
-    const preview = T2(() => files.slice(0, 8).map((file) => {
+    const preview = T2(() => files.slice(0, 10).map((file) => {
       const parts = file.webkitRelativePath?.split("/").filter(Boolean) ?? [file.name];
       const leaf = parts.pop() ?? file.name;
       const expression = leaf.replace(/\.[^.]+$/, "");
-      if (layout === "actor-outfit-expression") {
-        return `${parts[0] ?? "Default actor"} / ${parts[1] ?? "Default"} / ${expression}`;
+      if (layout === "outfit-expression-variant" || layout === "automatic" && parts.length >= 2) {
+        return `${parts[0] ?? "Default"} / ${parts[1] ?? expression} / ${leaf}`;
       }
-      return `${profile?.characterName ?? "Current actor"} / ${parts[0] ?? "Default"} / ${expression}`;
+      return `${parts[0] ?? "Default"} / ${expression}`;
     }), [files, layout]);
     async function start() {
       if (!files.length || busy) return;
       setBusy(true);
       try {
-        await client.importFiles(files, layout, profile?.defaultActorId ?? void 0);
+        await client.importFiles(files, layout, target?.outfitId, target?.expressionId);
         modal.dismiss();
       } catch (error) {
         client.notify("error", error instanceof Error ? error.message : "Import failed.");
@@ -5123,13 +5302,15 @@ function showImportModal(client, profile) {
       }
     }
     function accept(next) {
-      setFiles(Array.from(next).filter((file) => /\.(?:zip|png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name)));
+      setFiles(Array.from(next).filter(
+        (file) => /\.(?:zip|png|jpe?g|webp|gif|webm|mp4)$/i.test(file.name)
+      ));
     }
-    return /* @__PURE__ */ u2("div", { class: "ls2-modal ls2-import", children: [
+    return /* @__PURE__ */ u2("div", { class: "ls-import-modal", children: [
       /* @__PURE__ */ u2(
         "div",
         {
-          class: "ls2-dropzone",
+          class: "ls-dropzone",
           "data-dragging": dragging,
           onDragEnter: (event) => {
             event.preventDefault();
@@ -5143,32 +5324,43 @@ function showImportModal(client, profile) {
             accept(event.dataTransfer?.files ?? []);
           },
           children: [
-            /* @__PURE__ */ u2("input", { type: "file", multiple: true, accept: ".zip,.png,.jpg,.jpeg,.webp,.gif,.webm,.mp4", onChange: (event) => event.currentTarget.files && accept(event.currentTarget.files) }),
-            /* @__PURE__ */ u2("div", { class: "ls2-dropzone-icon", children: /* @__PURE__ */ u2(Icon, { name: "upload", size: 24 }) }),
-            /* @__PURE__ */ u2("strong", { children: files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop media or a LumiStage archive" }),
+            /* @__PURE__ */ u2(
+              "input",
+              {
+                type: "file",
+                multiple: true,
+                accept: ".zip,.png,.jpg,.jpeg,.webp,.gif,.webm,.mp4",
+                onChange: (event) => event.currentTarget.files && accept(event.currentTarget.files)
+              }
+            ),
+            /* @__PURE__ */ u2("span", { class: "ls-dropzone-mark", children: /* @__PURE__ */ u2(Icon, { name: "upload", size: 26 }) }),
+            /* @__PURE__ */ u2("strong", { children: files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Drop sprites, video, or a LumiStage archive" }),
             /* @__PURE__ */ u2("p", { children: "PNG, JPEG, WebP, GIF, muted WebM, muted MP4, or `.lumistage.zip`" }),
-            /* @__PURE__ */ u2(Button, { icon: "plus", variant: "default", children: "Choose files" })
+            /* @__PURE__ */ u2(Button, { icon: "plus", children: "Choose files" })
           ]
         }
       ),
-      /* @__PURE__ */ u2(Surface, { children: [
-        /* @__PURE__ */ u2("div", { class: "ls2-modal-section-head", children: /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("strong", { children: "Folder mapping" }),
-          /* @__PURE__ */ u2("span", { children: "Nothing is uploaded until you confirm." })
-        ] }) }),
+      /* @__PURE__ */ u2("section", { class: "ls-import-mapping", children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Folder mapping" }),
+          /* @__PURE__ */ u2("h3", { children: "Preview before upload" }),
+          /* @__PURE__ */ u2("p", { children: "Root files use Default. Two folders create Outfit / Expression / Variant." })
+        ] }),
         /* @__PURE__ */ u2(
-          Segmented,
+          HostSelect,
           {
-            label: "Import layout",
+            client,
+            label: "Import folder mapping",
             value: layout,
-            onChange: setLayout,
+            onChange: (value) => setLayout(value),
             options: [
-              { value: "outfit-expression", label: "Outfit / Expression" },
-              { value: "actor-outfit-expression", label: "Actor / Outfit / Expression" }
+              { value: "automatic", label: "Detect folder depth", sublabel: "Recommended for mixed ZIPs" },
+              { value: "outfit-expression", label: "Outfit / Expression.ext" },
+              { value: "outfit-expression-variant", label: "Outfit / Expression / Variant.ext" }
             ]
           }
         ),
-        files.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-mapping-preview", children: [
+        files.length > 0 && /* @__PURE__ */ u2("div", { class: "ls-mapping-preview", children: [
           preview.map((path) => /* @__PURE__ */ u2("div", { children: [
             /* @__PURE__ */ u2(Icon, { name: "image", size: 14 }),
             /* @__PURE__ */ u2("span", { children: path })
@@ -5176,47 +5368,99 @@ function showImportModal(client, profile) {
           files.length > preview.length && /* @__PURE__ */ u2("small", { children: [
             "+ ",
             files.length - preview.length,
-            " more files"
+            " more"
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-safe-note", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-validation-note", children: [
         /* @__PURE__ */ u2(Icon, { name: "success", size: 16 }),
         /* @__PURE__ */ u2("span", { children: "Paths, codecs, expansion size, collisions, and duplicate content are validated before commit." })
       ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-modal-actions", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-modal-actions", children: [
         /* @__PURE__ */ u2(Button, { variant: "ghost", onClick: () => modal.dismiss(), children: "Cancel" }),
-        /* @__PURE__ */ u2(Button, { variant: "primary", icon: "upload", disabled: !files.length || busy, onClick: () => void start(), children: busy ? "Importing\u2026" : "Review & import" })
+        /* @__PURE__ */ u2(
+          Button,
+          {
+            variant: "primary",
+            icon: "upload",
+            disabled: !files.length || busy,
+            onClick: () => void start(),
+            children: busy ? "Importing\u2026" : "Import media"
+          }
+        )
       ] })
     ] });
   }
   R(/* @__PURE__ */ u2(Importer, {}), modal.root);
   modal.onDismiss(() => R(null, modal.root));
 }
+function firstVariant(expression) {
+  return expression ? [...expression.variants].sort((a3, b2) => a3.order - b2.order)[0] ?? null : null;
+}
 function showQuickPicker(client) {
-  const modal = client.ctx.ui.showModal({ title: "Direct the stage", width: 720, maxHeight: 780 });
+  const modal = client.ctx.ui.showModal({ title: "Direct LumiStage", width: 900, maxHeight: 860 });
   function Picker() {
     const { backend, busy } = useClientState(client);
-    const actors = backend.stageProfiles.flatMap((profile) => profile.actors.map((actor) => ({ profile, actor })));
-    const [actorId, setActorId] = d2(actors.find((entry2) => entry2.actor.id === backend.snapshot?.focusedActorIds[0])?.actor.id ?? actors[0]?.actor.id ?? "");
-    const entry = actors.find((item) => item.actor.id === actorId) ?? actors[0] ?? null;
-    const current = entry ? backend.snapshot?.actors[entry.actor.id] : null;
-    const [outfitId, setOutfitId] = d2(current?.outfitId ?? entry?.actor.defaultOutfitId ?? entry?.actor.outfits[0]?.id ?? "");
-    const outfit = entry?.actor.outfits.find((item) => item.id === outfitId) ?? entry?.actor.outfits[0] ?? null;
-    const [expressionId, setExpressionId] = d2(current?.expressionId ?? outfit?.defaultExpressionId ?? outfit?.expressions[0]?.id ?? "");
-    const [scope, setScope] = d2("once");
+    const profiles = backend.stageProfiles;
+    const [characterId, setCharacterId] = d2(
+      backend.snapshot?.focusedCharacterIds[0] ?? profiles[0]?.characterId ?? ""
+    );
+    const profile = profiles.find((item) => item.characterId === characterId) ?? profiles[0] ?? null;
+    const current = profile ? backend.snapshot?.characters[profile.characterId] : null;
+    const [outfitId, setOutfitId] = d2(
+      current?.outfitId ?? profile?.defaultOutfitId ?? profile?.outfits[0]?.id ?? ""
+    );
+    const outfit = profile?.outfits.find((item) => item.id === outfitId) ?? profile?.outfits[0] ?? null;
+    const [expressionId, setExpressionId] = d2(
+      current?.expressionId ?? outfit?.defaultExpressionId ?? outfit?.expressions[0]?.id ?? ""
+    );
+    const expression = outfit?.expressions.find((item) => item.id === expressionId) ?? outfit?.expressions[0] ?? null;
+    const [variantId, setVariantId] = d2(
+      current?.variantId ?? firstVariant(expression)?.id ?? ""
+    );
     const [query, setQuery] = d2("");
     const expressions = (outfit?.expressions ?? []).filter(
-      (expression) => !query.trim() || [expression.name, ...expression.aliases, ...expression.tags].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+      (item) => !query.trim() || item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) || item.variants.some(
+        (variant) => variant.fileName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+      )
     );
-    const locked = entry ? backend.timeline?.manualOverrides[entry.actor.id]?.scope === "locked" : false;
-    async function apply() {
-      if (!entry || !outfit || !expressionId) return;
+    const locked = profile ? backend.timeline?.manualOverrides[profile.characterId]?.scope === "locked" : false;
+    function selectProfile(id) {
+      setCharacterId(id);
+      const nextProfile = profiles.find((item) => item.characterId === id);
+      const nextOutfit = nextProfile?.outfits.find(
+        (item) => item.id === nextProfile.defaultOutfitId
+      ) ?? nextProfile?.outfits[0];
+      const nextExpression = nextOutfit?.expressions.find(
+        (item) => item.id === nextOutfit.defaultExpressionId
+      ) ?? nextOutfit?.expressions[0];
+      setOutfitId(nextOutfit?.id ?? "");
+      setExpressionId(nextExpression?.id ?? "");
+      setVariantId(firstVariant(nextExpression)?.id ?? "");
+    }
+    function selectOutfit(id) {
+      setOutfitId(id);
+      const nextOutfit = profile?.outfits.find((item) => item.id === id);
+      const nextExpression = nextOutfit?.expressions.find(
+        (item) => item.id === nextOutfit.defaultExpressionId
+      ) ?? nextOutfit?.expressions[0];
+      setExpressionId(nextExpression?.id ?? "");
+      setVariantId(firstVariant(nextExpression)?.id ?? "");
+    }
+    function selectExpression(id) {
+      setExpressionId(id);
+      const next = outfit?.expressions.find((item) => item.id === id);
+      setVariantId(firstVariant(next)?.id ?? "");
+    }
+    async function apply(scope, lock) {
+      if (!profile || !outfit || !expression || !variantId) return;
       const override = {
-        actorId: entry.actor.id,
+        characterId: profile.characterId,
         outfitId: outfit.id,
-        expressionId,
+        expressionId: expression.id,
+        variantId,
         scope,
+        lock,
         createdAt: Date.now()
       };
       try {
@@ -5226,47 +5470,126 @@ function showQuickPicker(client) {
         client.notify("error", error instanceof Error ? error.message : "Could not direct the stage.");
       }
     }
-    if (!actors.length) {
-      return /* @__PURE__ */ u2("div", { class: "ls2-modal", children: /* @__PURE__ */ u2(EmptyState, { icon: "actors", title: "No stage actors yet", description: "Create a LumiStage profile and import media before directing the live stage." }) });
+    if (!profiles.length) {
+      return /* @__PURE__ */ u2("div", { class: "ls-modal-empty", children: /* @__PURE__ */ u2(
+        EmptyState,
+        {
+          icon: "characters",
+          title: "No character profiles on this stage",
+          description: "Import sprites for a character before directing the live stage."
+        }
+      ) });
     }
-    return /* @__PURE__ */ u2("div", { class: "ls2-modal ls2-picker", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-picker-context", children: [
-        /* @__PURE__ */ u2(Field, { label: "Actor", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: entry?.actor.id, onChange: (event) => {
-          const id = event.currentTarget.value;
-          setActorId(id);
-          const next = actors.find((item) => item.actor.id === id);
-          const nextOutfit = next?.actor.outfits.find((item) => item.id === next.actor.defaultOutfitId) ?? next?.actor.outfits[0];
-          setOutfitId(nextOutfit?.id ?? "");
-          setExpressionId(nextOutfit?.defaultExpressionId ?? nextOutfit?.expressions[0]?.id ?? "");
-        }, children: actors.map((item) => /* @__PURE__ */ u2("option", { value: item.actor.id, children: item.actor.name })) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Outfit", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: outfit?.id, onChange: (event) => {
-          const id = event.currentTarget.value;
-          setOutfitId(id);
-          const next = entry?.actor.outfits.find((item) => item.id === id);
-          setExpressionId(next?.defaultExpressionId ?? next?.expressions[0]?.id ?? "");
-        }, children: entry?.actor.outfits.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) }) })
+    return /* @__PURE__ */ u2("div", { class: "ls-quick-picker", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-picker-controls", children: [
+        /* @__PURE__ */ u2(Field, { label: "Character", children: /* @__PURE__ */ u2(
+          HostSelect,
+          {
+            client,
+            label: "Character",
+            value: profile?.characterId ?? "",
+            onChange: selectProfile,
+            options: profiles.map((item) => ({
+              value: item.characterId,
+              label: item.characterName,
+              sublabel: `${item.outfits.length} outfits`
+            }))
+          }
+        ) }),
+        /* @__PURE__ */ u2(Field, { label: "Outfit", children: /* @__PURE__ */ u2(
+          HostSelect,
+          {
+            client,
+            label: "Outfit",
+            value: outfit?.id ?? "",
+            onChange: selectOutfit,
+            options: (profile?.outfits ?? []).map((item) => ({
+              value: item.id,
+              label: item.name,
+              sublabel: `${item.expressions.length} expressions`
+            }))
+          }
+        ) })
       ] }),
-      /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Find an expression\u2026" }),
-      /* @__PURE__ */ u2("div", { class: "ls2-picker-grid", children: expressions.map((expression) => {
-        const media = [...expression.assets].filter((asset) => asset.enabled).sort((a3, b2) => b2.priority - a3.priority)[0];
-        const view = media ? backend.assetViews[media.id] : null;
-        return /* @__PURE__ */ u2("button", { type: "button", class: "ls2-expression-choice", "data-selected": expression.id === expressionId, onClick: () => setExpressionId(expression.id), children: [
-          /* @__PURE__ */ u2(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: view?.mediaKind ?? "image", label: expression.name, class: "ls2-expression-choice-media", contain: true }),
-          /* @__PURE__ */ u2("span", { children: [
-            /* @__PURE__ */ u2("strong", { children: expression.name }),
-            /* @__PURE__ */ u2("small", { children: [
-              expression.assets.length,
-              " media"
-            ] })
-          ] }),
-          expression.id === expressionId && /* @__PURE__ */ u2("span", { class: "ls2-choice-check", children: /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) })
-        ] });
-      }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-picker-footer", children: [
-        /* @__PURE__ */ u2(Segmented, { label: "Override duration", value: scope, onChange: setScope, options: [{ value: "once", label: "Apply once", icon: "play" }, { value: "locked", label: "Lock state", icon: "lock" }] }),
+      /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Find an expression or sprite\u2026" }),
+      /* @__PURE__ */ u2("div", { class: "ls-picker-body", children: [
+        /* @__PURE__ */ u2("div", { class: "ls-picker-expression-grid", children: expressions.map((item) => {
+          const preview = firstVariant(item);
+          const view = preview ? backend.variantViews[preview.id] : null;
+          return /* @__PURE__ */ u2(
+            "button",
+            {
+              type: "button",
+              class: "ls-picker-expression",
+              "data-selected": item.id === expression?.id,
+              onClick: () => selectExpression(item.id),
+              children: [
+                /* @__PURE__ */ u2(
+                  Media,
+                  {
+                    src: view?.thumbUrl ?? view?.url ?? null,
+                    kind: view?.mediaKind ?? "image",
+                    label: item.name,
+                    class: "ls-picker-expression-media",
+                    contain: true
+                  }
+                ),
+                /* @__PURE__ */ u2("span", { children: [
+                  /* @__PURE__ */ u2("strong", { children: item.name }),
+                  /* @__PURE__ */ u2("small", { children: [
+                    item.variants.length,
+                    " variant",
+                    item.variants.length === 1 ? "" : "s"
+                  ] })
+                ] }),
+                item.id === expression?.id && /* @__PURE__ */ u2("i", { children: /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) })
+              ]
+            }
+          );
+        }) }),
+        /* @__PURE__ */ u2("aside", { class: "ls-picker-variants", children: [
+          /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Exact sprite" }),
+          /* @__PURE__ */ u2("h3", { children: expression?.name ?? "Select an expression" }),
+          /* @__PURE__ */ u2("div", { children: (expression?.variants ?? []).map((variant) => {
+            const view = backend.variantViews[variant.id];
+            return /* @__PURE__ */ u2(
+              "button",
+              {
+                type: "button",
+                "data-selected": variant.id === variantId,
+                onClick: () => setVariantId(variant.id),
+                "aria-label": `Use ${variant.fileName}`,
+                children: [
+                  /* @__PURE__ */ u2(
+                    Media,
+                    {
+                      src: view?.thumbUrl ?? view?.url ?? null,
+                      kind: variant.mediaKind,
+                      label: variant.fileName,
+                      contain: true
+                    }
+                  ),
+                  /* @__PURE__ */ u2("span", { children: variant.fileName })
+                ]
+              }
+            );
+          }) })
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls-picker-footer", children: [
+        locked && /* @__PURE__ */ u2(
+          Button,
+          {
+            icon: "unlock",
+            variant: "ghost",
+            onClick: () => profile && void client.clearManual(profile.characterId),
+            children: "Clear current lock"
+          }
+        ),
         /* @__PURE__ */ u2(Toolbar, { children: [
-          locked && /* @__PURE__ */ u2(Button, { icon: "unlock", variant: "ghost", onClick: () => entry && void client.clearManual(entry.actor.id), children: "Clear lock" }),
-          /* @__PURE__ */ u2(Button, { variant: "primary", icon: scope === "locked" ? "lock" : "play", disabled: !expressionId || busy, onClick: () => void apply(), children: scope === "locked" ? "Lock on stage" : "Apply now" })
+          /* @__PURE__ */ u2(Button, { disabled: !variantId || busy, onClick: () => void apply("once", "state"), children: "Apply once" }),
+          /* @__PURE__ */ u2(Button, { icon: "lock", disabled: !variantId || busy, onClick: () => void apply("locked", "outfit"), children: "Lock outfit" }),
+          /* @__PURE__ */ u2(Button, { variant: "primary", icon: "lock", disabled: !variantId || busy, onClick: () => void apply("locked", "state"), children: "Lock state" })
         ] })
       ] })
     ] });
@@ -5276,12 +5599,12 @@ function showQuickPicker(client) {
 }
 
 // src/ui/stage.tsx
-function StageActor({ state, client }) {
+function StageCharacter({ state, client }) {
   const { backend } = useClientState(client);
-  const view = state.assetId ? backend.assetViews[state.assetId] : null;
+  const view = state.variantId ? backend.variantViews[state.variantId] : null;
   const src = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
-  return /* @__PURE__ */ u2("figure", { class: "ls2-stage-actor", "data-focused": state.focused, children: [
-    /* @__PURE__ */ u2("div", { class: "ls2-stage-actor-frame", children: src && (view?.mediaKind === "video" ? /* @__PURE__ */ u2("video", { src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": state.label }, src) : /* @__PURE__ */ u2("img", { src, alt: state.label, draggable: false }, src)) }),
+  return /* @__PURE__ */ u2("figure", { class: "ls-stage-character", "data-focused": state.focused, children: [
+    /* @__PURE__ */ u2("div", { class: "ls-stage-character-frame", children: src && (view?.mediaKind === "video" ? /* @__PURE__ */ u2("video", { src, muted: true, loop: true, playsInline: true, autoPlay: true, "aria-label": state.label }, src) : /* @__PURE__ */ u2("img", { src, alt: state.label, draggable: false }, src)) }),
     backend.settings.appearance.showCaptions && /* @__PURE__ */ u2("figcaption", { children: [
       /* @__PURE__ */ u2("strong", { children: state.label.split(" \xB7 ")[0] }),
       /* @__PURE__ */ u2("span", { children: state.label.split(" \xB7 ").slice(1).join(" / ") })
@@ -5291,7 +5614,7 @@ function StageActor({ state, client }) {
 function Stage(props) {
   const { backend } = useClientState(props.client);
   const appearance = props.client.effectiveAppearance();
-  const actors = Object.values(backend.snapshot?.actors ?? {}).filter((actor) => !!actor.assetId).sort((a3, b2) => Number(a3.focused) - Number(b2.focused));
+  const characters = Object.values(backend.snapshot?.characters ?? {}).filter((character) => !!character.variantId).sort((a3, b2) => Number(a3.focused) - Number(b2.focused));
   const style = {
     "--ls2-stage-opacity": appearance.opacity,
     "--ls2-stage-transition": `${appearance.transitionMs}ms`,
@@ -5323,623 +5646,904 @@ function Stage(props) {
     window.addEventListener("pointerup", end, { once: true });
     window.addEventListener("pointercancel", end, { once: true });
   }
-  return /* @__PURE__ */ u2("div", { class: "ls2-stage-root", style, "data-chrome": appearance.showChrome, "data-transition": appearance.transition, children: /* @__PURE__ */ u2("div", { class: "ls2-stage-chrome", children: [
-    /* @__PURE__ */ u2("div", { class: "ls2-stage-grab", children: [
-      /* @__PURE__ */ u2("span", { class: "ls2-stage-live", children: [
+  return /* @__PURE__ */ u2("div", { class: "ls-stage-root", style, "data-chrome": appearance.showChrome, "data-transition": appearance.transition, children: /* @__PURE__ */ u2("div", { class: "ls-stage-chrome", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-stage-grab", children: [
+      /* @__PURE__ */ u2("span", { class: "ls-stage-live", children: [
         /* @__PURE__ */ u2("span", {}),
         "LumiStage"
       ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-stage-actions", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-stage-actions", children: [
         /* @__PURE__ */ u2("button", { type: "button", onClick: props.onQuick, title: "Direct stage", "aria-label": "Direct stage", children: /* @__PURE__ */ u2(Icon, { name: "sparkles", size: 15 }) }),
         /* @__PURE__ */ u2("button", { type: "button", onClick: props.onFullscreen, title: "Toggle fullscreen", "aria-label": "Toggle fullscreen", children: /* @__PURE__ */ u2(Icon, { name: "expand", size: 15 }) }),
         /* @__PURE__ */ u2("button", { type: "button", onClick: props.onHide, title: "Hide stage", "aria-label": "Hide stage", children: /* @__PURE__ */ u2(Icon, { name: "close", size: 15 }) })
       ] })
     ] }),
-    actors.length ? /* @__PURE__ */ u2("div", { class: "ls2-stage-ensemble", children: actors.map((actor) => /* @__PURE__ */ u2(StageActor, { state: actor, client: props.client }, actor.actorId)) }) : /* @__PURE__ */ u2("div", { class: "ls2-stage-waiting", children: [
+    characters.length ? /* @__PURE__ */ u2("div", { class: "ls-stage-ensemble", children: characters.map((character) => /* @__PURE__ */ u2(StageCharacter, { state: character, client: props.client }, character.characterId)) }) : /* @__PURE__ */ u2("div", { class: "ls-stage-waiting", children: [
       /* @__PURE__ */ u2("div", { children: /* @__PURE__ */ u2(Icon, { name: "stage", size: 24 }) }),
       /* @__PURE__ */ u2("strong", { children: "Stage ready" }),
       /* @__PURE__ */ u2("span", { children: "Choose a state or complete a reply." })
     ] }),
-    /* @__PURE__ */ u2("button", { type: "button", class: "ls2-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
+    /* @__PURE__ */ u2("button", { type: "button", class: "ls-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
   ] }) });
 }
 
 // src/ui/studio.tsx
-var NAV = [
-  { id: "stage", label: "Stage", icon: "stage" },
-  { id: "library", label: "Library", icon: "library" },
-  { id: "automation", label: "Automation", icon: "automation" },
-  { id: "appearance", label: "Appearance", icon: "appearance" },
-  { id: "settings", label: "Settings", icon: "settings" },
-  { id: "diagnostics", label: "Diagnostics", icon: "diagnostics" }
-];
-var PRIMARY_NAV = NAV.slice(0, 2);
-var SECONDARY_NAV = NAV.slice(2);
-function activeNodes(profile, actorId, outfitId) {
-  const actor = profile?.actors.find((item) => item.id === actorId) ?? profile?.actors[0] ?? null;
-  const outfit = actor?.outfits.find((item) => item.id === outfitId) ?? actor?.outfits[0] ?? null;
-  return { actor, outfit };
+function firstVariant2(expression) {
+  return expression ? [...expression.variants].sort((a3, b2) => a3.order - b2.order)[0] ?? null : null;
 }
-function assetLocation(profile, assetId) {
-  for (const actor of profile.actors) for (const outfit of actor.outfits) {
-    for (const expression of outfit.expressions) {
-      const asset = expression.assets.find((item) => item.id === assetId);
-      if (asset) return { actor, outfit, expression, asset };
-    }
-  }
-  return null;
+function selectedOutfit(profile, outfitId) {
+  return profile?.outfits.find((item) => item.id === outfitId) ?? profile?.outfits.find((item) => item.id === profile.defaultOutfitId) ?? profile?.outfits[0] ?? null;
 }
-function ContextAvatar({ name }) {
-  const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase();
-  return /* @__PURE__ */ u2("span", { class: "ls2-context-avatar", children: initials || "LS" });
+function countExpressions(profile) {
+  return profile?.outfits.reduce((sum, outfit) => sum + outfit.expressions.length, 0) ?? 0;
 }
-function StageOnboarding({
-  client,
-  navigate,
-  actorCount,
-  mediaCount
-}) {
-  const { backend } = useClientState(client);
-  const hasCharacter = Boolean(backend.activeCharacterId);
-  const automationReady = backend.settings.detection.enabled && backend.permissions.generation && backend.permissions.chats;
-  const steps = [
-    { icon: "actors", title: "Choose the cast", detail: hasCharacter ? backend.activeCharacterName ?? "Character linked" : "Open a character or conversation", done: hasCharacter, action: () => navigate("library") },
-    { icon: "image", title: "Build the visual library", detail: mediaCount ? `${mediaCount} media across ${actorCount} actor${actorCount === 1 ? "" : "s"}` : "Import a folder or add states manually", done: mediaCount > 0, action: () => navigate("library") },
-    { icon: "automation", title: "Set the cue logic", detail: automationReady ? "Automatic direction is armed" : "Choose how replies change the stage", done: automationReady, action: () => navigate("automation") }
-  ];
-  const completed = steps.filter((step) => step.done).length;
-  return /* @__PURE__ */ u2("div", { class: "ls2-onboarding", children: [
-    /* @__PURE__ */ u2("section", { class: "ls2-onboarding-stage", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-rig", "aria-hidden": "true", children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-rig-bar" }),
-        /* @__PURE__ */ u2("i", { class: "ls2-rig-lamp ls2-rig-lamp-left" }),
-        /* @__PURE__ */ u2("i", { class: "ls2-rig-lamp ls2-rig-lamp-center" }),
-        /* @__PURE__ */ u2("i", { class: "ls2-rig-lamp ls2-rig-lamp-right" }),
-        /* @__PURE__ */ u2("span", { class: "ls2-rig-beam ls2-rig-beam-left" }),
-        /* @__PURE__ */ u2("span", { class: "ls2-rig-beam ls2-rig-beam-center" }),
-        /* @__PURE__ */ u2("span", { class: "ls2-rig-beam ls2-rig-beam-right" }),
-        /* @__PURE__ */ u2("span", { class: "ls2-rig-mark", children: /* @__PURE__ */ u2(Icon, { name: "stage", size: 22 }) }),
-        /* @__PURE__ */ u2("span", { class: "ls2-rig-floor" })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-onboarding-copy", children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-kicker", children: [
-          /* @__PURE__ */ u2("span", {}),
-          "Stage uncast"
-        ] }),
-        /* @__PURE__ */ u2("h3", { children: "Give every reply a visual performance." }),
-        /* @__PURE__ */ u2("p", { children: "Build a private cast library, then direct it yourself or let LumiStage resolve outfits and expression sprites after each reply." }),
-        /* @__PURE__ */ u2("div", { class: "ls2-onboarding-actions", children: [
-          /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(client, backend.profile), children: "Import a folder" }),
-          /* @__PURE__ */ u2(Button, { icon: "library", onClick: () => navigate("library"), children: "Build manually" })
-        ] })
-      ] })
+function stop(event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+function WorkspaceTitle(props) {
+  return /* @__PURE__ */ u2("header", { class: "ls-workspace-title", children: [
+    /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2("span", { class: "ls-kicker", children: props.kicker }),
+      /* @__PURE__ */ u2("h2", { children: props.title }),
+      /* @__PURE__ */ u2("p", { children: props.description })
     ] }),
-    /* @__PURE__ */ u2("section", { class: "ls2-cue-sheet", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-cue-sheet-head", children: [
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Opening cues" }),
-          /* @__PURE__ */ u2("strong", { children: "Ready the stage" })
-        ] }),
-        /* @__PURE__ */ u2("span", { children: [
-          completed,
-          " / ",
-          steps.length
-        ] })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-cue-progress", children: /* @__PURE__ */ u2("span", { style: { width: `${completed / steps.length * 100}%` } }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-cue-steps", children: steps.map((step, index) => /* @__PURE__ */ u2("button", { type: "button", "data-done": step.done, onClick: step.action, children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-cue-index", children: step.done ? /* @__PURE__ */ u2(Icon, { name: "check", size: 14 }) : String(index + 1).padStart(2, "0") }),
-        /* @__PURE__ */ u2("span", { class: "ls2-cue-icon", children: /* @__PURE__ */ u2(Icon, { name: step.icon, size: 17 }) }),
-        /* @__PURE__ */ u2("span", { class: "ls2-cue-copy", children: [
-          /* @__PURE__ */ u2("strong", { children: step.title }),
-          /* @__PURE__ */ u2("small", { children: step.detail })
-        ] }),
-        /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
-      ] })) })
-    ] })
+    props.actions && /* @__PURE__ */ u2("div", { class: "ls-workspace-actions", children: props.actions })
   ] });
 }
-function LiveView({ client, navigate }) {
+function SettingRow(props) {
+  return /* @__PURE__ */ u2("div", { class: "ls-setting-row", children: [
+    /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2("strong", { children: props.title }),
+      /* @__PURE__ */ u2("span", { children: props.description })
+    ] }),
+    /* @__PURE__ */ u2("div", { children: props.children })
+  ] });
+}
+function CurrentPreview({ client }) {
   const { backend } = useClientState(client);
-  const actors = Object.values(backend.snapshot?.actors ?? {}).sort((a3, b2) => Number(b2.focused) - Number(a3.focused));
-  const actorCount = backend.stageProfiles.reduce((sum, profile) => sum + profile.actors.length, 0);
-  const mediaCount = backend.stageProfiles.reduce((sum, profile) => sum + allAssets(profile).length, 0);
-  const lockCount = Object.keys(backend.timeline?.manualOverrides ?? {}).length;
-  const statusTone = backend.lastDetection.status === "error" ? "danger" : backend.lastDetection.status === "success" ? "success" : backend.lastDetection.status === "running" ? "accent" : "neutral";
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
+  const focusedId = backend.snapshot?.focusedCharacterIds[0];
+  const state = focusedId ? backend.snapshot?.characters[focusedId] : Object.values(backend.snapshot?.characters ?? {})[0];
+  const view = state?.variantId ? backend.variantViews[state.variantId] : null;
+  if (!state || !view) {
+    return /* @__PURE__ */ u2("div", { class: "ls-current-preview ls-current-preview-empty", children: [
+      /* @__PURE__ */ u2("span", { children: /* @__PURE__ */ u2(Icon, { name: "stage", size: 24 }) }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("strong", { children: "Stage awaiting direction" }),
+        /* @__PURE__ */ u2("small", { children: "Choose a sprite or complete a reply." })
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls-current-preview", children: [
     /* @__PURE__ */ u2(
-      ViewHeader,
+      Media,
       {
-        eyebrow: "Live direction",
-        title: "Live Stage",
-        description: "The resolved visual state for this conversation.",
-        actions: backend.activeChatId ? /* @__PURE__ */ u2(S, { children: [
-          /* @__PURE__ */ u2(Button, { icon: "sparkles", onClick: () => showQuickPicker(client), children: "Direct" }),
-          /* @__PURE__ */ u2(Button, { icon: "play", variant: "primary", onClick: () => client.analyzeNow(), children: "Run cue" })
-        ] }) : void 0
+        src: view.thumbUrl ?? view.url,
+        kind: view.mediaKind,
+        label: state.label,
+        class: "ls-current-preview-media",
+        contain: true
       }
     ),
-    /* @__PURE__ */ u2("section", { class: "ls2-cue-monitor", "data-tone": statusTone, children: [
-      /* @__PURE__ */ u2("span", { class: "ls2-cue-monitor-light" }),
-      /* @__PURE__ */ u2("div", { class: "ls2-detector-state", children: /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-cue-monitor-label", children: [
-          "Cue monitor \xB7 ",
-          backend.lastDetection.status
-        ] }),
-        /* @__PURE__ */ u2("strong", { children: backend.lastDetection.message })
-      ] }) }),
-      /* @__PURE__ */ u2("span", { class: "ls2-cue-monitor-meta", children: backend.queueDepth ? `${backend.queueDepth} queued` : backend.activeChatId ? "Watching replies" : "Awaiting chat" }),
-      backend.activeChatId && /* @__PURE__ */ u2(IconButton, { icon: "refresh", label: "Analyze latest reply", onClick: () => client.analyzeNow() })
-    ] }),
-    actors.length ? /* @__PURE__ */ u2(Surface, { padding: "none", class: "ls2-scene", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-scene-head", children: [
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Now playing" }),
-          /* @__PURE__ */ u2("h3", { children: backend.activeCharacterName ?? "Ensemble" })
-        ] }),
-        /* @__PURE__ */ u2("span", { children: [
-          actors.length,
-          " actor",
-          actors.length === 1 ? "" : "s"
-        ] })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-scene-cast", children: actors.map((actor) => {
-        const view = actor.assetId ? backend.assetViews[actor.assetId] : null;
-        const parts = actor.label.split(" \xB7 ");
-        return /* @__PURE__ */ u2("article", { class: "ls2-scene-actor", "data-focused": actor.focused, children: [
-          /* @__PURE__ */ u2("div", { class: "ls2-scene-media", children: [
-            /* @__PURE__ */ u2(Media, { src: view?.url ?? view?.thumbUrl ?? null, kind: view?.mediaKind ?? "image", label: actor.label, class: "ls2-scene-media-file", contain: true }),
-            actor.focused && /* @__PURE__ */ u2("span", { class: "ls2-focus-flag", children: [
-              /* @__PURE__ */ u2(Icon, { name: "sparkles", size: 12 }),
-              "Focus"
-            ] })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "ls2-scene-actor-copy", children: [
-            /* @__PURE__ */ u2("strong", { children: parts[0] }),
-            /* @__PURE__ */ u2("span", { children: parts.slice(1).join(" / ") })
-          ] })
-        ] });
-      }) })
-    ] }) : /* @__PURE__ */ u2(StageOnboarding, { client, navigate, actorCount, mediaCount }),
-    /* @__PURE__ */ u2("div", { class: "ls2-metric-grid", children: [
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2(Icon, { name: "actors", size: 18 }),
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: actorCount }),
-          "Actors"
-        ] })
-      ] }),
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2(Icon, { name: "image", size: 18 }),
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: mediaCount }),
-          "Media"
-        ] })
-      ] }),
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2(Icon, { name: "lock", size: 18 }),
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: lockCount }),
-          "Locks"
-        ] })
-      ] })
+    /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "On stage" }),
+      /* @__PURE__ */ u2("strong", { children: state.label.split(" \xB7 ")[0] }),
+      /* @__PURE__ */ u2("small", { children: state.label.split(" \xB7 ").slice(1).join(" / ") })
     ] })
   ] });
 }
-function FolderButton(props) {
-  return /* @__PURE__ */ u2(
-    "button",
-    {
-      type: "button",
-      class: "ls2-folder-button",
-      "data-active": props.active,
-      onClick: props.onClick,
-      draggable: props.draggable,
-      onDragStart: props.onDragStart,
-      onDragOver: (event) => props.draggable && event.preventDefault(),
-      onDrop: props.onDrop,
-      children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-folder-icon", children: /* @__PURE__ */ u2(Icon, { name: props.icon, size: 16 }) }),
+function DrawerDashboard(props) {
+  const { backend } = useClientState(props.client);
+  const appearance = props.client.effectiveAppearance();
+  const profile = backend.profile ?? backend.stageProfiles[0] ?? null;
+  const variantCount = profile ? allVariants(profile).length : 0;
+  const connection = backend.settings.detection.connectionId ? backend.connections.find((item) => item.id === backend.settings.detection.connectionId) : backend.connections.find((item) => item.isDefault) ?? backend.connections[0];
+  const ready = backend.lastDetection.status !== "error";
+  return /* @__PURE__ */ u2("div", { class: "ls-drawer", children: [
+    /* @__PURE__ */ u2(ProgressNotice, { client: props.client }),
+    /* @__PURE__ */ u2("div", { class: "ls-drawer-cue-line", children: [
+      /* @__PURE__ */ u2("span", {}),
+      /* @__PURE__ */ u2("small", { children: backend.activeChatId ? "LIVE CHAT" : "CHARACTER WORKSPACE" }),
+      /* @__PURE__ */ u2(Status, { tone: ready ? "success" : "warning", children: ready ? "Ready" : "Attention" })
+    ] }),
+    /* @__PURE__ */ u2("section", { class: "ls-drawer-context", children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { class: "ls-kicker", children: profile ? "Active profile" : "No profile selected" }),
+        /* @__PURE__ */ u2("h2", { children: profile?.characterName ?? "LumiStage" }),
+        /* @__PURE__ */ u2("p", { children: profile ? `${profile.outfits.length} outfits \xB7 ${countExpressions(profile)} expressions \xB7 ${variantCount} sprites` : "Open a character or chat to begin building its sprite library." })
+      ] }),
+      profile && /* @__PURE__ */ u2(HostBadge, { client: props.client, text: `${variantCount} sprites`, color: variantCount ? "primary" : "neutral" })
+    ] }),
+    /* @__PURE__ */ u2(CurrentPreview, { client: props.client }),
+    /* @__PURE__ */ u2("div", { class: "ls-drawer-status", children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { class: "ls-status-icon", children: /* @__PURE__ */ u2(Icon, { name: "automation", size: 16 }) }),
         /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: props.label }),
-          /* @__PURE__ */ u2("small", { children: props.count })
+          /* @__PURE__ */ u2("strong", { children: backend.settings.detection.enabled ? "Automatic direction" : "Manual direction" }),
+          /* @__PURE__ */ u2("small", { children: connection ? `${connection.name}${backend.settings.detection.model ? ` \xB7 ${backend.settings.detection.model}` : ""}` : "Uses active Lumiverse connection" })
         ] })
-      ]
+      ] }),
+      /* @__PURE__ */ u2("span", { class: "ls-cue-dot", "data-live": backend.settings.detection.enabled })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-drawer-primary-actions", children: [
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          variant: "primary",
+          icon: "expand",
+          onClick: props.onOpenStudio,
+          children: "Open Studio"
+        }
+      ),
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          icon: "sparkles",
+          disabled: !backend.activeChatId || !backend.stageProfiles.length,
+          onClick: () => showQuickPicker(props.client),
+          children: "Direct"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-drawer-utility", children: [
+      /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          onClick: () => void props.client.saveAppearance({ visible: !appearance.visible }),
+          children: [
+            /* @__PURE__ */ u2(Icon, { name: appearance.visible ? "eyeOff" : "eye", size: 16 }),
+            /* @__PURE__ */ u2("span", { children: appearance.visible ? "Hide floating stage" : "Show floating stage" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          disabled: !backend.activeChatId,
+          onClick: () => props.client.analyzeNow(),
+          children: [
+            /* @__PURE__ */ u2(Icon, { name: "refresh", size: 16 }),
+            /* @__PURE__ */ u2("span", { children: "Analyze current reply" })
+          ]
+        }
+      )
+    ] }),
+    !profile && /* @__PURE__ */ u2("div", { class: "ls-drawer-empty", children: [
+      /* @__PURE__ */ u2(Icon, { name: "library", size: 20 }),
+      /* @__PURE__ */ u2("span", { children: "Select a character in Lumiverse to create its independent outfit library." })
+    ] })
+  ] });
+}
+function ExpressionCard(props) {
+  const { backend } = useClientState(props.client);
+  const preview = firstVariant2(props.expression);
+  const view = preview ? backend.variantViews[preview.id] : null;
+  return /* @__PURE__ */ u2(
+    "article",
+    {
+      class: "ls-expression-card",
+      "data-selected": props.selected,
+      "data-inspected": props.inspected,
+      "data-batch": props.batchMode,
+      draggable: !props.batchMode,
+      onDragStart: props.onDragStart,
+      onDragOver: (event) => event.preventDefault(),
+      onDrop: props.onDrop,
+      children: /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: "ls-expression-card-hit",
+          "aria-pressed": props.batchMode ? props.selected : props.inspected,
+          onClick: props.batchMode ? props.onToggle : props.onOpen,
+          children: [
+            /* @__PURE__ */ u2("div", { class: "ls-expression-stack", "data-count": Math.min(3, props.expression.variants.length), children: [
+              /* @__PURE__ */ u2("span", { class: "ls-stack-back ls-stack-back-two" }),
+              /* @__PURE__ */ u2("span", { class: "ls-stack-back ls-stack-back-one" }),
+              /* @__PURE__ */ u2(
+                Media,
+                {
+                  src: view?.thumbUrl ?? view?.url ?? null,
+                  kind: view?.mediaKind ?? "image",
+                  label: props.expression.name,
+                  class: "ls-expression-media",
+                  contain: true
+                }
+              ),
+              props.batchMode && /* @__PURE__ */ u2("span", { class: "ls-card-check", "data-selected": props.selected, children: props.selected && /* @__PURE__ */ u2(Icon, { name: "check", size: 13 }) }),
+              props.isDefault && /* @__PURE__ */ u2("span", { class: "ls-default-flag", children: "Default" }),
+              /* @__PURE__ */ u2("span", { class: "ls-variant-count", children: props.expression.variants.length })
+            ] }),
+            /* @__PURE__ */ u2("span", { class: "ls-expression-copy", children: [
+              /* @__PURE__ */ u2("strong", { children: props.expression.name }),
+              /* @__PURE__ */ u2("small", { children: [
+                props.expression.variants.length,
+                " variant",
+                props.expression.variants.length === 1 ? "" : "s"
+              ] })
+            ] })
+          ]
+        }
+      )
     }
   );
 }
-function LibraryView(props) {
+function VariantTray(props) {
   const { backend } = useClientState(props.client);
-  const [actorId, setActorId] = d2(props.profile?.defaultActorId ?? props.profile?.actors[0]?.id ?? "");
-  const [outfitId, setOutfitId] = d2("");
-  const [expressionId, setExpressionId] = d2("");
-  const [query, setQuery] = d2("");
-  const [page, setPage] = d2(0);
-  const [dragged, setDragged] = d2(null);
-  const [priority, setPriority] = d2(0);
-  const [tags, setTags] = d2("");
-  const [aliases, setAliases] = d2("");
-  const [find, setFind] = d2("");
-  const [replace, setReplace] = d2("");
-  const [destination, setDestination] = d2("");
-  const lastIndex = A2(null);
-  const { actor, outfit } = activeNodes(props.profile, actorId, outfitId);
-  h2(() => {
-    if (props.profile && !props.profile.actors.some((item) => item.id === actorId)) setActorId(props.profile.defaultActorId ?? props.profile.actors[0]?.id ?? "");
-  }, [props.profile?.revision, actorId]);
-  h2(() => {
-    if (actor && !actor.outfits.some((item) => item.id === outfitId)) setOutfitId(actor.defaultOutfitId ?? actor.outfits[0]?.id ?? "");
-  }, [actor?.id, outfitId]);
-  const rows = T2(() => {
-    if (!outfit) return [];
-    const needle = query.trim().toLocaleLowerCase();
-    return outfit.expressions.flatMap((expression) => expression.assets.length ? expression.assets.map((asset) => ({ expression, asset })) : [{ expression, asset: null }]).filter(({ expression, asset }) => !needle || [expression.name, asset?.fileName ?? "", ...expression.tags, ...expression.aliases, ...expression.cues].join(" ").toLocaleLowerCase().includes(needle));
-  }, [outfit, query]);
-  const pageSize = 72;
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageStart = safePage * pageSize;
-  const pageRows = rows.slice(pageStart, pageStart + pageSize);
-  const inspectedExpression = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
-  const selectedExpressions = T2(() => {
-    if (!props.profile) return [];
-    return [...new Set([...props.selected].map((assetId) => assetLocation(props.profile, assetId)?.expression.id).filter((id) => !!id))];
-  }, [props.profile, props.selected]);
-  const destinations = props.profile?.actors.flatMap((profileActor) => profileActor.outfits.map((profileOutfit) => ({
-    id: profileOutfit.id,
-    label: `${profileActor.name} / ${profileOutfit.name}`
-  }))) ?? [];
-  const renamePreview = props.profile ? allExpressions(props.profile).filter((item) => selectedExpressions.includes(item.id)).slice(0, 4).map((item) => ({
-    before: item.name,
-    after: find ? item.name.split(find).join(replace) : item.name
-  })) : [];
-  h2(() => setPage(0), [actor?.id, outfit?.id, query]);
-  function select(index, assetId, shift) {
-    if (!assetId) return;
-    const next = new Set(props.selected);
-    if (shift && lastIndex.current !== null) {
-      const [start, end] = [lastIndex.current, index].sort((a3, b2) => a3 - b2);
-      for (let cursor = start; cursor <= end; cursor += 1) {
-        const asset = rows[cursor]?.asset;
-        if (asset) next.add(asset.id);
-      }
-    } else if (next.has(assetId)) next.delete(assetId);
-    else next.add(assetId);
-    lastIndex.current = index;
-    props.setSelected(next);
-  }
-  function reorder(sourceId, targetId) {
-    if (!actor || sourceId === targetId) return;
+  const rename = (name) => props.update((profile) => {
+    const expression = profile.outfits.find((item) => item.id === props.outfit.id)?.expressions.find((item) => item.id === props.expression.id);
+    if (expression) expression.name = name;
+  });
+  function reorder(variantId, direction) {
     props.update((profile) => {
-      const targetActor = profile.actors.find((item) => item.id === actor.id);
-      const list = targetActor?.outfits;
-      if (!list) return;
-      const from = list.findIndex((item) => item.id === sourceId);
-      const to = list.findIndex((item) => item.id === targetId);
-      if (from < 0 || to < 0) return;
-      const [moved] = list.splice(from, 1);
-      list.splice(to, 0, moved);
-      list.forEach((item, index) => {
-        item.order = index;
+      const variants = profile.outfits.find((item) => item.id === props.outfit.id)?.expressions.find((item) => item.id === props.expression.id)?.variants;
+      if (!variants) return;
+      const index = variants.findIndex((item) => item.id === variantId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= variants.length) return;
+      [variants[index], variants[target]] = [variants[target], variants[index]];
+      variants.forEach((item, order) => {
+        item.order = order;
       });
     });
   }
-  function addActor() {
-    showTextPrompt(props.client, { title: "New actor", label: "Actor name", placeholder: "e.g. Aster" }, (name) => props.update((profile) => {
-      const next = createActor(name);
-      next.order = profile.actors.length;
-      profile.actors.push(next);
-      profile.defaultActorId ??= next.id;
-      setActorId(next.id);
-    }));
+  async function removeVariant(variant) {
+    const { confirmed } = await props.client.ctx.ui.showConfirm({
+      title: "Remove sprite variant?",
+      message: `${variant.fileName} will be removed from this expression. Its Lumiverse asset is deleted only when no LumiStage profile references it.`,
+      variant: "danger",
+      confirmLabel: "Remove"
+    });
+    if (!confirmed) return;
+    props.update((profile) => {
+      const expression = profile.outfits.find((item) => item.id === props.outfit.id)?.expressions.find((item) => item.id === props.expression.id);
+      if (expression) expression.variants = expression.variants.filter((item) => item.id !== variant.id);
+    });
   }
-  function addOutfit() {
-    if (!actor) return;
-    showTextPrompt(props.client, { title: "New outfit folder", label: "Outfit name", placeholder: "e.g. Evening wear" }, (name) => props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id);
-      if (!target) return;
-      const next = createOutfit(name);
-      next.order = target.outfits.length;
-      target.outfits.push(next);
-      target.defaultOutfitId ??= next.id;
-      setOutfitId(next.id);
-    }));
-  }
-  function addExpression() {
-    if (!actor || !outfit) return;
-    showTextPrompt(props.client, { title: "New expression", label: "Expression name", placeholder: "e.g. Relieved" }, (name) => props.update((profile) => {
-      const target = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-      if (!target) return;
-      const next = createExpression(name);
-      next.order = target.expressions.length;
-      target.expressions.push(next);
-      target.defaultExpressionId ??= next.id;
-      setExpressionId(next.id);
-    }));
-  }
-  if (!props.profile) {
-    return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-      /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Asset direction", title: "Library", description: "Build visual profiles for the active character." }),
-      /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(EmptyState, { icon: "actors", title: "No character selected", description: "Open a character or conversation in Lumiverse to begin." }) })
-    ] });
-  }
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-    /* @__PURE__ */ u2(
-      ViewHeader,
-      {
-        eyebrow: "Asset direction",
-        title: "Library",
-        description: "Organize actors, editable outfit folders, expressions, and sprites.",
-        actions: /* @__PURE__ */ u2(S, { children: [
-          /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import" }),
-          /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add actor", onClick: addActor })
-        ] })
-      }
-    ),
-    /* @__PURE__ */ u2(Surface, { class: "ls2-library-context", padding: "small", children: [
-      /* @__PURE__ */ u2(ContextAvatar, { name: props.profile.characterName }),
+  return /* @__PURE__ */ u2("aside", { class: "ls-variant-tray", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-tray-head", children: [
       /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("strong", { children: props.profile.characterName }),
-        /* @__PURE__ */ u2("span", { children: [
-          props.profile.actors.length,
-          " actors \xB7 ",
-          allAssets(props.profile).length,
-          " media"
-        ] })
+        /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Expression slot" }),
+        /* @__PURE__ */ u2("h3", { children: props.expression.name })
       ] }),
-      /* @__PURE__ */ u2("select", { class: "ls2-select ls2-actor-select", value: actor?.id, "aria-label": "Actor", onChange: (event) => setActorId(event.currentTarget.value), children: props.profile.actors.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.name })) })
+      /* @__PURE__ */ u2(IconButton, { icon: "close", label: "Close variant tray", onClick: props.close })
     ] }),
-    /* @__PURE__ */ u2("div", { class: "ls2-folder-section", children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Outfits", description: "Drag to reorder", trailing: /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add outfit", onClick: addOutfit }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-folder-strip", children: actor?.outfits.map((item) => /* @__PURE__ */ u2(
-        FolderButton,
-        {
-          icon: "outfit",
-          label: item.name,
-          count: item.expressions.reduce((sum, expression) => sum + expression.assets.length, 0),
-          active: item.id === outfit?.id,
-          onClick: () => {
-            setOutfitId(item.id);
-            setExpressionId(item.defaultExpressionId ?? item.expressions[0]?.id ?? "");
-          },
-          draggable: true,
-          onDragStart: () => setDragged(item.id),
-          onDrop: () => {
-            if (dragged) reorder(dragged, item.id);
-            setDragged(null);
-          }
-        }
-      )) })
-    ] }),
-    actor && outfit && /* @__PURE__ */ u2(Surface, { class: "ls2-outfit-editor", children: [
+    /* @__PURE__ */ u2(Field, { label: "Expression name", children: /* @__PURE__ */ u2(
+      "input",
+      {
+        class: "ls-input",
+        value: props.expression.name,
+        onInput: (event) => rename(event.currentTarget.value)
+      }
+    ) }),
+    /* @__PURE__ */ u2("div", { class: "ls-tray-actions", children: [
       /* @__PURE__ */ u2(
-        SectionTitle,
+        Button,
         {
-          title: "Outfit editor",
-          description: `${actor.name} / ${outfit.name}`,
-          trailing: /* @__PURE__ */ u2(Status, { tone: outfit.enabled ? "success" : "neutral", children: actor.defaultOutfitId === outfit.id ? "Default" : outfit.enabled ? "Enabled" : "Disabled" })
+          size: "small",
+          icon: "upload",
+          onClick: () => showImportModal(props.client, props.profile, {
+            outfitId: props.outfit.id,
+            expressionId: props.expression.id
+          }),
+          children: "Add variants"
         }
       ),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Folder name", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.name, onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.name = event.currentTarget.value;
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: outfit.priority, onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.priority = Number(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Aliases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.aliases.join(", "), onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.aliases = cleanList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Tags", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: outfit.tags.join(", "), onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.tags = cleanList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Actor aliases", hint: "Used for group-chat focus", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: actor.aliases.join(", "), onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id);
-          if (node) node.aliases = cleanList(event.currentTarget.value);
-        }) }) })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-toggle-stack", children: [
-        /* @__PURE__ */ u2(Toggle, { checked: outfit.enabled, onChange: (value) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.enabled = value;
-        }), label: "Enable this outfit", hint: "Disabled outfits remain in the Library but automation cannot select them." }),
-        /* @__PURE__ */ u2(Toggle, { checked: outfit.allowAutoSwitch, onChange: (value) => props.update((profile) => {
-          const node = profile.actors.find((item) => item.id === actor.id)?.outfits.find((item) => item.id === outfit.id);
-          if (node) node.allowAutoSwitch = value;
-        }), label: "Allow automatic selection", hint: "The detector uses this folder name and every contained sprite filename when resolving the scene." })
-      ] }),
-      /* @__PURE__ */ u2(Toolbar, { children: /* @__PURE__ */ u2(Button, { icon: "check", disabled: actor.defaultOutfitId === outfit.id, onClick: () => props.update((profile) => {
-        const node = profile.actors.find((item) => item.id === actor.id);
-        if (node) node.defaultOutfitId = outfit.id;
-      }), children: "Set as default outfit" }) })
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          size: "small",
+          icon: "check",
+          disabled: props.outfit.defaultExpressionId === props.expression.id,
+          onClick: () => props.update((profile) => {
+            const outfit = profile.outfits.find((item) => item.id === props.outfit.id);
+            if (outfit) outfit.defaultExpressionId = props.expression.id;
+          }),
+          children: "Set default"
+        }
+      )
     ] }),
-    /* @__PURE__ */ u2(Surface, { class: "ls2-library-workspace", padding: "none", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-library-toolbar", children: [
-        /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Search expression and sprite names\u2026" }),
-        /* @__PURE__ */ u2(Toolbar, { children: [
-          /* @__PURE__ */ u2(Button, { icon: "plus", size: "small", onClick: addExpression, children: "Expression" }),
-          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.setSelected(new Set(pageRows.flatMap((row) => row.asset ? [row.asset.id] : []))), disabled: !pageRows.some((row) => row.asset), children: "Select page" }),
-          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.setSelected(new Set(rows.flatMap((row) => row.asset ? [row.asset.id] : []))), disabled: !rows.some((row) => row.asset), children: "Select filtered" })
-        ] })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-library-subbar", children: [
-        /* @__PURE__ */ u2("span", { children: [
-          rows.filter((row) => row.asset).length,
-          " media \xB7 ",
-          outfit?.expressions.length ?? 0,
-          " expressions"
-        ] }),
-        /* @__PURE__ */ u2("span", { children: [
-          props.selected.size,
-          " selected"
-        ] }),
-        /* @__PURE__ */ u2("div", { class: "ls2-pagination", children: [
-          /* @__PURE__ */ u2(IconButton, { icon: "chevronLeft", label: "Previous page", disabled: safePage === 0, onClick: () => setPage(Math.max(0, safePage - 1)) }),
+    /* @__PURE__ */ u2("div", { class: "ls-variant-list", children: [
+      props.expression.variants.map((variant, index) => {
+        const view = backend.variantViews[variant.id];
+        return /* @__PURE__ */ u2("div", { class: "ls-variant-row", children: [
+          /* @__PURE__ */ u2(
+            "button",
+            {
+              type: "button",
+              class: "ls-variant-preview",
+              onClick: () => {
+                const modal = props.client.ctx.ui.showModal({
+                  title: variant.fileName,
+                  width: 760,
+                  maxHeight: 820
+                });
+                const root = document.createElement("div");
+                root.className = "ls-lightbox";
+                const media = variant.mediaKind === "video" ? document.createElement("video") : document.createElement("img");
+                media.setAttribute("src", view?.url ?? "");
+                media.setAttribute("aria-label", variant.fileName);
+                if (media instanceof HTMLVideoElement) {
+                  media.muted = true;
+                  media.loop = true;
+                  media.autoplay = true;
+                  media.playsInline = true;
+                  media.controls = true;
+                }
+                root.appendChild(media);
+                modal.root.appendChild(root);
+              },
+              children: /* @__PURE__ */ u2(
+                Media,
+                {
+                  src: view?.thumbUrl ?? view?.url ?? null,
+                  kind: variant.mediaKind,
+                  label: variant.fileName,
+                  contain: true
+                }
+              )
+            }
+          ),
           /* @__PURE__ */ u2("span", { children: [
-            safePage + 1,
-            " / ",
-            pageCount
+            /* @__PURE__ */ u2("strong", { children: variant.fileName }),
+            /* @__PURE__ */ u2("small", { children: [
+              variant.mediaKind,
+              " \xB7 ",
+              variant.mimeType
+            ] })
           ] }),
-          /* @__PURE__ */ u2(IconButton, { icon: "chevronRight", label: "Next page", disabled: safePage >= pageCount - 1, onClick: () => setPage(Math.min(pageCount - 1, safePage + 1)) })
+          /* @__PURE__ */ u2("div", { children: [
+            /* @__PURE__ */ u2(IconButton, { icon: "chevronLeft", label: "Move variant earlier", disabled: index === 0, onClick: () => reorder(variant.id, -1) }),
+            /* @__PURE__ */ u2(IconButton, { icon: "chevronRight", label: "Move variant later", disabled: index === props.expression.variants.length - 1, onClick: () => reorder(variant.id, 1) }),
+            /* @__PURE__ */ u2(IconButton, { icon: "trash", label: "Remove variant", danger: true, onClick: () => void removeVariant(variant) })
+          ] })
+        ] });
+      }),
+      !props.expression.variants.length && /* @__PURE__ */ u2("div", { class: "ls-tray-empty", children: [
+        /* @__PURE__ */ u2(Icon, { name: "image", size: 20 }),
+        /* @__PURE__ */ u2("span", { children: "No variants yet. Upload one or more sprites for this expression." })
+      ] })
+    ] })
+  ] });
+}
+function BatchBar(props) {
+  const [destination, setDestination] = d2(
+    props.profile.outfits.find((item) => item.id !== props.outfit.id)?.id ?? ""
+  );
+  async function remove() {
+    const { confirmed } = await props.client.ctx.ui.showConfirm({
+      title: `Delete ${props.selected.size} expression${props.selected.size === 1 ? "" : "s"}?`,
+      message: "The selected expression slots and their variants will be removed. You can undo until the Studio is closed.",
+      variant: "danger",
+      confirmLabel: "Delete"
+    });
+    if (confirmed) props.mutate({ type: "delete", expressionIds: [...props.selected] });
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls-batch-bar", role: "toolbar", "aria-label": "Expression batch actions", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-batch-count", children: [
+      /* @__PURE__ */ u2("span", { children: props.selected.size }),
+      /* @__PURE__ */ u2("strong", { children: "selected" }),
+      /* @__PURE__ */ u2("small", { children: [
+        "of ",
+        props.filteredIds.length,
+        " filtered"
+      ] })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-batch-select-links", children: [
+      /* @__PURE__ */ u2("button", { type: "button", onClick: props.selectAll, children: "Select all filtered" }),
+      /* @__PURE__ */ u2("button", { type: "button", onClick: props.clear, children: "Deselect all" })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-batch-destination", children: /* @__PURE__ */ u2(
+      HostSelect,
+      {
+        client: props.client,
+        label: "Destination outfit",
+        value: destination,
+        onChange: setDestination,
+        placeholder: "Choose outfit",
+        compact: true,
+        options: props.profile.outfits.map((item) => ({
+          value: item.id,
+          label: item.name,
+          sublabel: item.id === props.outfit.id ? "Current outfit" : `${item.expressions.length} expressions`
+        }))
+      }
+    ) }),
+    /* @__PURE__ */ u2(Toolbar, { children: [
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          size: "small",
+          icon: "move",
+          disabled: !props.selected.size || !destination,
+          onClick: () => props.mutate({ type: "move", expressionIds: [...props.selected], outfitId: destination }),
+          children: "Move"
+        }
+      ),
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          size: "small",
+          icon: "copy",
+          disabled: !props.selected.size || !destination,
+          onClick: () => props.mutate({ type: "copy", expressionIds: [...props.selected], outfitId: destination }),
+          children: "Copy"
+        }
+      ),
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          size: "small",
+          icon: "trash",
+          variant: "danger",
+          disabled: !props.selected.size,
+          onClick: () => void remove(),
+          children: "Delete"
+        }
+      ),
+      /* @__PURE__ */ u2(IconButton, { icon: "close", label: "Exit batch mode", onClick: props.exit })
+    ] })
+  ] });
+}
+function LibraryView(props) {
+  const [outfitId, setOutfitId] = d2(props.profile.defaultOutfitId ?? props.profile.outfits[0]?.id ?? "");
+  const [expressionId, setExpressionId] = d2("");
+  const [query, setQuery] = d2("");
+  const [batchMode, setBatchMode] = d2(false);
+  const [selected, setSelected] = d2(/* @__PURE__ */ new Set());
+  const [page, setPage] = d2(1);
+  const [perPage, setPerPage] = d2(48);
+  const outfit = selectedOutfit(props.profile, outfitId);
+  const filtered = T2(() => (outfit?.expressions ?? []).filter((expression) => {
+    const needle = query.trim().toLocaleLowerCase();
+    return !needle || expression.name.toLocaleLowerCase().includes(needle) || expression.variants.some((variant) => variant.fileName.toLocaleLowerCase().includes(needle));
+  }), [outfit, query]);
+  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const visible = filtered.slice((page - 1) * perPage, page * perPage);
+  const inspected = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
+  h2(() => {
+    if (!props.profile.outfits.some((item) => item.id === outfitId)) {
+      setOutfitId(props.profile.defaultOutfitId ?? props.profile.outfits[0]?.id ?? "");
+    }
+  }, [props.profile.revision, props.profile.outfits.length, outfitId]);
+  h2(() => setPage(1), [outfitId, query, perPage]);
+  h2(() => {
+    setSelected(/* @__PURE__ */ new Set());
+    setBatchMode(false);
+    setExpressionId("");
+  }, [outfitId]);
+  function selectOutfit(id) {
+    setOutfitId(id);
+  }
+  function addOutfit() {
+    showTextPrompt(
+      props.client,
+      { title: "New outfit folder", label: "Outfit name", placeholder: "Evening wear", submitLabel: "Create outfit" },
+      (name) => props.update((profile) => {
+        const outfit2 = createOutfit(name);
+        outfit2.order = profile.outfits.length;
+        profile.outfits.push(outfit2);
+        profile.defaultOutfitId ??= outfit2.id;
+        setOutfitId(outfit2.id);
+      })
+    );
+  }
+  function addExpression() {
+    if (!outfit) return;
+    showTextPrompt(
+      props.client,
+      { title: "New expression", label: "Expression name", placeholder: "Happy", submitLabel: "Create expression" },
+      (name) => props.update((profile) => {
+        const target = profile.outfits.find((item) => item.id === outfit.id);
+        if (!target) return;
+        const expression = createExpression(name);
+        expression.order = target.expressions.length;
+        target.expressions.push(expression);
+        target.defaultExpressionId ??= expression.id;
+        setExpressionId(expression.id);
+      })
+    );
+  }
+  async function deleteOutfit() {
+    if (!outfit) return;
+    const { confirmed } = await props.client.ctx.ui.showConfirm({
+      title: `Delete ${outfit.name}?`,
+      message: `This removes ${outfit.expressions.length} expression slots and all of their variants from this profile.`,
+      variant: "danger",
+      confirmLabel: "Delete outfit"
+    });
+    if (!confirmed) return;
+    props.update((profile) => {
+      profile.outfits = profile.outfits.filter((item) => item.id !== outfit.id);
+      profile.outfits.forEach((item, order) => {
+        item.order = order;
+      });
+      if (profile.defaultOutfitId === outfit.id) profile.defaultOutfitId = profile.outfits[0]?.id ?? null;
+      setOutfitId(profile.defaultOutfitId ?? profile.outfits[0]?.id ?? "");
+    });
+  }
+  function reorderOutfit(sourceId, targetId) {
+    if (sourceId === targetId) return;
+    props.update((profile) => {
+      const sourceIndex = profile.outfits.findIndex((item) => item.id === sourceId);
+      const targetIndex = profile.outfits.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return;
+      const [moving] = profile.outfits.splice(sourceIndex, 1);
+      profile.outfits.splice(targetIndex, 0, moving);
+      profile.outfits.forEach((item, order) => {
+        item.order = order;
+      });
+    });
+  }
+  function reorderExpression(sourceId, targetId) {
+    if (!outfit || sourceId === targetId) return;
+    props.update((profile) => {
+      const expressions = profile.outfits.find((item) => item.id === outfit.id)?.expressions;
+      if (!expressions) return;
+      const sourceIndex = expressions.findIndex((item) => item.id === sourceId);
+      const targetIndex = expressions.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return;
+      const [moving] = expressions.splice(sourceIndex, 1);
+      expressions.splice(targetIndex, 0, moving);
+      expressions.forEach((item, order) => {
+        item.order = order;
+      });
+    });
+  }
+  function runBatch(mutation) {
+    props.replace(applyBatchMutation(props.profile, mutation));
+    setSelected(/* @__PURE__ */ new Set());
+    if (mutation.type === "delete") setExpressionId("");
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls-library-view", children: [
+    /* @__PURE__ */ u2("aside", { class: "ls-outfit-rail", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-outfit-rail-head", children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Wardrobe" }),
+          /* @__PURE__ */ u2("strong", { children: "Outfits" })
+        ] }),
+        /* @__PURE__ */ u2(IconButton, { icon: "plus", label: "Add outfit", onClick: addOutfit })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "ls-outfit-list", children: props.profile.outfits.map((item) => /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          "data-active": item.id === outfit?.id,
+          draggable: true,
+          onDragStart: (event) => event.dataTransfer?.setData("text/lumistage-outfit", item.id),
+          onDragOver: (event) => event.preventDefault(),
+          onDrop: (event) => {
+            stop(event);
+            reorderOutfit(event.dataTransfer?.getData("text/lumistage-outfit") ?? "", item.id);
+          },
+          onClick: () => selectOutfit(item.id),
+          children: [
+            /* @__PURE__ */ u2(Icon, { name: "outfit", size: 16 }),
+            /* @__PURE__ */ u2("span", { children: [
+              /* @__PURE__ */ u2("strong", { children: item.name }),
+              /* @__PURE__ */ u2("small", { children: [
+                item.expressions.length,
+                " expressions"
+              ] })
+            ] }),
+            props.profile.defaultOutfitId === item.id && /* @__PURE__ */ u2("i", { children: "Default" })
+          ]
+        }
+      )) }),
+      /* @__PURE__ */ u2("div", { class: "ls-outfit-rail-foot", children: /* @__PURE__ */ u2("span", { children: [
+        /* @__PURE__ */ u2(Icon, { name: "move", size: 13 }),
+        "Drag to reorder"
+      ] }) })
+    ] }),
+    /* @__PURE__ */ u2("main", { class: "ls-library-main", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-library-toolbar", children: [
+        /* @__PURE__ */ u2("div", { class: "ls-outfit-title", children: [
+          /* @__PURE__ */ u2("span", { class: "ls-kicker", children: props.profile.characterName }),
+          /* @__PURE__ */ u2(
+            "input",
+            {
+              value: outfit?.name ?? "",
+              "aria-label": "Outfit folder name",
+              onInput: (event) => {
+                const name = event.currentTarget.value;
+                props.update((profile) => {
+                  const target = profile.outfits.find((item) => item.id === outfit?.id);
+                  if (target) target.name = name;
+                });
+              }
+            }
+          ),
+          /* @__PURE__ */ u2("span", { children: [
+            filtered.length,
+            " expression",
+            filtered.length === 1 ? "" : "s"
+          ] })
+        ] }),
+        /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(
+            Button,
+            {
+              size: "small",
+              icon: "check",
+              disabled: !outfit || props.profile.defaultOutfitId === outfit.id,
+              onClick: () => props.update((profile) => {
+                profile.defaultOutfitId = outfit?.id ?? null;
+              }),
+              children: "Set default"
+            }
+          ),
+          /* @__PURE__ */ u2(IconButton, { icon: "trash", label: "Delete outfit", danger: true, disabled: props.profile.outfits.length <= 1, onClick: () => void deleteOutfit() })
         ] })
       ] }),
-      props.selected.size > 0 && /* @__PURE__ */ u2("div", { class: "ls2-batch-bar", role: "toolbar", "aria-label": "Batch actions", children: [
-        /* @__PURE__ */ u2("strong", { children: [
-          props.selected.size,
-          " selected"
-        ] }),
-        /* @__PURE__ */ u2("span", { children: [
-          selectedExpressions.length,
-          " expression",
-          selectedExpressions.length === 1 ? "" : "s"
-        ] }),
+      /* @__PURE__ */ u2("div", { class: "ls-library-command-row", children: [
+        /* @__PURE__ */ u2(SearchInput, { value: query, onInput: setQuery, placeholder: "Search expressions and sprite filenames\u2026" }),
         /* @__PURE__ */ u2(Toolbar, { children: [
           /* @__PURE__ */ u2(IconButton, { icon: "undo", label: "Undo", disabled: !props.canUndo, onClick: props.undo }),
           /* @__PURE__ */ u2(IconButton, { icon: "redo", label: "Redo", disabled: !props.canRedo, onClick: props.redo }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "eye", onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: true }), children: "Enable" }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "eyeOff", onClick: () => props.mutate({ type: "set-enabled", assetIds: [...props.selected], enabled: false }), children: "Disable" }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "copy", onClick: () => props.mutate({ type: "duplicate", assetIds: [...props.selected] }), children: "Duplicate" }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "trash", variant: "danger", onClick: () => props.mutate({ type: "delete", assetIds: [...props.selected] }), children: "Trash" }),
-          /* @__PURE__ */ u2(Button, { size: "small", variant: "ghost", onClick: () => props.setSelected(/* @__PURE__ */ new Set()), children: "Clear" })
+          /* @__PURE__ */ u2(
+            Button,
+            {
+              size: "small",
+              icon: "batch",
+              variant: batchMode ? "primary" : "default",
+              onClick: () => {
+                setBatchMode(!batchMode);
+                setSelected(/* @__PURE__ */ new Set());
+                setExpressionId("");
+              },
+              children: "Select"
+            }
+          ),
+          /* @__PURE__ */ u2(Button, { size: "small", icon: "plus", onClick: addExpression, children: "New expression" }),
+          /* @__PURE__ */ u2(
+            Button,
+            {
+              size: "small",
+              icon: "upload",
+              variant: "primary",
+              onClick: () => showImportModal(props.client, props.profile, { outfitId: outfit?.id }),
+              children: "Import"
+            }
+          )
         ] })
       ] }),
-      pageRows.length ? /* @__PURE__ */ u2("div", { class: "ls2-asset-grid", children: pageRows.map(({ expression, asset }, index) => {
-        const view = asset ? backend.assetViews[asset.id] : null;
-        return /* @__PURE__ */ u2("article", { class: "ls2-asset-card", "data-selected": asset ? props.selected.has(asset.id) : false, "data-inspected": expression.id === expressionId, children: /* @__PURE__ */ u2("button", { type: "button", class: "ls2-asset-main", onClick: (event) => {
-          select(pageStart + index, asset?.id ?? null, event.shiftKey);
-          setExpressionId(expression.id);
-        }, children: [
-          /* @__PURE__ */ u2(Media, { src: view?.thumbUrl ?? view?.url ?? null, kind: asset?.mediaKind ?? "image", label: expression.name, class: "ls2-asset-media" }),
-          /* @__PURE__ */ u2("span", { class: "ls2-asset-overlay", children: [
-            /* @__PURE__ */ u2("strong", { children: expression.name }),
-            /* @__PURE__ */ u2("small", { children: asset ? `${asset.fileName} \xB7 P${asset.priority}` : "No media yet" })
-          ] }),
-          asset && /* @__PURE__ */ u2("span", { class: "ls2-asset-check", children: /* @__PURE__ */ u2(Icon, { name: props.selected.has(asset.id) ? "check" : "plus", size: 12 }) })
-        ] }) });
-      }) }) : /* @__PURE__ */ u2(EmptyState, { icon: "image", title: "No expressions in this outfit", description: "Import media or create an expression to start building this outfit.", action: /* @__PURE__ */ u2(Button, { icon: "upload", variant: "primary", onClick: () => showImportModal(props.client, props.profile), children: "Import media" }) })
+      batchMode && outfit && /* @__PURE__ */ u2(
+        BatchBar,
+        {
+          client: props.client,
+          profile: props.profile,
+          outfit,
+          selected,
+          filteredIds: filtered.map((item) => item.id),
+          mutate: runBatch,
+          clear: () => setSelected(/* @__PURE__ */ new Set()),
+          selectAll: () => setSelected(new Set(filtered.map((item) => item.id))),
+          exit: () => {
+            setBatchMode(false);
+            setSelected(/* @__PURE__ */ new Set());
+          }
+        }
+      ),
+      /* @__PURE__ */ u2("div", { class: "ls-expression-scroll", children: visible.length ? /* @__PURE__ */ u2("div", { class: "ls-expression-grid", role: "list", "aria-label": `${outfit?.name} expressions`, children: visible.map((expression) => /* @__PURE__ */ u2(
+        ExpressionCard,
+        {
+          client: props.client,
+          expression,
+          selected: selected.has(expression.id),
+          inspected: expression.id === inspected?.id,
+          isDefault: outfit?.defaultExpressionId === expression.id,
+          batchMode,
+          onOpen: () => setExpressionId(expression.id),
+          onToggle: () => setSelected((current) => {
+            const next = new Set(current);
+            if (next.has(expression.id)) next.delete(expression.id);
+            else next.add(expression.id);
+            return next;
+          }),
+          onDragStart: (event) => event.dataTransfer?.setData("text/lumistage-expression", expression.id),
+          onDrop: (event) => {
+            stop(event);
+            reorderExpression(event.dataTransfer?.getData("text/lumistage-expression") ?? "", expression.id);
+          }
+        }
+      )) }) : /* @__PURE__ */ u2(
+        EmptyState,
+        {
+          icon: "expression",
+          title: query ? "No expressions match" : "This outfit is empty",
+          description: query ? "Try another name or sprite filename." : "Create an expression slot or import a folder of sprites.",
+          action: !query && /* @__PURE__ */ u2(Button, { icon: "plus", variant: "primary", onClick: addExpression, children: "New expression" })
+        }
+      ) }),
+      filtered.length > perPage && /* @__PURE__ */ u2(
+        HostPagination,
+        {
+          client: props.client,
+          page: Math.min(page, pages),
+          pages,
+          total: filtered.length,
+          perPage,
+          onPage: setPage,
+          onPerPage: (value) => {
+            setPerPage(value);
+            setPage(1);
+          }
+        }
+      )
     ] }),
-    props.selected.size > 0 && /* @__PURE__ */ u2("details", { class: "ls2-disclosure ls2-batch-panel", children: [
-      /* @__PURE__ */ u2("summary", { children: [
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2(Icon, { name: "batch", size: 16 }),
-          "Batch edit ",
-          props.selected.size,
-          " media"
+    outfit && inspected && /* @__PURE__ */ u2(
+      VariantTray,
+      {
+        client: props.client,
+        profile: props.profile,
+        outfit,
+        expression: inspected,
+        update: props.update,
+        close: () => setExpressionId("")
+      }
+    )
+  ] });
+}
+function LiveStageView({ client }) {
+  const { backend } = useClientState(client);
+  const appearance = client.effectiveAppearance();
+  const characters = Object.values(backend.snapshot?.characters ?? {});
+  return /* @__PURE__ */ u2("div", { class: "ls-page ls-live-page", children: [
+    /* @__PURE__ */ u2(
+      WorkspaceTitle,
+      {
+        kicker: "Live direction",
+        title: "Live Stage",
+        description: "The resolved visual state for the current chat, including exact sprite variants and locks.",
+        actions: /* @__PURE__ */ u2(Toolbar, { children: [
+          /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => client.analyzeNow(), children: "Analyze now" }),
+          /* @__PURE__ */ u2(Button, { icon: "sparkles", variant: "primary", disabled: !backend.activeChatId, onClick: () => showQuickPicker(client), children: "Direct stage" })
+        ] })
+      }
+    ),
+    /* @__PURE__ */ u2("section", { class: "ls-live-stage-board", children: /* @__PURE__ */ u2("div", { class: "ls-stage-board-grid", children: [
+      characters.map((state) => {
+        const view = state.variantId ? backend.variantViews[state.variantId] : null;
+        const lock = backend.timeline?.manualOverrides[state.characterId];
+        return /* @__PURE__ */ u2("article", { "data-focused": state.focused, children: [
+          /* @__PURE__ */ u2("div", { class: "ls-live-character-media", children: /* @__PURE__ */ u2(
+            Media,
+            {
+              src: view?.url ?? null,
+              kind: view?.mediaKind ?? "image",
+              label: state.label,
+              contain: true
+            }
+          ) }),
+          /* @__PURE__ */ u2("div", { class: "ls-live-character-copy", children: [
+            /* @__PURE__ */ u2("span", { class: "ls-kicker", children: state.focused ? "Focused" : "Ensemble" }),
+            /* @__PURE__ */ u2("strong", { children: state.label.split(" \xB7 ")[0] }),
+            /* @__PURE__ */ u2("small", { children: state.label.split(" \xB7 ").slice(1).join(" / ") }),
+            /* @__PURE__ */ u2("div", { children: [
+              /* @__PURE__ */ u2("span", { children: [
+                Math.round(state.confidence * 100),
+                "% confidence"
+              ] }),
+              lock && /* @__PURE__ */ u2("span", { children: [
+                /* @__PURE__ */ u2(Icon, { name: "lock", size: 12 }),
+                lock.lock === "outfit" ? "Outfit locked" : "State locked"
+              ] })
+            ] })
+          ] })
+        ] });
+      }),
+      !characters.length && /* @__PURE__ */ u2(
+        EmptyState,
+        {
+          icon: "stage",
+          title: "Nothing is on stage yet",
+          description: "Direct a state manually or complete a generated reply after importing sprites.",
+          action: /* @__PURE__ */ u2(Button, { icon: "sparkles", variant: "primary", onClick: () => showQuickPicker(client), children: "Direct stage" })
+        }
+      )
+    ] }) }),
+    /* @__PURE__ */ u2("div", { class: "ls-live-controls", children: [
+      /* @__PURE__ */ u2("section", { children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Floating stage" }),
+          /* @__PURE__ */ u2("h3", { children: "Presentation" })
         ] }),
-        /* @__PURE__ */ u2(Icon, { name: "chevronDown", size: 15 })
+        /* @__PURE__ */ u2(SettingRow, { title: "Stage visibility", description: "Show the resizable sprite stage over the chat.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage visibility", checked: appearance.visible, onChange: (visible) => void client.saveAppearance({ visible }) }) }),
+        /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show character, outfit, and expression beneath each sprite.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage captions", checked: appearance.showCaptions, onChange: (showCaptions) => void client.saveAppearance({ showCaptions }) }) })
       ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-disclosure-body", children: [
-        /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-          /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: priority, onInput: (event) => setPriority(Number(event.currentTarget.value)) }) }),
-          /* @__PURE__ */ u2(Field, { label: "Move to outfit", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: destination, onChange: (event) => setDestination(event.currentTarget.value), children: [
-            /* @__PURE__ */ u2("option", { value: "", children: "Choose an outfit\u2026" }),
-            destinations.map((item) => /* @__PURE__ */ u2("option", { value: item.id, children: item.label }))
-          ] }) }),
-          /* @__PURE__ */ u2(Field, { label: "Add tags", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: tags, onInput: (event) => setTags(event.currentTarget.value), placeholder: "bright, smile, joy" }) }),
-          /* @__PURE__ */ u2(Field, { label: "Add aliases", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: aliases, onInput: (event) => setAliases(event.currentTarget.value), placeholder: "grin, cheerful" }) }),
-          /* @__PURE__ */ u2(Field, { label: "Find in expression names", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: find, onInput: (event) => setFind(event.currentTarget.value) }) }),
-          /* @__PURE__ */ u2(Field, { label: "Replace with", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: replace, onInput: (event) => setReplace(event.currentTarget.value) }) })
+      /* @__PURE__ */ u2("section", { children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Conversation" }),
+          /* @__PURE__ */ u2("h3", { children: "Chat overrides" })
         ] }),
-        find && renamePreview.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-rename-preview", children: renamePreview.map((item) => /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("span", { children: item.before }),
-          /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 13 }),
-          /* @__PURE__ */ u2("strong", { children: item.after })
-        ] })) }),
+        /* @__PURE__ */ u2("p", { children: "Stage size and placement can follow global defaults or be saved specifically for this chat." }),
         /* @__PURE__ */ u2(Toolbar, { children: [
-          /* @__PURE__ */ u2(Button, { size: "small", onClick: () => props.mutate({ type: "set-priority", assetIds: [...props.selected], priority }), children: "Set priority" }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "move", disabled: !destination, onClick: () => props.mutate({ type: "move", assetIds: [...props.selected], outfitId: destination }), children: "Move" }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "tag", disabled: !tags.trim(), onClick: () => props.mutate({ type: "add-tags", expressionIds: selectedExpressions, tags: tags.split(",") }), children: "Add tags" }),
-          /* @__PURE__ */ u2(Button, { size: "small", icon: "tag", disabled: !aliases.trim(), onClick: () => props.mutate({ type: "add-aliases", expressionIds: selectedExpressions, aliases: aliases.split(",") }), children: "Add aliases" }),
-          /* @__PURE__ */ u2(Button, { size: "small", disabled: !find, onClick: () => props.mutate({ type: "rename", expressionIds: selectedExpressions, find, replace }), children: "Rename" })
-        ] }),
-        /* @__PURE__ */ u2("p", { class: "ls2-help", children: "Changes are reversible with Undo until the Library is saved." })
-      ] })
-    ] }),
-    inspectedExpression && actor && outfit && /* @__PURE__ */ u2(Surface, { class: "ls2-inspector", children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Expression inspector", description: `${actor.name} / ${outfit.name}`, trailing: /* @__PURE__ */ u2(Status, { tone: inspectedExpression.enabled ? "success" : "neutral", children: inspectedExpression.enabled ? "Enabled" : "Disabled" }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Name", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.name, onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.name = event.currentTarget.value;
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Priority", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", value: inspectedExpression.priority, onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.priority = Number(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Aliases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.aliases.join(", "), onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.aliases = cleanList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Cue phrases", hint: "Comma separated", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.cues.join(", "), onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.cues = cleanList(event.currentTarget.value);
-        }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Tags", hint: "Comma separated", class: "ls2-field-wide", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: inspectedExpression.tags.join(", "), onInput: (event) => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.tags = cleanList(event.currentTarget.value);
-        }) }) })
-      ] }),
-      /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { icon: "check", onClick: () => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id);
-          if (node) node.defaultExpressionId = inspectedExpression.id;
-        }), children: "Set as default" }),
-        /* @__PURE__ */ u2(Button, { icon: inspectedExpression.enabled ? "eyeOff" : "eye", onClick: () => props.update((profile) => {
-          const node = profile.actors.find((a3) => a3.id === actor.id)?.outfits.find((o3) => o3.id === outfit.id)?.expressions.find((e3) => e3.id === inspectedExpression.id);
-          if (node) node.enabled = !node.enabled;
-        }), children: inspectedExpression.enabled ? "Disable" : "Enable" })
+          /* @__PURE__ */ u2(
+            Button,
+            {
+              disabled: !backend.activeChatId,
+              onClick: () => void client.saveChatLayout({ ...appearance }),
+              children: "Save layout for chat"
+            }
+          ),
+          /* @__PURE__ */ u2(
+            Button,
+            {
+              variant: "ghost",
+              disabled: !backend.timeline?.layoutOverride,
+              onClick: () => void client.saveChatLayout(null),
+              children: "Use global layout"
+            }
+          )
+        ] })
       ] })
     ] })
   ] });
 }
-function AutomationView({ client, openSettings }) {
+function DiagnosticsPanel({ client }) {
   const { backend } = useClientState(client);
-  const [draft, setDraft] = d2(backend.settings);
-  h2(() => setDraft(backend.settings), [backend.settings.revision]);
-  const detection = draft.detection;
-  const missing = [!backend.permissions.generation && "Generation", !backend.permissions.chats && "Chats", !backend.permissions.chatMutation && "Chat History"].filter(Boolean);
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Post-reply direction", title: "Automation", description: "Classify the completed reply once, then resolve it against your catalog.", actions: /* @__PURE__ */ u2(Button, { icon: "check", variant: "primary", onClick: () => void client.saveSettings(draft), children: "Save changes" }) }),
-    missing.length > 0 && /* @__PURE__ */ u2(InlineNotice, { tone: "warning", children: [
-      /* @__PURE__ */ u2("strong", { children: "Automation is paused." }),
-      /* @__PURE__ */ u2("span", { children: [
-        "Grant ",
-        missing.join(", "),
-        " permissions to enable detection."
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(Toggle, { checked: detection.enabled, onChange: (enabled) => setDraft({ ...draft, detection: { ...detection, enabled } }), label: "Automatic stage direction", hint: "Runs only after a successful, saved assistant reply. Stopped or failed generations do not change the stage." }) }),
-    /* @__PURE__ */ u2(Surface, { class: "ls2-route-summary", children: [
-      /* @__PURE__ */ u2("span", { class: "ls2-route-icon", children: /* @__PURE__ */ u2(Icon, { name: "aperture", size: 20 }) }),
+  const [report, setReport] = d2(null);
+  const [loading, setLoading] = d2(false);
+  async function refresh() {
+    setLoading(true);
+    try {
+      setReport(await client.diagnostics());
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Diagnostics failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  const permissions = Object.entries(backend.permissions);
+  return /* @__PURE__ */ u2("section", { class: "ls-settings-card ls-diagnostics-card", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-settings-card-head", children: [
       /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Detector route" }),
-        /* @__PURE__ */ u2("strong", { children: detection.connectionId ? "Pinned connection" : "Active Lumiverse connection" }),
-        /* @__PURE__ */ u2("small", { children: detection.model ?? "Connection default model" })
+        /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Runtime health" }),
+        /* @__PURE__ */ u2("h3", { children: "Diagnostics" }),
+        /* @__PURE__ */ u2("p", { children: "Permission, queue, catalog, and detector status without transcript or raw model content." })
       ] }),
-      /* @__PURE__ */ u2(Button, { icon: "settings", onClick: openSettings, children: "Configure" })
+      /* @__PURE__ */ u2(Button, { size: "small", icon: "refresh", disabled: loading, onClick: () => void refresh(), children: loading ? "Checking\u2026" : "Run report" })
     ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Confidence policy", description: "Uncertain predictions preserve the previous stage." }),
-      /* @__PURE__ */ u2("div", { class: "ls2-range-stack", children: [
-        /* @__PURE__ */ u2(Field, { label: `Expression sprite \xB7 ${Math.round(detection.stateConfidence * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".3", max: ".95", step: ".05", value: detection.stateConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, stateConfidence: Number(event.currentTarget.value) } }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Outfit selection \xB7 ${Math.round(detection.outfitConfidence * 100)}%`, hint: "Uses outfit folder names and the filenames of every sprite inside them.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".5", max: "1", step: ".05", value: detection.outfitConfidence, onInput: (event) => setDraft({ ...draft, detection: { ...detection, outfitConfidence: Number(event.currentTarget.value) } }) }) })
+    /* @__PURE__ */ u2("div", { class: "ls-permission-grid", children: permissions.map(([name, granted]) => /* @__PURE__ */ u2("span", { "data-granted": granted, children: [
+      /* @__PURE__ */ u2(Icon, { name: granted ? "success" : "warning", size: 14 }),
+      name
+    ] })) }),
+    /* @__PURE__ */ u2("div", { class: "ls-diagnostic-summary", children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { children: "Detector" }),
+        /* @__PURE__ */ u2("strong", { children: backend.lastDetection.status }),
+        /* @__PURE__ */ u2("small", { children: backend.lastDetection.message })
+      ] }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { children: "Queue" }),
+        /* @__PURE__ */ u2("strong", { children: backend.queueDepth }),
+        /* @__PURE__ */ u2("small", { children: "pending jobs" })
+      ] }),
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { children: "Catalog" }),
+        /* @__PURE__ */ u2("strong", { children: backend.profile ? inspectProfile(backend.profile).length : 0 }),
+        /* @__PURE__ */ u2("small", { children: "integrity notices" })
       ] })
-    ] })
+    ] }),
+    report && /* @__PURE__ */ u2("pre", { children: JSON.stringify(report, null, 2) })
   ] });
 }
 function SettingsView({ client }) {
-  const { backend, busy } = useClientState(client);
-  const [draft, setDraft] = d2(backend.settings);
-  h2(() => setDraft(backend.settings), [backend.settings.revision]);
-  const detection = draft.detection;
-  const selected = detection.connectionId ? backend.connections.find((connection) => connection.id === detection.connectionId) ?? null : backend.connections.find((connection) => connection.isDefault) ?? backend.connections[0] ?? null;
-  const configured = backend.connections.filter((connection) => connection.hasApiKey).length;
-  const missingPermissions = Object.entries(backend.permissions).filter(([, granted]) => !granted).map(([name]) => name);
-  const patchDetection = (patch) => setDraft({ ...draft, detection: { ...detection, ...patch } });
+  const { backend } = useClientState(client);
+  const [draft, setDraft] = d2(() => structuredClone(backend.settings));
+  const [section, setSection] = d2("detection");
+  const dirty = JSON.stringify(draft) !== JSON.stringify(backend.settings);
+  h2(() => setDraft(structuredClone(backend.settings)), [backend.settings.revision]);
+  const connections = [
+    { value: "", label: "Use active Lumiverse connection", sublabel: "Follows the host selection" },
+    ...backend.connections.map((item) => ({
+      value: item.id,
+      label: item.name,
+      sublabel: `${item.provider}${item.model ? ` \xB7 ${item.model}` : ""}`
+    }))
+  ];
   async function save() {
     try {
       await client.saveSettings(draft);
@@ -5948,987 +6552,1199 @@ function SettingsView({ client }) {
       client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
     }
   }
-  async function requestPermissions() {
-    try {
-      await client.ctx.permissions.request(["generation", "chats", "chat_mutation", "characters", "images", "ui_panels"]);
-      const active = client.ctx.getActiveChat();
-      client.refresh(active.chatId, active.characterId);
-    } catch (error) {
-      client.notify("error", error instanceof Error ? error.message : "Permission request was not completed.");
-    }
-  }
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Extension configuration", title: "Settings", description: "Provider routing, detector defaults, permissions, and LumiStage-owned data.", actions: /* @__PURE__ */ u2(Button, { icon: "check", variant: "primary", disabled: busy, onClick: () => void save(), children: "Save settings" }) }),
-    /* @__PURE__ */ u2(Surface, { class: "ls2-settings-route", padding: "none", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-settings-route-hero", children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-settings-route-icon", children: /* @__PURE__ */ u2(Icon, { name: "aperture", size: 24 }) }),
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "API connection" }),
-          /* @__PURE__ */ u2("strong", { children: selected?.name ?? "Follow active connection" }),
-          /* @__PURE__ */ u2("small", { children: selected ? `${selected.provider} \xB7 ${detection.model ?? selected.model ?? "Default model"}` : "Uses whichever LLM connection is active in Lumiverse" })
-        ] }),
-        /* @__PURE__ */ u2(Status, { tone: selected?.hasApiKey || !detection.connectionId && configured > 0 ? "success" : "warning", children: selected?.hasApiKey || !detection.connectionId && configured > 0 ? "Available" : "Needs setup" })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-settings-route-form", children: [
-        /* @__PURE__ */ u2(Field, { label: "Connection profile", hint: "Choosing Active follows Lumiverse whenever its active connection changes.", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: detection.connectionId ?? "", onChange: (event) => patchDetection({ connectionId: event.currentTarget.value || null }), children: [
-          /* @__PURE__ */ u2("option", { value: "", children: "Active Lumiverse connection" }),
-          detection.connectionId && !backend.connections.some((connection) => connection.id === detection.connectionId) && /* @__PURE__ */ u2("option", { value: detection.connectionId, children: "Unavailable saved connection" }),
-          backend.connections.map((connection) => /* @__PURE__ */ u2("option", { value: connection.id, children: [
-            connection.name,
-            " \xB7 ",
-            connection.provider
-          ] }))
-        ] }) }),
-        /* @__PURE__ */ u2(Field, { label: "Model override", hint: "Leave blank to use the selected connection\u2019s configured model.", children: /* @__PURE__ */ u2("input", { class: "ls2-input", value: detection.model ?? "", placeholder: selected?.model || "Connection default", onInput: (event) => patchDetection({ model: event.currentTarget.value.trim() || null }) }) }),
-        /* @__PURE__ */ u2(Button, { icon: "settings", onClick: () => client.send({ type: "open-connections" }), children: "Manage connections in Lumiverse" })
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Available connections", description: "LumiStage receives safe profile metadata only. API keys are never exposed.", trailing: /* @__PURE__ */ u2("span", { class: "ls2-count", children: [
-        configured,
-        " ready"
-      ] }) }),
-      backend.connections.length ? /* @__PURE__ */ u2("div", { class: "ls2-connection-list", children: backend.connections.map((connection) => /* @__PURE__ */ u2("button", { type: "button", "data-selected": connection.id === detection.connectionId, onClick: () => patchDetection({ connectionId: connection.id }), children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-connection-mark", children: connection.name.slice(0, 2).toLocaleUpperCase() }),
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: connection.name }),
-          /* @__PURE__ */ u2("small", { children: [
-            connection.provider,
-            " \xB7 ",
-            connection.model || "Default model"
+  return /* @__PURE__ */ u2("div", { class: "ls-page ls-settings-page", children: [
+    /* @__PURE__ */ u2(
+      WorkspaceTitle,
+      {
+        kicker: "Configuration",
+        title: "Settings",
+        description: "Connection, detection, stage presentation, archives, and health in one focused workspace.",
+        actions: /* @__PURE__ */ u2(Button, { variant: "primary", icon: "check", disabled: !dirty, onClick: () => void save(), children: "Save settings" })
+      }
+    ),
+    /* @__PURE__ */ u2("div", { class: "ls-settings-layout", children: [
+      /* @__PURE__ */ u2("nav", { class: "ls-settings-nav", "aria-label": "Settings sections", children: [
+        /* @__PURE__ */ u2("button", { type: "button", "data-active": section === "detection", onClick: () => setSection("detection"), children: [
+          /* @__PURE__ */ u2(Icon, { name: "automation", size: 17 }),
+          /* @__PURE__ */ u2("span", { children: [
+            /* @__PURE__ */ u2("strong", { children: "Detection" }),
+            /* @__PURE__ */ u2("small", { children: "Connection and confidence" })
           ] })
         ] }),
-        /* @__PURE__ */ u2("span", { class: "ls2-connection-state", "data-ready": connection.hasApiKey, children: connection.isDefault ? "Default" : connection.hasApiKey ? "Ready" : "No key" })
-      ] })) }) : /* @__PURE__ */ u2(EmptyState, { icon: "aperture", title: "No LLM connections available", description: "Create an API connection in Lumiverse, then return here to choose it for expression detection.", action: /* @__PURE__ */ u2(Button, { icon: "settings", variant: "primary", onClick: () => client.send({ type: "open-connections" }), children: "Open Connections" }) })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Detector defaults", description: "Applied to LumiStage\u2019s private classification request." }),
-      /* @__PURE__ */ u2("div", { class: "ls2-range-stack", children: [
-        /* @__PURE__ */ u2(Field, { label: `Conversation context \xB7 ${detection.contextMessages} messages`, hint: "The detector receives only this trailing window.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "1", max: "20", value: detection.contextMessages, onInput: (event) => patchDetection({ contextMessages: Number(event.currentTarget.value) }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Adjacent media preload \xB7 ${draft.preloadAdjacent}`, hint: "More preloading improves transitions but uses additional bandwidth.", children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "0", max: "10", value: draft.preloadAdjacent, onInput: (event) => setDraft({ ...draft, preloadAdjacent: Number(event.currentTarget.value) }) }) })
+        /* @__PURE__ */ u2("button", { type: "button", "data-active": section === "stage", onClick: () => setSection("stage"), children: [
+          /* @__PURE__ */ u2(Icon, { name: "appearance", size: 17 }),
+          /* @__PURE__ */ u2("span", { children: [
+            /* @__PURE__ */ u2("strong", { children: "Stage" }),
+            /* @__PURE__ */ u2("small", { children: "Layout and motion" })
+          ] })
+        ] }),
+        /* @__PURE__ */ u2("button", { type: "button", "data-active": section === "data", onClick: () => setSection("data"), children: [
+          /* @__PURE__ */ u2(Icon, { name: "download", size: 17 }),
+          /* @__PURE__ */ u2("span", { children: [
+            /* @__PURE__ */ u2("strong", { children: "Data & health" }),
+            /* @__PURE__ */ u2("small", { children: "Archives and diagnostics" })
+          ] })
+        ] })
       ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-locked-value", children: [
-        /* @__PURE__ */ u2(Icon, { name: "lock", size: 14 }),
-        /* @__PURE__ */ u2("span", { children: [
-          "Classification temperature is fixed at ",
-          /* @__PURE__ */ u2("strong", { children: "0.10" }),
-          " for repeatable decisions."
+      /* @__PURE__ */ u2("main", { class: "ls-settings-content", children: [
+        section === "detection" && /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("section", { class: "ls-settings-card", children: [
+          /* @__PURE__ */ u2("div", { class: "ls-settings-card-head", children: [
+            /* @__PURE__ */ u2("div", { children: [
+              /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Automatic direction" }),
+              /* @__PURE__ */ u2("h3", { children: "Detection" }),
+              /* @__PURE__ */ u2("p", { children: "One call receives every outfit, expression, and sprite filename after a successful reply." })
+            ] }),
+            /* @__PURE__ */ u2(
+              HostSwitch,
+              {
+                client,
+                label: "Automatic detection",
+                checked: draft.detection.enabled,
+                onChange: (enabled) => setDraft({ ...draft, detection: { ...draft.detection, enabled } })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "ls-settings-form-grid", children: [
+            /* @__PURE__ */ u2(Field, { label: "LLM connection", hint: "Choose a profile or follow Lumiverse\u2019s active connection.", children: /* @__PURE__ */ u2(
+              HostSelect,
+              {
+                client,
+                label: "LLM connection",
+                value: draft.detection.connectionId ?? "",
+                options: connections,
+                onChange: (connectionId) => setDraft({
+                  ...draft,
+                  detection: { ...draft.detection, connectionId: connectionId || null, model: null }
+                })
+              }
+            ) }),
+            /* @__PURE__ */ u2(Field, { label: "Model", hint: "The native picker reads the selected connection\u2019s catalog.", children: /* @__PURE__ */ u2(
+              HostModelPicker,
+              {
+                client,
+                value: draft.detection.model ?? "",
+                connectionId: draft.detection.connectionId,
+                onChange: (model) => setDraft({ ...draft, detection: { ...draft.detection, model: model || null } })
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Context window", description: "Recent chat messages supplied to the detector.", children: /* @__PURE__ */ u2(
+            HostNumber,
+            {
+              client,
+              value: draft.detection.contextMessages,
+              min: 1,
+              max: 20,
+              onChange: (contextMessages) => setDraft({ ...draft, detection: { ...draft.detection, contextMessages } })
+            }
+          ) }),
+          /* @__PURE__ */ u2(
+            HostRange,
+            {
+              client,
+              value: Math.round(draft.detection.confidence * 100),
+              min: 0,
+              max: 100,
+              step: 5,
+              suffix: "%",
+              label: "Confidence threshold",
+              hint: "Below this threshold the complete prior stage state is preserved.",
+              onChange: (confidence) => setDraft({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })
+            }
+          ),
+          /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: [
+            /* @__PURE__ */ u2(Button, { icon: "settings", onClick: () => client.send({ type: "open-connections" }), children: "Manage connections" }),
+            /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => client.analyzeNow(), children: "Analyze current reply" })
+          ] })
+        ] }) }),
+        section === "stage" && /* @__PURE__ */ u2("section", { class: "ls-settings-card", children: [
+          /* @__PURE__ */ u2("div", { class: "ls-settings-card-head", children: /* @__PURE__ */ u2("div", { children: [
+            /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Presentation" }),
+            /* @__PURE__ */ u2("h3", { children: "Floating stage" }),
+            /* @__PURE__ */ u2("p", { children: "Responsive ensemble layout with media-safe transitions." })
+          ] }) }),
+          /* @__PURE__ */ u2("div", { class: "ls-settings-form-grid", children: [
+            /* @__PURE__ */ u2(Field, { label: "Transition", children: /* @__PURE__ */ u2(
+              HostSelect,
+              {
+                client,
+                label: "Transition",
+                value: draft.appearance.transition,
+                onChange: (transition) => setDraft({
+                  ...draft,
+                  appearance: { ...draft.appearance, transition }
+                }),
+                options: [
+                  { value: "crossfade", label: "Crossfade" },
+                  { value: "lift", label: "Cue lift" },
+                  { value: "cut", label: "Hard cut" }
+                ]
+              }
+            ) }),
+            /* @__PURE__ */ u2(Field, { label: "Transition duration", children: /* @__PURE__ */ u2(
+              HostNumber,
+              {
+                client,
+                value: draft.appearance.transitionMs,
+                min: 0,
+                max: 2e3,
+                step: 20,
+                onChange: (transitionMs) => setDraft({ ...draft, appearance: { ...draft.appearance, transitionMs } })
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.opacity * 100), min: 10, max: 100, step: 5, suffix: "%", label: "Stage opacity", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.idleOpacity * 100), min: 5, max: 100, step: 5, suffix: "%", label: "Unfocused character opacity", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.focusedScale * 100), min: 80, max: 130, step: 1, suffix: "%", label: "Focused character scale", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.ensembleOverlap * 100), min: 0, max: 80, step: 5, suffix: "%", label: "Ensemble overlap", onChange: (value) => setDraft({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } }) }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show resolved names beneath stage sprites.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Captions", checked: draft.appearance.showCaptions, onChange: (showCaptions) => setDraft({ ...draft, appearance: { ...draft.appearance, showCaptions } }) }) }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Stage chrome", description: "Show the compact live header and controls.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage chrome", checked: draft.appearance.showChrome, onChange: (showChrome) => setDraft({ ...draft, appearance: { ...draft.appearance, showChrome } }) }) }),
+          /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: /* @__PURE__ */ u2(Button, { onClick: () => setDraft({
+            ...draft,
+            appearance: { ...draft.appearance, width: 320, height: 420, x: -1, y: -1, fullscreen: false }
+          }), children: "Reset size and position" }) })
+        ] }),
+        section === "data" && /* @__PURE__ */ u2(S, { children: [
+          /* @__PURE__ */ u2("section", { class: "ls-settings-card", children: [
+            /* @__PURE__ */ u2("div", { class: "ls-settings-card-head", children: /* @__PURE__ */ u2("div", { children: [
+              /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Portable backup" }),
+              /* @__PURE__ */ u2("h3", { children: "LumiStage archive" }),
+              /* @__PURE__ */ u2("p", { children: "Export or restore this character\u2019s folders, expression slots, variants, and media." })
+            ] }) }),
+            /* @__PURE__ */ u2("div", { class: "ls-data-actions", children: [
+              /* @__PURE__ */ u2("button", { type: "button", disabled: !backend.profile, onClick: () => void client.exportProfile(), children: [
+                /* @__PURE__ */ u2(Icon, { name: "download", size: 20 }),
+                /* @__PURE__ */ u2("span", { children: [
+                  /* @__PURE__ */ u2("strong", { children: "Export archive" }),
+                  /* @__PURE__ */ u2("small", { children: "Create a complete `.lumistage.zip` backup" })
+                ] }),
+                /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
+              ] }),
+              /* @__PURE__ */ u2("button", { type: "button", disabled: !backend.profile, onClick: () => showImportModal(client, backend.profile), children: [
+                /* @__PURE__ */ u2(Icon, { name: "upload", size: 20 }),
+                /* @__PURE__ */ u2("span", { children: [
+                  /* @__PURE__ */ u2("strong", { children: "Import archive or media" }),
+                  /* @__PURE__ */ u2("small", { children: "Validate and merge into the active character" })
+                ] }),
+                /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ u2(DiagnosticsPanel, { client })
         ] })
       ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Permissions", description: missingPermissions.length ? `${missingPermissions.length} required permission${missingPermissions.length === 1 ? "" : "s"} unavailable.` : "Every requested LumiStage capability is available.", trailing: /* @__PURE__ */ u2(Status, { tone: missingPermissions.length ? "warning" : "success", children: missingPermissions.length ? "Review" : "Ready" }) }),
-      /* @__PURE__ */ u2("div", { class: "ls2-permission-strip", children: Object.entries(backend.permissions).map(([name, granted]) => /* @__PURE__ */ u2("span", { "data-granted": granted, children: [
-        /* @__PURE__ */ u2(Icon, { name: granted ? "check" : "warning", size: 13 }),
-        name.replace(/([A-Z])/g, " $1")
-      ] })) }),
-      missingPermissions.length > 0 && /* @__PURE__ */ u2(Button, { icon: "lock", onClick: () => void requestPermissions(), children: "Review permissions" })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "LumiStage data", description: "Profiles and timelines stay in extension-owned user storage. Archives include only LumiStage metadata and media." }),
-      /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { icon: "download", disabled: !backend.profile, onClick: () => void client.exportProfile(), children: "Export active profile" }),
-        /* @__PURE__ */ u2(Button, { icon: "upload", onClick: () => showImportModal(client, backend.profile), children: "Import archive" })
-      ] })
     ] })
   ] });
 }
-function AppearanceView({ client }) {
-  const { backend } = useClientState(client);
-  const [chatScoped, setChatScoped] = d2(Boolean(backend.timeline?.layoutOverride));
-  const [draft, setDraft] = d2({ ...backend.settings, appearance: client.effectiveAppearance() });
-  h2(() => {
-    setChatScoped(Boolean(backend.timeline?.layoutOverride));
-    setDraft({ ...backend.settings, appearance: client.effectiveAppearance() });
-  }, [backend.settings.revision, backend.timeline?.revision]);
-  const appearance = draft.appearance;
-  const patch = (value) => setDraft({ ...draft, appearance: { ...appearance, ...value } });
-  async function save() {
-    if (chatScoped) await client.saveChatLayout(appearance);
-    else {
-      if (backend.timeline?.layoutOverride) await client.saveChatLayout(null);
-      await client.saveSettings(draft);
-    }
-  }
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "Stage presentation", title: "Appearance", description: "LumiStage inherits Lumiverse colors, glass, radii, shadows, font, and UI scaling.", actions: /* @__PURE__ */ u2(Button, { icon: "check", variant: "primary", onClick: () => void save(), children: "Save changes" }) }),
-    /* @__PURE__ */ u2(Surface, { class: "ls2-appearance-preview", padding: "none", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-preview-window", children: [
-        /* @__PURE__ */ u2("div", { class: "ls2-preview-toolbar", children: [
-          /* @__PURE__ */ u2("span", {}),
-          /* @__PURE__ */ u2("span", {}),
-          /* @__PURE__ */ u2("span", {})
-        ] }),
-        /* @__PURE__ */ u2("div", { class: "ls2-preview-actors", children: [
-          /* @__PURE__ */ u2("i", {}),
-          /* @__PURE__ */ u2("i", { "data-focus": true })
-        ] }),
-        /* @__PURE__ */ u2("div", { class: "ls2-preview-caption", children: "Focused actor \xB7 Outfit / Expression" })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "ls2-preview-copy", children: [
-        /* @__PURE__ */ u2("strong", { children: "Live preview language" }),
-        /* @__PURE__ */ u2("span", { children: "Every surface and accent shown here comes from the active Lumiverse theme." })
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: /* @__PURE__ */ u2(Toggle, { checked: chatScoped, disabled: !backend.activeChatId, onChange: setChatScoped, label: "Chat-specific layout", hint: "Store geometry and presentation on this LumiStage timeline instead of the global default." }) }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Motion and composition" }),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Transition", children: /* @__PURE__ */ u2("select", { class: "ls2-select", value: appearance.transition, onChange: (event) => patch({ transition: event.currentTarget.value }), children: [
-          /* @__PURE__ */ u2("option", { value: "crossfade", children: "Crossfade" }),
-          /* @__PURE__ */ u2("option", { value: "lift", children: "Lift" }),
-          /* @__PURE__ */ u2("option", { value: "cut", children: "Cut" })
-        ] }) }),
-        /* @__PURE__ */ u2(Field, { label: `Duration \xB7 ${appearance.transitionMs} ms`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "0", max: "1000", step: "20", value: appearance.transitionMs, onInput: (event) => patch({ transitionMs: Number(event.currentTarget.value) }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Focused actor \xB7 ${appearance.focusedScale.toFixed(2)}\xD7`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".8", max: "1.3", step: ".01", value: appearance.focusedScale, onInput: (event) => patch({ focusedScale: Number(event.currentTarget.value) }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Ensemble overlap \xB7 ${Math.round(appearance.ensembleOverlap * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: "0", max: ".8", step: ".02", value: appearance.ensembleOverlap, onInput: (event) => patch({ ensembleOverlap: Number(event.currentTarget.value) }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Stage opacity \xB7 ${Math.round(appearance.opacity * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".1", max: "1", step: ".05", value: appearance.opacity, onInput: (event) => patch({ opacity: Number(event.currentTarget.value) }) }) }),
-        /* @__PURE__ */ u2(Field, { label: `Background actors \xB7 ${Math.round(appearance.idleOpacity * 100)}%`, children: /* @__PURE__ */ u2("input", { class: "ls2-range", type: "range", min: ".05", max: "1", step: ".05", value: appearance.idleOpacity, onInput: (event) => patch({ idleOpacity: Number(event.currentTarget.value) }) }) })
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Stage chrome" }),
-      /* @__PURE__ */ u2(Toggle, { checked: appearance.showChrome, onChange: (showChrome) => patch({ showChrome }), label: "Floating window frame", hint: "Use Lumiverse glass, border, and shadow tokens around the stage." }),
-      /* @__PURE__ */ u2(Toggle, { checked: appearance.showCaptions, onChange: (showCaptions) => patch({ showCaptions }), label: "State captions", hint: "Show actor, outfit, and expression below each sprite." }),
-      /* @__PURE__ */ u2(Toggle, { checked: appearance.visible, onChange: (visible) => patch({ visible }), label: "Stage visible", hint: "The drawer and quick selector remain available while hidden." })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Window size" }),
-      /* @__PURE__ */ u2("div", { class: "ls2-form-grid", children: [
-        /* @__PURE__ */ u2(Field, { label: "Width", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", min: "200", max: "1200", value: appearance.width, onInput: (event) => patch({ width: Number(event.currentTarget.value) }) }) }),
-        /* @__PURE__ */ u2(Field, { label: "Height", children: /* @__PURE__ */ u2("input", { class: "ls2-input", type: "number", min: "240", max: "1000", value: appearance.height, onInput: (event) => patch({ height: Number(event.currentTarget.value) }) }) })
-      ] })
-    ] })
-  ] });
-}
-function DiagnosticsView({ client, profile }) {
-  const { backend } = useClientState(client);
-  const [report, setReport] = d2(null);
-  const issues = profile ? inspectProfile(profile) : [];
-  async function refresh() {
-    try {
-      setReport(await client.diagnostics());
-    } catch (error) {
-      client.notify("error", error instanceof Error ? error.message : "Diagnostics failed.");
-    }
-  }
-  async function copy() {
-    await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
-    client.notify("success", "Privacy-safe diagnostics copied.");
-  }
-  return /* @__PURE__ */ u2("div", { class: "ls2-view", children: [
-    /* @__PURE__ */ u2(ViewHeader, { eyebrow: "System health", title: "Diagnostics", description: "Runtime, catalog, storage, and permission health without transcripts or raw model output.", actions: /* @__PURE__ */ u2(S, { children: [
-      /* @__PURE__ */ u2(Button, { icon: "refresh", onClick: () => void refresh(), children: "Refresh" }),
-      /* @__PURE__ */ u2(Button, { icon: "copy", variant: "primary", disabled: !report, onClick: () => void copy(), children: "Copy report" })
-    ] }) }),
-    /* @__PURE__ */ u2("div", { class: "ls2-health-grid", children: Object.entries(backend.permissions).map(([name, granted]) => /* @__PURE__ */ u2("div", { "data-good": granted, children: [
-      /* @__PURE__ */ u2("span", { children: /* @__PURE__ */ u2(Icon, { name: granted ? "success" : "warning", size: 16 }) }),
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("strong", { children: name.replace(/([A-Z])/g, " $1") }),
-        /* @__PURE__ */ u2("small", { children: granted ? "Granted" : "Unavailable" })
-      ] })
-    ] })) }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Catalog integrity", description: issues.length ? `${issues.length} finding${issues.length === 1 ? "" : "s"} need review.` : "No structural issues found.", trailing: /* @__PURE__ */ u2(Status, { tone: issues.some((item) => item.severity === "error") ? "danger" : issues.length ? "warning" : "success", children: issues.length ? "Review" : "Healthy" }) }),
-      issues.length > 0 && /* @__PURE__ */ u2("div", { class: "ls2-issue-list", children: issues.slice(0, 40).map((issue) => /* @__PURE__ */ u2("div", { "data-tone": issue.severity, children: [
-        /* @__PURE__ */ u2(Icon, { name: issue.severity === "error" ? "warning" : "info", size: 15 }),
-        /* @__PURE__ */ u2("span", { children: issue.message })
-      ] })) })
-    ] }),
-    /* @__PURE__ */ u2(InlineNotice, { tone: "success", children: [
-      /* @__PURE__ */ u2("strong", { children: "Privacy boundary active." }),
-      /* @__PURE__ */ u2("span", { children: "Generated reports exclude transcript content and raw provider responses." })
-    ] }),
-    report && /* @__PURE__ */ u2("pre", { class: "ls2-diagnostic-output", children: JSON.stringify(report, null, 2) })
-  ] });
-}
-function Studio({ client }) {
-  const state = useClientState(client);
-  const [view, setView] = d2("stage");
-  const [moreOpen, setMoreOpen] = d2(false);
-  const [draft, setDraft] = d2(state.backend.profile);
+function StudioWorkspace(props) {
+  const state = useClientState(props.client);
+  const backendProfile = state.backend.profile;
+  const [view, setView] = d2(props.initialView ?? "library");
+  const [draft, setDraft] = d2(
+    () => backendProfile ? structuredClone(backendProfile) : null
+  );
+  const [history, setHistory] = d2([]);
+  const [future, setFuture] = d2([]);
   const [dirty, setDirty] = d2(false);
-  const [selected, setSelected] = d2(/* @__PURE__ */ new Set());
-  const undoRef = A2([]);
-  const redoRef = A2([]);
-  const [, renderHistory] = d2(0);
   h2(() => {
-    if (!dirty || state.backend.profile?.revision !== draft?.revision) {
-      setDraft(state.backend.profile ? structuredClone(state.backend.profile) : null);
-      setDirty(false);
-      undoRef.current = [];
-      redoRef.current = [];
-      renderHistory((value) => value + 1);
-    }
-  }, [state.backend.profile?.revision]);
-  h2(() => {
-    if (!moreOpen) return;
-    const closeMenu = (event) => {
-      if (event.key === "Escape") setMoreOpen(false);
-    };
-    window.addEventListener("keydown", closeMenu);
-    return () => window.removeEventListener("keydown", closeMenu);
-  }, [moreOpen]);
+    setDraft(backendProfile ? structuredClone(backendProfile) : null);
+    setHistory([]);
+    setFuture([]);
+    setDirty(false);
+  }, [backendProfile?.characterId, backendProfile?.revision]);
   function update(mutator) {
     if (!draft) return;
+    const before = structuredClone(draft);
     const next = structuredClone(draft);
     mutator(next);
-    undoRef.current.push(structuredClone(draft));
-    if (undoRef.current.length > 50) undoRef.current.shift();
-    redoRef.current = [];
     next.updatedAt = Date.now();
+    setHistory((items) => [...items.slice(-39), before]);
+    setFuture([]);
     setDraft(next);
     setDirty(true);
-    renderHistory((value) => value + 1);
   }
-  function mutate(mutation) {
+  function replace(profile) {
     if (!draft) return;
-    undoRef.current.push(structuredClone(draft));
-    redoRef.current = [];
-    setDraft(applyBatchMutation(draft, mutation));
+    setHistory((items) => [...items.slice(-39), structuredClone(draft)]);
+    setFuture([]);
+    setDraft(structuredClone(profile));
     setDirty(true);
-    renderHistory((value) => value + 1);
   }
   function undo() {
-    const previous = undoRef.current.pop();
+    const previous = history.at(-1);
     if (!previous || !draft) return;
-    redoRef.current.push(structuredClone(draft));
-    setDraft(previous);
+    setHistory(history.slice(0, -1));
+    setFuture([structuredClone(draft), ...future].slice(0, 40));
+    setDraft(structuredClone(previous));
     setDirty(true);
-    renderHistory((value) => value + 1);
   }
   function redo() {
-    const next = redoRef.current.pop();
+    const next = future[0];
     if (!next || !draft) return;
-    undoRef.current.push(structuredClone(draft));
-    setDraft(next);
+    setFuture(future.slice(1));
+    setHistory([...history, structuredClone(draft)].slice(-40));
+    setDraft(structuredClone(next));
     setDirty(true);
-    renderHistory((value) => value + 1);
   }
-  async function save() {
+  async function saveProfile() {
     if (!draft) return;
     try {
-      await client.saveProfile(draft);
+      await props.client.saveProfile(draft);
       setDirty(false);
-      client.notify("success", "LumiStage library saved.");
+      props.client.notify("success", "Character library saved.");
     } catch (error) {
-      client.notify("error", error instanceof Error ? error.message : "Save failed.");
+      props.client.notify("error", error instanceof Error ? error.message : "Could not save the library.");
     }
   }
-  return /* @__PURE__ */ u2("div", { class: "ls2-root", children: /* @__PURE__ */ u2("div", { class: "ls2-drawer", children: [
-    /* @__PURE__ */ u2("nav", { class: "ls2-nav", "aria-label": "LumiStage workspace", children: [
-      /* @__PURE__ */ u2("div", { class: "ls2-nav-primary", children: [
-        PRIMARY_NAV.map((item) => /* @__PURE__ */ u2("button", { type: "button", "data-active": view === item.id, "aria-current": view === item.id ? "page" : void 0, onClick: () => {
-          setView(item.id);
-          setMoreOpen(false);
-        }, children: [
-          /* @__PURE__ */ u2(Icon, { name: item.icon, size: 17 }),
-          /* @__PURE__ */ u2("span", { children: item.label })
-        ] })),
-        /* @__PURE__ */ u2("button", { type: "button", "data-active": SECONDARY_NAV.some((item) => item.id === view), "aria-expanded": moreOpen, "aria-haspopup": "menu", onClick: () => setMoreOpen((value) => !value), children: [
-          /* @__PURE__ */ u2(Icon, { name: "menu", size: 17 }),
-          /* @__PURE__ */ u2("span", { children: "More" })
+  function changeCharacter(characterId) {
+    if (dirty) {
+      props.client.notify("warning", "Save or undo your library changes before switching characters.");
+      return;
+    }
+    props.client.refresh(state.backend.activeChatId, characterId);
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls-studio", children: [
+    /* @__PURE__ */ u2(ProgressNotice, { client: props.client }),
+    /* @__PURE__ */ u2("header", { class: "ls-studio-topbar", children: [
+      /* @__PURE__ */ u2("div", { class: "ls-studio-brand", children: [
+        /* @__PURE__ */ u2("span", { class: "ls-brand-mark", children: /* @__PURE__ */ u2(Icon, { name: "stage", size: 18 }) }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: "LumiStage" }),
+          /* @__PURE__ */ u2("small", { children: "Expression Studio" })
         ] })
       ] }),
-      moreOpen && /* @__PURE__ */ u2("div", { class: "ls2-nav-menu", role: "menu", children: [
-        /* @__PURE__ */ u2("div", { class: "ls2-nav-menu-head", children: [
-          /* @__PURE__ */ u2("span", { children: "Workspace" }),
-          /* @__PURE__ */ u2(IconButton, { icon: "close", label: "Close menu", onClick: () => setMoreOpen(false) })
+      /* @__PURE__ */ u2("nav", { "aria-label": "Studio views", children: [
+        /* @__PURE__ */ u2("button", { type: "button", "data-active": view === "library", onClick: () => setView("library"), children: [
+          /* @__PURE__ */ u2(Icon, { name: "library", size: 16 }),
+          "Library"
         ] }),
-        SECONDARY_NAV.map((item) => /* @__PURE__ */ u2("button", { type: "button", role: "menuitem", "data-active": view === item.id, "aria-current": view === item.id ? "page" : void 0, onClick: () => {
-          setView(item.id);
-          setMoreOpen(false);
-        }, children: [
-          /* @__PURE__ */ u2("span", { class: "ls2-nav-menu-icon", children: /* @__PURE__ */ u2(Icon, { name: item.icon, size: 18 }) }),
-          /* @__PURE__ */ u2("span", { children: [
-            /* @__PURE__ */ u2("strong", { children: item.label }),
-            /* @__PURE__ */ u2("small", { children: item.id === "automation" ? "Detection and confidence" : item.id === "appearance" ? "Stage layout and motion" : item.id === "settings" ? "Connections and extension data" : "Health and privacy report" })
-          ] }),
-          /* @__PURE__ */ u2(Icon, { name: "chevronRight", size: 16 })
-        ] }))
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(ProgressNotice, { client }),
-    /* @__PURE__ */ u2("main", { class: "ls2-content", children: [
-      view === "stage" && /* @__PURE__ */ u2(LiveView, { client, navigate: setView }),
-      view === "library" && /* @__PURE__ */ u2(LibraryView, { client, profile: draft, update, selected, setSelected, mutate, undo, redo, canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 }),
-      view === "automation" && /* @__PURE__ */ u2(AutomationView, { client, openSettings: () => setView("settings") }),
-      view === "appearance" && /* @__PURE__ */ u2(AppearanceView, { client }),
-      view === "settings" && /* @__PURE__ */ u2(SettingsView, { client }),
-      view === "diagnostics" && /* @__PURE__ */ u2(DiagnosticsView, { client, profile: draft })
-    ] }),
-    (dirty || view === "library") && /* @__PURE__ */ u2("div", { class: "ls2-savebar", "data-dirty": dirty, children: [
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-save-dot" }),
-        /* @__PURE__ */ u2("span", { children: dirty ? "Unsaved library changes" : "Library is up to date" })
+        /* @__PURE__ */ u2("button", { type: "button", "data-active": view === "stage", onClick: () => setView("stage"), children: [
+          /* @__PURE__ */ u2(Icon, { name: "stage", size: 16 }),
+          "Live Stage"
+        ] }),
+        /* @__PURE__ */ u2("button", { type: "button", "data-active": view === "settings", onClick: () => setView("settings"), children: [
+          /* @__PURE__ */ u2(Icon, { name: "settings", size: 16 }),
+          "Settings"
+        ] })
       ] }),
-      /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { size: "small", variant: "ghost", disabled: !dirty, onClick: () => {
-          setDraft(state.backend.profile ? structuredClone(state.backend.profile) : null);
-          setDirty(false);
-        }, children: "Revert" }),
-        /* @__PURE__ */ u2(Button, { size: "small", variant: "primary", icon: "check", disabled: !dirty || state.busy, onClick: () => void save(), children: "Save" })
+      /* @__PURE__ */ u2("div", { class: "ls-studio-context", children: [
+        /* @__PURE__ */ u2("div", { class: "ls-character-select", children: /* @__PURE__ */ u2(
+          HostSelect,
+          {
+            client: props.client,
+            label: "Studio character",
+            value: draft?.characterId ?? "",
+            onChange: changeCharacter,
+            compact: true,
+            options: state.backend.stageProfiles.map((profile) => ({
+              value: profile.characterId,
+              label: profile.characterName,
+              sublabel: `${profile.outfits.length} outfits`
+            }))
+          }
+        ) }),
+        view === "library" && /* @__PURE__ */ u2(
+          Button,
+          {
+            size: "small",
+            icon: "check",
+            variant: "primary",
+            disabled: !dirty || state.busy,
+            onClick: () => void saveProfile(),
+            children: state.busy ? "Saving\u2026" : dirty ? "Save changes" : "Saved"
+          }
+        )
       ] })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-studio-content", children: [
+      view === "library" && draft && /* @__PURE__ */ u2(
+        LibraryView,
+        {
+          client: props.client,
+          profile: draft,
+          update,
+          replace,
+          undo,
+          redo,
+          canUndo: history.length > 0,
+          canRedo: future.length > 0
+        }
+      ),
+      view === "library" && !draft && /* @__PURE__ */ u2("div", { class: "ls-page-center", children: /* @__PURE__ */ u2(
+        EmptyState,
+        {
+          icon: "library",
+          title: "Choose a character",
+          description: "Open a character or chat in Lumiverse, then return to build its outfit library."
+        }
+      ) }),
+      view === "stage" && /* @__PURE__ */ u2(LiveStageView, { client: props.client }),
+      view === "settings" && /* @__PURE__ */ u2(SettingsView, { client: props.client })
     ] })
-  ] }) });
+  ] });
 }
-function CharacterSetup({ client, characterId, onOpenStudio }) {
-  const { backend } = useClientState(client);
-  const profile = backend.profile?.characterId === characterId ? backend.profile : null;
-  h2(() => client.send({ type: "character-editor", characterId }), [characterId]);
-  if (!profile) return /* @__PURE__ */ u2("div", { class: "ls2-root ls2-character-panel", children: /* @__PURE__ */ u2("div", { class: "ls2-loading", children: [
-    /* @__PURE__ */ u2("span", {}),
-    /* @__PURE__ */ u2("strong", { children: "Loading LumiStage profile\u2026" })
-  ] }) });
-  const assets = allAssets(profile);
-  const outfits = profile.actors.reduce((sum, actor) => sum + actor.outfits.length, 0);
-  return /* @__PURE__ */ u2("div", { class: "ls2-root ls2-character-panel", children: [
-    /* @__PURE__ */ u2("div", { class: "ls2-character-hero", children: [
-      /* @__PURE__ */ u2(ContextAvatar, { name: profile.characterName }),
+function CharacterSetup(props) {
+  const { backend, busy } = useClientState(props.client);
+  const profile = backend.profile?.characterId === props.characterId ? backend.profile : null;
+  const [outfitId, setOutfitId] = d2("");
+  const outfit = selectedOutfit(profile, outfitId);
+  h2(() => {
+    props.client.send({ type: "character-editor", characterId: props.characterId });
+  }, [props.characterId]);
+  h2(() => {
+    if (profile && !profile.outfits.some((item) => item.id === outfitId)) {
+      setOutfitId(profile.defaultOutfitId ?? profile.outfits[0]?.id ?? "");
+    }
+  }, [profile?.revision, outfitId]);
+  async function commit(mutator) {
+    if (!profile) return;
+    const next = structuredClone(profile);
+    mutator(next);
+    try {
+      await props.client.saveProfile(next);
+    } catch (error) {
+      props.client.notify("error", error instanceof Error ? error.message : "Could not save profile.");
+    }
+  }
+  if (!profile) {
+    return /* @__PURE__ */ u2("div", { class: "ls-character-setup ls-character-loading", children: [
+      /* @__PURE__ */ u2("span", { class: "ls-loading-pulse" }),
+      /* @__PURE__ */ u2("strong", { children: "Loading LumiStage profile\u2026" })
+    ] });
+  }
+  return /* @__PURE__ */ u2("div", { class: "ls-character-setup", children: [
+    /* @__PURE__ */ u2("div", { class: "ls-character-setup-head", children: [
       /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2("span", { class: "ls2-eyebrow", children: "Independent visual profile" }),
+        /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Independent expression library" }),
         /* @__PURE__ */ u2("h2", { children: profile.characterName }),
-        /* @__PURE__ */ u2("p", { children: "Actor, outfit, expression, and sprite direction owned entirely by LumiStage." })
-      ] })
-    ] }),
-    /* @__PURE__ */ u2("div", { class: "ls2-metric-grid", children: [
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2(Icon, { name: "actors", size: 18 }),
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: profile.actors.length }),
-          "Actors"
+        /* @__PURE__ */ u2("p", { children: [
+          profile.outfits.length,
+          " outfits \xB7 ",
+          countExpressions(profile),
+          " expressions \xB7 ",
+          allVariants(profile).length,
+          " sprites"
         ] })
       ] }),
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          icon: "expand",
+          variant: "primary",
+          onClick: () => props.onOpenStudio(profile.characterId),
+          children: "Open Studio"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-character-outfit-strip", children: [
+      profile.outfits.map((item) => /* @__PURE__ */ u2("button", { type: "button", "data-active": item.id === outfit?.id, onClick: () => setOutfitId(item.id), children: [
+        /* @__PURE__ */ u2(Icon, { name: "outfit", size: 15 }),
+        /* @__PURE__ */ u2("span", { children: item.name }),
+        /* @__PURE__ */ u2("small", { children: item.expressions.length })
+      ] })),
+      /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: "ls-character-add-outfit",
+          onClick: () => showTextPrompt(
+            props.client,
+            { title: "New outfit", label: "Outfit name", submitLabel: "Create outfit" },
+            (name) => commit((next) => {
+              const created = createOutfit(name);
+              created.order = next.outfits.length;
+              next.outfits.push(created);
+              next.defaultOutfitId ??= created.id;
+            })
+          ),
+          children: [
+            /* @__PURE__ */ u2(Icon, { name: "plus", size: 15 }),
+            "Add outfit"
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-character-toolbar", children: [
       /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2(Icon, { name: "outfit", size: 18 }),
+        /* @__PURE__ */ u2("strong", { children: outfit?.name ?? "Outfit" }),
         /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: outfits }),
-          "Outfits"
+          outfit?.expressions.length ?? 0,
+          " expression slots"
         ] })
       ] }),
-      /* @__PURE__ */ u2("div", { children: [
-        /* @__PURE__ */ u2(Icon, { name: "image", size: 18 }),
-        /* @__PURE__ */ u2("span", { children: [
-          /* @__PURE__ */ u2("strong", { children: assets.length }),
-          "Media"
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ u2(Surface, { children: [
-      /* @__PURE__ */ u2(SectionTitle, { title: "Manage this profile", description: "Open the full studio for visual libraries, batch operations, automation, archives, and diagnostics." }),
       /* @__PURE__ */ u2(Toolbar, { children: [
-        /* @__PURE__ */ u2(Button, { icon: "stage", variant: "primary", onClick: onOpenStudio, children: "Open LumiStage" }),
-        /* @__PURE__ */ u2(Button, { icon: "upload", onClick: () => showImportModal(client, profile), children: "Import media" })
+        /* @__PURE__ */ u2(
+          Button,
+          {
+            size: "small",
+            icon: "check",
+            disabled: !outfit || profile.defaultOutfitId === outfit.id || busy,
+            onClick: () => void commit((next) => {
+              next.defaultOutfitId = outfit?.id ?? null;
+            }),
+            children: "Set default outfit"
+          }
+        ),
+        /* @__PURE__ */ u2(
+          Button,
+          {
+            size: "small",
+            icon: "upload",
+            onClick: () => showImportModal(props.client, profile, { outfitId: outfit?.id }),
+            children: "Import"
+          }
+        )
       ] })
+    ] }),
+    /* @__PURE__ */ u2("div", { class: "ls-character-expression-grid", children: [
+      (outfit?.expressions ?? []).map((expression) => {
+        const variant = firstVariant2(expression);
+        const view = variant ? backend.variantViews[variant.id] : null;
+        return /* @__PURE__ */ u2(
+          "button",
+          {
+            type: "button",
+            class: "ls-character-expression-card",
+            "data-default": outfit?.defaultExpressionId === expression.id,
+            onClick: () => void commit((next) => {
+              const target = next.outfits.find((item) => item.id === outfit?.id);
+              if (target) target.defaultExpressionId = expression.id;
+            }),
+            children: [
+              /* @__PURE__ */ u2(
+                Media,
+                {
+                  src: view?.thumbUrl ?? view?.url ?? null,
+                  kind: view?.mediaKind ?? "image",
+                  label: expression.name,
+                  contain: true
+                }
+              ),
+              /* @__PURE__ */ u2("span", { children: [
+                /* @__PURE__ */ u2("strong", { children: expression.name }),
+                /* @__PURE__ */ u2("small", { children: [
+                  expression.variants.length,
+                  " variants"
+                ] })
+              ] }),
+              outfit?.defaultExpressionId === expression.id && /* @__PURE__ */ u2("i", { children: [
+                /* @__PURE__ */ u2(Icon, { name: "check", size: 12 }),
+                "Default"
+              ] })
+            ]
+          }
+        );
+      }),
+      /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: "ls-character-new-expression",
+          onClick: () => showTextPrompt(
+            props.client,
+            { title: "New expression", label: "Expression name", placeholder: "Happy", submitLabel: "Create expression" },
+            (name) => commit((next) => {
+              const target = next.outfits.find((item) => item.id === outfit?.id);
+              if (!target) return;
+              const expression = createExpression(name);
+              expression.order = target.expressions.length;
+              target.expressions.push(expression);
+              target.defaultExpressionId ??= expression.id;
+            })
+          ),
+          children: [
+            /* @__PURE__ */ u2(Icon, { name: "plus", size: 20 }),
+            /* @__PURE__ */ u2("span", { children: "New expression" })
+          ]
+        }
+      )
     ] })
   ] });
 }
 
 // src/ui/styles.ts
-var LUMI_STAGE_CSS = `
-.ls2-root, .ls2-modal, .ls2-stage-root {
-  --ls2-text: var(--lumiverse-text, #ececf2);
-  --ls2-muted: var(--lumiverse-text-muted, #a3a5b4);
-  --ls2-dim: var(--lumiverse-text-dim, #747788);
-  --ls2-hint: var(--lumiverse-text-hint, var(--ls2-dim));
-  --ls2-canvas: var(--lumiverse-bg-deep, var(--lumiverse-bg, #101116));
-  --ls2-panel: var(--lumiverse-bg-elevated, var(--lumiverse-surface, #191a21));
-  --ls2-raised: var(--lumiverse-surface-raised, var(--lumiverse-bg-hover, #22232b));
-  --ls2-fill: var(--lumiverse-fill-subtle, rgba(255,255,255,.045));
-  --ls2-fill-hover: var(--lumiverse-fill-hover, rgba(255,255,255,.075));
-  --ls2-fill-strong: var(--lumiverse-fill-strong, rgba(255,255,255,.12));
-  --ls2-input: var(--lumiverse-input-bg, var(--ls2-fill));
-  --ls2-line: var(--lumiverse-border, rgba(255,255,255,.1));
-  --ls2-line-subtle: var(--lumiverse-border-subtle, var(--ls2-line));
-  --ls2-line-hover: var(--lumiverse-border-hover, rgba(255,255,255,.18));
-  --ls2-accent: var(--lumiverse-primary, var(--lumiverse-accent, #8b7cf6));
-  --ls2-accent-hover: var(--lumiverse-primary-hover, var(--lumiverse-accent, #9b8eff));
-  --ls2-accent-fg: var(--lumiverse-primary-contrast, var(--lumiverse-on-primary, #fff));
-  --ls2-accent-soft: var(--lumiverse-primary-010, var(--lumiverse-primary-muted, rgba(139,124,246,.1)));
-  --ls2-accent-medium: var(--lumiverse-primary-020, var(--lumiverse-primary-light, rgba(139,124,246,.18)));
-  --ls2-success: var(--lumiverse-success, #69c79f);
-  --ls2-warning: var(--lumiverse-warning, #e1a75c);
-  --ls2-danger: var(--lumiverse-danger, var(--lumiverse-error, #e17078));
-  --ls2-glass: var(--lcs-glass-bg, var(--lumiverse-bg-panel, var(--ls2-panel)));
-  --ls2-glass-border: var(--lcs-glass-border, var(--ls2-line));
-  --ls2-glass-blur: var(--lcs-glass-blur, 16px);
-  --ls2-radius-xs: var(--lcs-radius-xs, var(--lumiverse-radius-sm, 6px));
-  --ls2-radius-sm: var(--lcs-radius-sm, var(--lumiverse-radius-md, 9px));
-  --ls2-radius: var(--lcs-radius, var(--lumiverse-radius-lg, 13px));
-  --ls2-radius-lg: var(--lumiverse-radius-xl, 18px);
-  --ls2-shadow-sm: var(--lumiverse-shadow-sm, 0 4px 16px rgba(0,0,0,.14));
-  --ls2-shadow: var(--lumiverse-shadow-md, 0 12px 35px rgba(0,0,0,.2));
-  --ls2-transition: var(--lcs-transition-fast, var(--lumiverse-transition-fast, 150ms ease));
-  color: var(--ls2-text);
-  font-family: var(--lumiverse-font-family, Inter, ui-sans-serif, system-ui, sans-serif);
-  font-size: calc(14px * var(--lumiverse-font-scale, 1));
+var LUMI_STAGE_CSS = String.raw`
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form, .ls-stage-root) {
+  --ls-bg: var(--lumiverse-bg);
+  --ls-panel: color-mix(in srgb, var(--lumiverse-bg) 93%, var(--lumiverse-text) 7%);
+  --ls-panel-raised: color-mix(in srgb, var(--lumiverse-bg) 88%, var(--lumiverse-text) 12%);
+  --ls-panel-deep: color-mix(in srgb, var(--lumiverse-bg) 97%, var(--lumiverse-text) 3%);
+  --ls-hover: var(--lumiverse-fill-hover);
+  --ls-fill: var(--lumiverse-fill);
+  --ls-fill-subtle: var(--lumiverse-fill-subtle);
+  --ls-line: var(--lumiverse-border);
+  --ls-line-hover: var(--lumiverse-border-hover, var(--lumiverse-border));
+  --ls-text: var(--lumiverse-text);
+  --ls-muted: var(--lumiverse-text-muted);
+  --ls-dim: var(--lumiverse-text-dim);
+  --ls-accent: var(--lumiverse-accent, var(--lumiverse-primary));
+  --ls-accent-fg: var(--lumiverse-accent-fg, var(--lumiverse-bg));
+  --ls-success: var(--lumiverse-success);
+  --ls-warning: var(--lumiverse-warning);
+  --ls-danger: var(--lumiverse-danger);
+  --ls-radius: var(--lumiverse-radius);
+  --ls-fast: var(--lumiverse-transition-fast, 140ms ease);
+  box-sizing: border-box;
+  color: var(--ls-text);
+  font-size: calc(13px * var(--lumiverse-font-scale, 1));
   line-height: 1.45;
 }
-.ls2-root *, .ls2-root *::before, .ls2-root *::after,
-.ls2-modal *, .ls2-modal *::before, .ls2-modal *::after,
-.ls2-stage-root *, .ls2-stage-root *::before, .ls2-stage-root *::after { box-sizing: border-box; }
-.ls2-root :is(h1,h2,h3,p,figure), .ls2-modal :is(h1,h2,h3,p,figure), .ls2-stage-root :is(h1,h2,h3,p,figure) { margin: 0; }
-.ls2-root :is(button,input,select,textarea), .ls2-modal :is(button,input,select,textarea), .ls2-stage-root button { font: inherit; }
-.ls2-root button, .ls2-modal button, .ls2-stage-root button { color: inherit; }
-.ls2-root :focus-visible, .ls2-modal :focus-visible, .ls2-stage-root :focus-visible { outline: 2px solid var(--ls2-accent); outline-offset: 2px; }
-.ls2-root svg, .ls2-modal svg, .ls2-stage-root svg { display: block; flex: 0 0 auto; }
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form, .ls-stage-root) *,
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form, .ls-stage-root) *::before,
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form, .ls-stage-root) *::after { box-sizing: border-box; }
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form) button,
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form) input { font: inherit; }
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form) button:focus-visible,
+:where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-modal-form) input:focus-visible {
+  outline: 2px solid var(--ls-accent);
+  outline-offset: 2px;
+}
 
-.ls2-root { min-height: 100%; background: transparent; }
-.ls2-drawer {
-  min-height: 100%;
+.ls-kicker {
+  display: block;
+  color: var(--ls-accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.ls-toolbar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ls-button {
+  min-height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--ls-line);
+  border-radius: max(7px, calc(var(--ls-radius) * .75));
+  background: var(--ls-panel-raised);
+  color: var(--ls-text);
+  cursor: pointer;
+  font-weight: 650;
+  transition: background var(--ls-fast), border-color var(--ls-fast), transform var(--ls-fast);
+}
+.ls-button:hover:not(:disabled) { background: var(--ls-hover); border-color: var(--ls-line-hover); }
+.ls-button:active:not(:disabled) { transform: translateY(1px); }
+.ls-button:disabled { opacity: .45; cursor: default; }
+.ls-button-primary { border-color: color-mix(in srgb, var(--ls-accent) 72%, var(--ls-line)); background: var(--ls-accent); color: var(--ls-accent-fg); }
+.ls-button-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--ls-accent) 86%, var(--ls-text) 14%); }
+.ls-button-ghost { background: transparent; border-color: transparent; color: var(--ls-muted); }
+.ls-button-danger { color: var(--ls-danger); border-color: color-mix(in srgb, var(--ls-danger) 38%, var(--ls-line)); }
+.ls-button-small { min-height: 30px; padding: 0 9px; font-size: 11px; }
+.ls-icon-button {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ls-muted);
+  cursor: pointer;
+  transition: background var(--ls-fast), color var(--ls-fast), border-color var(--ls-fast);
+}
+.ls-icon-button:hover:not(:disabled), .ls-icon-button[data-active="true"] { background: var(--ls-hover); border-color: var(--ls-line); color: var(--ls-text); }
+.ls-icon-button[data-danger="true"]:hover:not(:disabled) { color: var(--ls-danger); border-color: color-mix(in srgb, var(--ls-danger) 35%, var(--ls-line)); }
+.ls-icon-button:disabled { opacity: .32; cursor: default; }
+.ls-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ls-field-label { color: var(--ls-text); font-size: 11px; font-weight: 700; }
+.ls-field-hint { color: var(--ls-dim); font-size: 10px; line-height: 1.4; }
+.ls-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--ls-line);
+  border-radius: 8px;
+  background: var(--ls-panel-deep);
+  color: var(--ls-text);
+}
+.ls-input:hover { border-color: var(--ls-line-hover); }
+.ls-native-control { min-width: 0; }
+.ls-native-pagination { padding: 10px 18px 14px; border-top: 1px solid var(--ls-line); background: var(--ls-bg); }
+.ls-native-badge { display: inline-flex; }
+.ls-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ls-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ls-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ls-dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-dim) 12%, transparent); }
+.ls-status[data-tone="success"] .ls-status-dot { background: var(--ls-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-success) 14%, transparent); }
+.ls-status[data-tone="warning"] .ls-status-dot { background: var(--ls-warning); }
+.ls-status[data-tone="danger"] .ls-status-dot { background: var(--ls-danger); }
+.ls-status[data-tone="accent"] .ls-status-dot { background: var(--ls-accent); }
+.ls-search {
+  min-width: 190px;
+  flex: 1 1 280px;
+  height: 36px;
   display: flex;
-  flex-direction: column;
-  container: lumi-stage / inline-size;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--ls-line);
+  border-radius: 9px;
+  background: var(--ls-panel-deep);
+  color: var(--ls-dim);
+}
+.ls-search:focus-within { border-color: var(--ls-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ls-accent) 14%, transparent); }
+.ls-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ls-text); }
+.ls-search button { width: 24px; height: 24px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ls-dim); cursor: pointer; }
+.ls-empty { min-height: 230px; display: grid; place-items: center; align-content: center; gap: 9px; padding: 28px; text-align: center; color: var(--ls-muted); }
+.ls-empty-icon { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--ls-line); border-radius: 15px; background: var(--ls-panel-raised); color: var(--ls-accent); }
+.ls-empty > strong { color: var(--ls-text); font-size: 15px; }
+.ls-empty > p { max-width: 390px; margin: 0; color: var(--ls-muted); font-size: 12px; }
+.ls-empty-action { margin-top: 5px; }
+.ls-media-fallback { display: grid; place-items: center; align-content: center; gap: 6px; background: var(--ls-panel-deep); color: var(--ls-dim); }
+.ls-media-fallback span { font-size: 9px; }
+.ls-global-notice {
+  position: absolute;
+  z-index: 100;
+  top: 12px;
+  left: 50%;
+  width: min(420px, calc(100% - 28px));
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid var(--ls-line);
+  border-radius: 10px;
+  background: var(--ls-panel-raised);
+  box-shadow: 0 12px 38px color-mix(in srgb, var(--ls-bg) 50%, transparent);
+}
+.ls-global-notice-copy { padding: 9px 12px; font-size: 11px; font-weight: 650; text-align: center; }
+.ls-progress { height: 2px; background: var(--ls-fill); }
+.ls-progress span { display: block; height: 100%; background: var(--ls-accent); transition: width var(--ls-fast); }
+
+/* Drawer dashboard */
+.ls-drawer {
+  position: relative;
+  min-height: 100%;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  background: var(--ls-bg);
+  color: var(--ls-text);
+}
+.ls-drawer-cue-line { display: flex; align-items: center; gap: 9px; margin-bottom: 20px; }
+.ls-drawer-cue-line > span { width: 30px; height: 1px; background: var(--ls-accent); box-shadow: 12px 0 22px var(--ls-accent); }
+.ls-drawer-cue-line > small { flex: 1; color: var(--ls-dim); font-size: 8px; font-weight: 800; letter-spacing: .16em; }
+.ls-drawer-context { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.ls-drawer-context h2 { margin: 5px 0 3px; font-size: 20px; line-height: 1.1; letter-spacing: -.02em; }
+.ls-drawer-context p { margin: 0; color: var(--ls-muted); font-size: 11px; }
+.ls-current-preview {
+  position: relative;
+  min-height: 185px;
+  display: grid;
+  grid-template-columns: minmax(100px, 42%) 1fr;
+  align-items: end;
+  gap: 14px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--ls-line);
+  border-radius: calc(var(--ls-radius) * 1.25);
+  background: var(--ls-panel);
+}
+.ls-current-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background:
-    radial-gradient(circle at 94% 0, color-mix(in srgb, var(--ls2-accent) 5%, transparent), transparent 25rem),
-    transparent;
+    linear-gradient(90deg, transparent 49.8%, color-mix(in srgb, var(--ls-line) 45%, transparent) 50%, transparent 50.2%),
+    linear-gradient(0deg, transparent 49.8%, color-mix(in srgb, var(--ls-line) 28%, transparent) 50%, transparent 50.2%);
+  background-size: 38px 38px;
+  mask-image: linear-gradient(to top, black, transparent 70%);
+}
+.ls-current-preview-media { position: relative; z-index: 1; width: 100%; height: 160px; object-fit: contain; }
+.ls-current-preview > div:last-child { position: relative; z-index: 1; padding-bottom: 10px; }
+.ls-current-preview > div:last-child strong { display: block; margin: 5px 0 2px; font-size: 15px; }
+.ls-current-preview > div:last-child small { display: block; color: var(--ls-muted); font-size: 10px; }
+.ls-current-preview-empty { min-height: 150px; grid-template-columns: 44px 1fr; align-items: center; }
+.ls-current-preview-empty > span { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ls-line); border-radius: 14px; color: var(--ls-accent); }
+.ls-current-preview-empty small { margin-top: 2px; }
+.ls-drawer-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--ls-line);
+  border-radius: 10px;
+  background: var(--ls-panel-deep);
+}
+.ls-drawer-status > div { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.ls-status-icon { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; background: var(--ls-fill-subtle); color: var(--ls-accent); }
+.ls-drawer-status strong, .ls-drawer-status small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-drawer-status strong { font-size: 11px; }
+.ls-drawer-status small { color: var(--ls-dim); font-size: 9px; }
+.ls-cue-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--ls-dim); }
+.ls-cue-dot[data-live="true"] { background: var(--ls-success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ls-success) 12%, transparent); }
+.ls-drawer-primary-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 14px 0 10px; }
+.ls-drawer-utility { border-top: 1px solid var(--ls-line); border-bottom: 1px solid var(--ls-line); }
+.ls-drawer-utility button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ls-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.ls-drawer-utility button + button { border-top: 1px solid var(--ls-line); }
+.ls-drawer-utility button:hover:not(:disabled) { color: var(--ls-text); }
+.ls-drawer-utility button:disabled { opacity: .4; cursor: default; }
+.ls-drawer-empty { display: flex; gap: 9px; margin-top: 12px; padding: 11px; border-radius: 9px; background: var(--ls-panel); color: var(--ls-muted); font-size: 10px; }
+
+/* Full Studio */
+.ls-studio {
+  position: relative;
+  width: 100%;
+  height: min(820px, calc(100dvh - 142px));
+  min-height: 620px;
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--ls-line);
+  border-radius: calc(var(--ls-radius) * 1.1);
+  background: var(--ls-bg);
+  color: var(--ls-text);
+}
+.ls-studio-topbar {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 210px 1fr minmax(260px, 380px);
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--ls-line);
+  background: var(--ls-panel);
+}
+.ls-studio-brand { display: flex; align-items: center; gap: 9px; }
+.ls-brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ls-accent) 35%, var(--ls-line)); border-radius: 9px; background: var(--ls-panel-raised); color: var(--ls-accent); }
+.ls-studio-brand strong, .ls-studio-brand small { display: block; }
+.ls-studio-brand strong { font-size: 13px; letter-spacing: .01em; }
+.ls-studio-brand small { color: var(--ls-dim); font-size: 9px; }
+.ls-studio-topbar nav { height: 100%; display: flex; justify-content: center; gap: 2px; }
+.ls-studio-topbar nav button {
+  position: relative;
+  min-width: 98px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ls-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ls-studio-topbar nav button::after { content: ""; position: absolute; right: 16px; bottom: -1px; left: 16px; height: 2px; border-radius: 2px 2px 0 0; background: transparent; }
+.ls-studio-topbar nav button:hover { color: var(--ls-text); background: var(--ls-fill-subtle); }
+.ls-studio-topbar nav button[data-active="true"] { color: var(--ls-text); }
+.ls-studio-topbar nav button[data-active="true"]::after { background: var(--ls-accent); box-shadow: 0 -4px 12px color-mix(in srgb, var(--ls-accent) 25%, transparent); }
+.ls-studio-context { min-width: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ls-character-select { min-width: 180px; max-width: 260px; flex: 1; }
+.ls-studio-content { min-height: 0; overflow: hidden; background: var(--ls-bg); }
+.ls-page { height: 100%; overflow: auto; padding: 26px 30px; background: var(--ls-bg); }
+.ls-page-center { height: 100%; display: grid; place-items: center; }
+.ls-workspace-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--ls-line); }
+.ls-workspace-title h2 { margin: 6px 0 4px; font-size: 24px; line-height: 1.05; letter-spacing: -.025em; }
+.ls-workspace-title p { max-width: 620px; margin: 0; color: var(--ls-muted); font-size: 12px; }
+.ls-workspace-actions { flex: 0 0 auto; }
+
+/* Library */
+.ls-library-view { height: 100%; min-height: 0; display: grid; grid-template-columns: 196px minmax(0, 1fr); background: var(--ls-bg); }
+.ls-library-view:has(.ls-variant-tray) { grid-template-columns: 196px minmax(0, 1fr) 310px; }
+.ls-outfit-rail { min-width: 0; display: grid; grid-template-rows: 58px minmax(0, 1fr) 34px; border-right: 1px solid var(--ls-line); background: var(--ls-panel); }
+.ls-outfit-rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 8px 14px; border-bottom: 1px solid var(--ls-line); }
+.ls-outfit-rail-head strong { display: block; margin-top: 2px; font-size: 12px; }
+.ls-outfit-list { overflow: auto; padding: 8px; }
+.ls-outfit-list > button {
+  position: relative;
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ls-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.ls-outfit-list > button:hover { background: var(--ls-hover); color: var(--ls-text); }
+.ls-outfit-list > button[data-active="true"] { border-color: color-mix(in srgb, var(--ls-accent) 30%, var(--ls-line)); background: var(--ls-panel-raised); color: var(--ls-text); }
+.ls-outfit-list > button[data-active="true"]::before { content: ""; position: absolute; top: 10px; bottom: 10px; left: -1px; width: 2px; border-radius: 0 2px 2px 0; background: var(--ls-accent); }
+.ls-outfit-list button span { min-width: 0; }
+.ls-outfit-list button strong, .ls-outfit-list button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-outfit-list button strong { font-size: 11px; }
+.ls-outfit-list button small { color: var(--ls-dim); font-size: 9px; }
+.ls-outfit-list button i { color: var(--ls-accent); font-size: 8px; font-style: normal; text-transform: uppercase; }
+.ls-outfit-rail-foot { display: flex; align-items: center; padding: 0 13px; border-top: 1px solid var(--ls-line); color: var(--ls-dim); font-size: 8px; }
+.ls-outfit-rail-foot span { display: inline-flex; align-items: center; gap: 5px; }
+.ls-library-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; background: var(--ls-bg); }
+.ls-library-toolbar { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--ls-line); background: var(--ls-bg); }
+.ls-outfit-title { min-width: 0; }
+.ls-outfit-title input {
+  max-width: min(430px, 65vw);
+  display: block;
+  margin: 2px 0 1px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ls-text);
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -.015em;
+}
+.ls-outfit-title > span:last-child { color: var(--ls-dim); font-size: 9px; }
+.ls-library-command-row { min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--ls-line); background: var(--ls-panel); }
+.ls-expression-scroll { min-height: 0; overflow: auto; padding: 18px; }
+.ls-expression-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 13px; align-content: start; }
+.ls-expression-card { min-width: 0; overflow: visible; border: 0; background: transparent; }
+.ls-expression-card-hit { width: 100%; display: block; padding: 0; border: 0; background: transparent; color: var(--ls-text); cursor: pointer; text-align: left; }
+.ls-expression-stack { position: relative; height: 174px; }
+.ls-stack-back { position: absolute; border: 1px solid var(--ls-line); border-radius: 10px; background: var(--ls-panel-raised); }
+.ls-stack-back-two { inset: 0 8px 10px 8px; transform: translateY(-5px); opacity: .45; }
+.ls-stack-back-one { inset: 0 4px 5px 4px; transform: translateY(-2px); opacity: .72; }
+.ls-expression-media {
+  position: absolute;
+  inset: 0 0 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--ls-line);
+  border-radius: 11px;
+  background: var(--ls-panel-deep);
+  object-fit: contain;
+  transition: border-color var(--ls-fast), transform var(--ls-fast), box-shadow var(--ls-fast);
+}
+.ls-expression-card-hit:hover .ls-expression-media { border-color: var(--ls-line-hover); transform: translateY(-2px); box-shadow: 0 10px 24px color-mix(in srgb, var(--ls-bg) 35%, transparent); }
+.ls-expression-card[data-inspected="true"] .ls-expression-media,
+.ls-expression-card[data-selected="true"] .ls-expression-media { border-color: var(--ls-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ls-accent) 20%, transparent); }
+.ls-default-flag, .ls-variant-count, .ls-card-check { position: absolute; z-index: 3; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--ls-line); background: var(--ls-panel-raised); }
+.ls-default-flag { top: 8px; left: 8px; min-height: 21px; padding: 0 7px; border-color: color-mix(in srgb, var(--ls-accent) 35%, var(--ls-line)); border-radius: 6px; color: var(--ls-accent); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.ls-variant-count { right: 8px; bottom: 8px; min-width: 24px; height: 22px; padding: 0 6px; border-radius: 11px; color: var(--ls-muted); font-size: 9px; font-weight: 800; }
+.ls-card-check { top: 8px; right: 8px; width: 23px; height: 23px; border-radius: 7px; color: var(--ls-accent-fg); }
+.ls-card-check[data-selected="true"] { border-color: var(--ls-accent); background: var(--ls-accent); }
+.ls-expression-copy { display: block; min-width: 0; padding: 9px 3px 0; }
+.ls-expression-copy strong, .ls-expression-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-expression-copy strong { font-size: 11px; }
+.ls-expression-copy small { color: var(--ls-dim); font-size: 9px; }
+.ls-batch-bar {
+  display: grid;
+  grid-template-columns: auto auto minmax(170px, 250px) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ls-accent) 35%, var(--ls-line));
+  background: var(--ls-panel-raised);
+}
+.ls-batch-count { display: grid; grid-template-columns: auto auto; column-gap: 5px; align-items: baseline; }
+.ls-batch-count span { color: var(--ls-accent); font-size: 16px; font-weight: 800; }
+.ls-batch-count strong { font-size: 10px; }
+.ls-batch-count small { grid-column: 1 / -1; color: var(--ls-dim); font-size: 8px; }
+.ls-batch-select-links { display: flex; gap: 8px; }
+.ls-batch-select-links button { padding: 0; border: 0; background: transparent; color: var(--ls-accent); cursor: pointer; font-size: 9px; }
+.ls-batch-destination { min-width: 0; }
+.ls-variant-tray { min-width: 0; min-height: 0; overflow: auto; padding: 16px; border-left: 1px solid var(--ls-line); background: var(--ls-panel); }
+.ls-tray-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--ls-line); }
+.ls-tray-head h3 { margin: 4px 0 0; font-size: 16px; }
+.ls-tray-actions { display: flex; gap: 6px; margin: 10px 0 14px; }
+.ls-variant-list { display: flex; flex-direction: column; gap: 7px; }
+.ls-variant-row { min-width: 0; display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px; border: 1px solid var(--ls-line); border-radius: 9px; background: var(--ls-panel-deep); }
+.ls-variant-preview { width: 54px; height: 54px; padding: 0; overflow: hidden; border: 0; border-radius: 7px; background: var(--ls-fill-subtle); cursor: zoom-in; }
+.ls-variant-preview > * { width: 100%; height: 100%; object-fit: contain; }
+.ls-variant-row > span { min-width: 0; }
+.ls-variant-row strong, .ls-variant-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-variant-row strong { font-size: 9px; }
+.ls-variant-row small { color: var(--ls-dim); font-size: 8px; }
+.ls-variant-row > div { display: flex; flex-direction: column; }
+.ls-variant-row .ls-icon-button { width: 26px; height: 24px; }
+.ls-tray-empty { display: flex; align-items: center; gap: 9px; padding: 14px; border: 1px dashed var(--ls-line); border-radius: 9px; color: var(--ls-muted); font-size: 9px; }
+.ls-lightbox { height: min(720px, 76vh); display: grid; place-items: center; background: var(--ls-bg); }
+.ls-lightbox > * { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* Live stage workspace */
+.ls-live-stage-board { position: relative; min-height: 340px; overflow: hidden; border: 1px solid var(--ls-line); border-radius: calc(var(--ls-radius) * 1.2); background: var(--ls-panel-deep); }
+.ls-live-stage-board::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--ls-accent) 11%, transparent), transparent 58%); }
+.ls-stage-board-grid { position: relative; min-height: 340px; display: flex; align-items: stretch; justify-content: center; gap: 16px; padding: 24px; }
+.ls-stage-board-grid > article { min-width: 190px; max-width: 290px; flex: 1; display: grid; grid-template-rows: minmax(230px, 1fr) auto; overflow: hidden; border: 1px solid var(--ls-line); border-radius: 13px; background: var(--ls-panel); opacity: .68; }
+.ls-stage-board-grid > article[data-focused="true"] { border-color: color-mix(in srgb, var(--ls-accent) 45%, var(--ls-line)); opacity: 1; box-shadow: 0 0 32px color-mix(in srgb, var(--ls-accent) 10%, transparent); }
+.ls-live-character-media { min-height: 230px; padding: 10px 10px 0; }
+.ls-live-character-media > * { width: 100%; height: 100%; object-fit: contain; }
+.ls-live-character-copy { padding: 12px; border-top: 1px solid var(--ls-line); background: var(--ls-panel-raised); }
+.ls-live-character-copy > strong, .ls-live-character-copy > small { display: block; }
+.ls-live-character-copy > strong { margin: 4px 0 1px; font-size: 13px; }
+.ls-live-character-copy > small { color: var(--ls-muted); font-size: 9px; }
+.ls-live-character-copy > div { display: flex; gap: 6px; margin-top: 8px; }
+.ls-live-character-copy > div span { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--ls-line); border-radius: 5px; color: var(--ls-dim); font-size: 8px; }
+.ls-live-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.ls-live-controls > section { padding: 17px; border: 1px solid var(--ls-line); border-radius: 11px; background: var(--ls-panel); }
+.ls-live-controls h3 { margin: 4px 0 10px; font-size: 15px; }
+.ls-live-controls p { color: var(--ls-muted); font-size: 10px; }
+
+/* Settings */
+.ls-settings-layout { min-height: 500px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; }
+.ls-settings-nav { display: flex; flex-direction: column; gap: 5px; }
+.ls-settings-nav button {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ls-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.ls-settings-nav button:hover { background: var(--ls-hover); color: var(--ls-text); }
+.ls-settings-nav button[data-active="true"] { border-color: var(--ls-line); background: var(--ls-panel-raised); color: var(--ls-text); }
+.ls-settings-nav button[data-active="true"]::before { content: ""; position: absolute; top: 9px; bottom: 9px; left: -1px; width: 2px; background: var(--ls-accent); }
+.ls-settings-nav strong, .ls-settings-nav small { display: block; }
+.ls-settings-nav strong { font-size: 10px; }
+.ls-settings-nav small { color: var(--ls-dim); font-size: 8px; }
+.ls-settings-content { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.ls-settings-card { padding: 20px; border: 1px solid var(--ls-line); border-radius: 12px; background: var(--ls-panel); }
+.ls-settings-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--ls-line); }
+.ls-settings-card-head h3 { margin: 5px 0 3px; font-size: 17px; }
+.ls-settings-card-head p { max-width: 600px; margin: 0; color: var(--ls-muted); font-size: 10px; }
+.ls-settings-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.ls-setting-row { min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 220px); align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid var(--ls-line); }
+.ls-setting-row > div:first-child strong, .ls-setting-row > div:first-child span { display: block; }
+.ls-setting-row > div:first-child strong { font-size: 10px; }
+.ls-setting-row > div:first-child span { margin-top: 2px; color: var(--ls-dim); font-size: 9px; }
+.ls-setting-row > div:last-child { display: flex; justify-content: flex-end; }
+.ls-settings-inline-actions { display: flex; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--ls-line); }
+.ls-data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ls-data-actions > button { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 14px; border: 1px solid var(--ls-line); border-radius: 10px; background: var(--ls-panel-deep); color: var(--ls-muted); cursor: pointer; text-align: left; }
+.ls-data-actions > button:hover:not(:disabled) { border-color: var(--ls-line-hover); background: var(--ls-hover); color: var(--ls-text); }
+.ls-data-actions > button:disabled { opacity: .4; cursor: default; }
+.ls-data-actions strong, .ls-data-actions small { display: block; }
+.ls-data-actions strong { color: var(--ls-text); font-size: 10px; }
+.ls-data-actions small { color: var(--ls-dim); font-size: 8px; }
+.ls-permission-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ls-permission-grid span { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid var(--ls-line); border-radius: 6px; color: var(--ls-danger); font-size: 8px; }
+.ls-permission-grid span[data-granted="true"] { color: var(--ls-success); }
+.ls-diagnostic-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.ls-diagnostic-summary > div { padding: 10px; border-radius: 8px; background: var(--ls-panel-deep); }
+.ls-diagnostic-summary span, .ls-diagnostic-summary strong, .ls-diagnostic-summary small { display: block; }
+.ls-diagnostic-summary span { color: var(--ls-dim); font-size: 8px; text-transform: uppercase; }
+.ls-diagnostic-summary strong { margin: 3px 0; font-size: 13px; text-transform: capitalize; }
+.ls-diagnostic-summary small { color: var(--ls-muted); font-size: 8px; }
+.ls-diagnostics-card pre { max-height: 260px; overflow: auto; margin: 12px 0 0; padding: 12px; border: 1px solid var(--ls-line); border-radius: 8px; background: var(--ls-panel-deep); color: var(--ls-muted); font-size: 9px; white-space: pre-wrap; }
+
+/* Character editor */
+.ls-character-setup { min-height: 320px; padding: 16px; color: var(--ls-text); background: var(--ls-bg); }
+.ls-character-loading { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 10px; color: var(--ls-muted); }
+.ls-loading-pulse { width: 26px; height: 26px; border: 2px solid var(--ls-line); border-top-color: var(--ls-accent); border-radius: 50%; animation: ls-spin .8s linear infinite; }
+.ls-character-setup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 15px; padding-bottom: 14px; border-bottom: 1px solid var(--ls-line); }
+.ls-character-setup-head h2 { margin: 5px 0 2px; font-size: 19px; }
+.ls-character-setup-head p { margin: 0; color: var(--ls-muted); font-size: 10px; }
+.ls-character-outfit-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; }
+.ls-character-outfit-strip button { flex: 0 0 auto; min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--ls-line); border-radius: 8px; background: var(--ls-panel); color: var(--ls-muted); cursor: pointer; }
+.ls-character-outfit-strip button[data-active="true"] { border-color: var(--ls-accent); background: var(--ls-panel-raised); color: var(--ls-text); }
+.ls-character-outfit-strip button small { min-width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; background: var(--ls-fill-subtle); color: var(--ls-dim); font-size: 8px; }
+.ls-character-add-outfit { border-style: dashed !important; }
+.ls-character-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; }
+.ls-character-toolbar > div strong, .ls-character-toolbar > div span { display: block; }
+.ls-character-toolbar > div strong { font-size: 12px; }
+.ls-character-toolbar > div span { color: var(--ls-dim); font-size: 9px; }
+.ls-character-expression-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 10px; }
+.ls-character-expression-card, .ls-character-new-expression { min-height: 154px; overflow: hidden; display: grid; grid-template-rows: 112px auto; padding: 0; border: 1px solid var(--ls-line); border-radius: 10px; background: var(--ls-panel); color: var(--ls-text); cursor: pointer; text-align: left; }
+.ls-character-expression-card:hover, .ls-character-new-expression:hover { border-color: var(--ls-line-hover); background: var(--ls-hover); }
+.ls-character-expression-card[data-default="true"] { border-color: color-mix(in srgb, var(--ls-accent) 45%, var(--ls-line)); }
+.ls-character-expression-card > :first-child { width: 100%; height: 112px; object-fit: contain; background: var(--ls-panel-deep); }
+.ls-character-expression-card > span { padding: 7px 8px; }
+.ls-character-expression-card strong, .ls-character-expression-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-character-expression-card strong { font-size: 10px; }
+.ls-character-expression-card small { color: var(--ls-dim); font-size: 8px; }
+.ls-character-expression-card i { position: absolute; display: none; }
+.ls-character-new-expression { place-items: center; align-content: center; grid-template-rows: auto auto; gap: 6px; border-style: dashed; color: var(--ls-muted); text-align: center; }
+
+/* Import, prompts, quick selector */
+.ls-modal-form, .ls-import-modal, .ls-quick-picker { background: var(--ls-bg); color: var(--ls-text); }
+.ls-modal-form { display: flex; flex-direction: column; gap: 18px; padding: 18px; }
+.ls-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ls-import-modal { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.ls-dropzone { position: relative; min-height: 210px; display: grid; place-items: center; align-content: center; gap: 7px; padding: 24px; border: 1px dashed var(--ls-line-hover); border-radius: 13px; background: var(--ls-panel-deep); text-align: center; }
+.ls-dropzone[data-dragging="true"] { border-color: var(--ls-accent); background: color-mix(in srgb, var(--ls-bg) 90%, var(--ls-accent) 10%); }
+.ls-dropzone input { position: absolute; inset: 0; z-index: 2; width: 100%; opacity: 0; cursor: pointer; }
+.ls-dropzone .ls-button { pointer-events: none; }
+.ls-dropzone-mark { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ls-accent) 35%, var(--ls-line)); border-radius: 14px; background: var(--ls-panel-raised); color: var(--ls-accent); }
+.ls-dropzone strong { font-size: 14px; }
+.ls-dropzone p { margin: 0 0 4px; color: var(--ls-muted); font-size: 10px; }
+.ls-import-mapping { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 260px); gap: 14px; padding: 15px; border: 1px solid var(--ls-line); border-radius: 11px; background: var(--ls-panel); }
+.ls-import-mapping h3 { margin: 4px 0 2px; font-size: 14px; }
+.ls-import-mapping p { margin: 0; color: var(--ls-muted); font-size: 9px; }
+.ls-mapping-preview { grid-column: 1 / -1; max-height: 155px; overflow: auto; padding: 7px; border-radius: 8px; background: var(--ls-panel-deep); }
+.ls-mapping-preview > div { display: flex; align-items: center; gap: 7px; padding: 5px 6px; color: var(--ls-muted); font-size: 9px; }
+.ls-mapping-preview small { display: block; padding: 5px 6px; color: var(--ls-dim); font-size: 8px; }
+.ls-validation-note { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid color-mix(in srgb, var(--ls-success) 28%, var(--ls-line)); border-radius: 8px; color: var(--ls-muted); font-size: 9px; }
+.ls-validation-note svg { color: var(--ls-success); }
+.ls-quick-picker { padding: 18px; }
+.ls-picker-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.ls-picker-body { min-height: 410px; display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; margin-top: 12px; }
+.ls-picker-expression-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 9px; align-content: start; max-height: 440px; overflow: auto; padding: 2px; }
+.ls-picker-expression { position: relative; overflow: hidden; padding: 0; border: 1px solid var(--ls-line); border-radius: 9px; background: var(--ls-panel); color: var(--ls-text); cursor: pointer; text-align: left; }
+.ls-picker-expression:hover { border-color: var(--ls-line-hover); }
+.ls-picker-expression[data-selected="true"] { border-color: var(--ls-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ls-accent) 18%, transparent); }
+.ls-picker-expression-media { width: 100%; height: 120px; object-fit: contain; background: var(--ls-panel-deep); }
+.ls-picker-expression > span { display: block; padding: 7px 8px; }
+.ls-picker-expression strong, .ls-picker-expression small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-picker-expression strong { font-size: 10px; }
+.ls-picker-expression small { color: var(--ls-dim); font-size: 8px; }
+.ls-picker-expression > i { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--ls-accent); color: var(--ls-accent-fg); }
+.ls-picker-variants { min-width: 0; padding: 13px; border: 1px solid var(--ls-line); border-radius: 10px; background: var(--ls-panel); }
+.ls-picker-variants h3 { margin: 4px 0 10px; font-size: 14px; }
+.ls-picker-variants > div { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; max-height: 365px; overflow: auto; }
+.ls-picker-variants button { min-width: 0; overflow: hidden; padding: 0; border: 1px solid var(--ls-line); border-radius: 8px; background: var(--ls-panel-deep); color: var(--ls-muted); cursor: pointer; }
+.ls-picker-variants button[data-selected="true"] { border-color: var(--ls-accent); color: var(--ls-text); }
+.ls-picker-variants button > :first-child { width: 100%; height: 86px; object-fit: contain; }
+.ls-picker-variants button span { display: block; overflow: hidden; padding: 5px; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.ls-picker-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--ls-line); }
+.ls-modal-empty { min-height: 320px; background: var(--ls-bg); }
+
+/* Floating stage */
+.ls-stage-root { width: 100%; height: 100%; opacity: var(--ls2-stage-opacity); color: var(--ls-text); }
+.ls-stage-chrome { position: relative; width: 100%; height: 100%; display: grid; grid-template-rows: 34px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--ls-line); border-radius: 13px; background: color-mix(in srgb, var(--ls-bg) 92%, transparent); backdrop-filter: blur(8px); }
+.ls-stage-root[data-chrome="false"] .ls-stage-chrome { grid-template-rows: 0 minmax(0, 1fr); border-color: transparent; background: transparent; backdrop-filter: none; }
+.ls-stage-root[data-chrome="false"] .ls-stage-grab { opacity: 0; pointer-events: none; }
+.ls-stage-grab { display: flex; align-items: center; justify-content: space-between; padding: 0 7px 0 10px; border-bottom: 1px solid var(--ls-line); background: var(--ls-panel); cursor: move; }
+.ls-stage-live { display: inline-flex; align-items: center; gap: 6px; color: var(--ls-muted); font-size: 9px; font-weight: 750; }
+.ls-stage-live > span { width: 6px; height: 6px; border-radius: 50%; background: var(--ls-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-success) 12%, transparent); }
+.ls-stage-actions { display: flex; }
+.ls-stage-actions button { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--ls-muted); cursor: pointer; }
+.ls-stage-actions button:hover { background: var(--ls-hover); color: var(--ls-text); }
+.ls-stage-ensemble { min-height: 0; display: flex; align-items: end; justify-content: center; overflow: hidden; padding: 8px; }
+.ls-stage-character { min-width: 0; height: 100%; flex: 1 1 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; margin: 0 calc(var(--ls2-stage-overlap) * -18%); opacity: var(--ls2-stage-idle-opacity); transform: scale(.94); transform-origin: bottom center; transition: opacity var(--ls2-stage-transition), transform var(--ls2-stage-transition); }
+.ls-stage-character[data-focused="true"] { z-index: 2; opacity: 1; transform: scale(var(--ls2-stage-focus-scale)); }
+.ls-stage-character-frame { min-height: 0; display: flex; align-items: end; justify-content: center; overflow: hidden; }
+.ls-stage-character-frame > * { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ls-stage-character figcaption { padding: 5px 7px; text-align: center; text-shadow: 0 1px 5px var(--ls-bg); }
+.ls-stage-character figcaption strong, .ls-stage-character figcaption span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-stage-character figcaption strong { font-size: 9px; }
+.ls-stage-character figcaption span { color: var(--ls-muted); font-size: 7px; }
+.ls-stage-waiting { display: grid; place-items: center; align-content: center; gap: 5px; color: var(--ls-muted); text-align: center; }
+.ls-stage-waiting > div { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--ls-line); border-radius: 13px; background: var(--ls-panel); color: var(--ls-accent); }
+.ls-stage-waiting strong { color: var(--ls-text); font-size: 11px; }
+.ls-stage-waiting span { font-size: 8px; }
+.ls-stage-resize { position: absolute; right: 1px; bottom: 1px; width: 22px; height: 22px; border: 0; background: transparent; cursor: nwse-resize; }
+.ls-stage-resize span { position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px; border-right: 1px solid var(--ls-muted); border-bottom: 1px solid var(--ls-muted); }
+.ls-stage-root[data-transition="cut"] .ls-stage-character { transition: none; }
+.ls-stage-root[data-transition="lift"] .ls-stage-character { transform: translateY(8px) scale(.94); }
+.ls-stage-root[data-transition="lift"] .ls-stage-character[data-focused="true"] { transform: translateY(0) scale(var(--ls2-stage-focus-scale)); }
+
+@keyframes ls-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+  .ls-studio-topbar { grid-template-columns: 170px 1fr auto; }
+  .ls-character-select { display: none; }
+  .ls-library-view:has(.ls-variant-tray) { grid-template-columns: 180px minmax(0, 1fr) 270px; }
+  .ls-outfit-rail { grid-template-rows: 58px minmax(0, 1fr); }
+  .ls-outfit-rail-foot { display: none; }
+  .ls-batch-bar { grid-template-columns: auto 1fr auto; }
+  .ls-batch-destination { grid-column: 1 / 3; }
+  .ls-expression-grid { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
 }
 
-.ls2-nav {
-  position: sticky; top: 0; z-index: 20;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--ls2-line-subtle);
-  background: color-mix(in srgb, var(--ls2-glass) 92%, transparent);
-  backdrop-filter: blur(var(--ls2-glass-blur));
+@media (max-width: 720px) {
+  .ls-studio { height: calc(100dvh - 96px); min-height: 500px; grid-template-rows: auto minmax(0, 1fr); border-radius: 0; }
+  .ls-studio-topbar { grid-template-columns: 1fr auto; grid-template-rows: 48px 42px; gap: 0; padding: 0 10px; }
+  .ls-studio-topbar nav { grid-column: 1 / -1; grid-row: 2; order: 3; border-top: 1px solid var(--ls-line); }
+  .ls-studio-topbar nav button { min-width: 0; flex: 1; padding: 0 8px; }
+  .ls-studio-context { grid-column: 2; grid-row: 1; }
+  .ls-library-view, .ls-library-view:has(.ls-variant-tray) { position: relative; display: grid; grid-template-columns: 1fr; grid-template-rows: 78px minmax(0, 1fr); }
+  .ls-outfit-rail { display: block; overflow: hidden; border-right: 0; border-bottom: 1px solid var(--ls-line); }
+  .ls-outfit-rail-head { height: 32px; padding: 2px 8px 0 10px; border: 0; }
+  .ls-outfit-rail-head .ls-kicker { display: none; }
+  .ls-outfit-list { display: flex; gap: 5px; overflow-x: auto; padding: 4px 8px 8px; }
+  .ls-outfit-list > button { width: auto; min-width: 122px; min-height: 38px; flex: 0 0 auto; grid-template-columns: 18px minmax(70px, 1fr); margin: 0; padding: 5px 7px; }
+  .ls-outfit-list > button i { display: none; }
+  .ls-outfit-list > button[data-active="true"]::before { top: auto; right: 12px; bottom: -1px; left: 12px; width: auto; height: 2px; }
+  .ls-library-toolbar { min-height: 52px; padding: 7px 10px; }
+  .ls-library-toolbar .ls-toolbar { display: none; }
+  .ls-library-command-row { flex-wrap: wrap; padding: 7px 10px; }
+  .ls-library-command-row .ls-search { flex-basis: 100%; }
+  .ls-library-command-row .ls-toolbar { width: 100%; justify-content: flex-end; }
+  .ls-expression-scroll { padding: 10px; }
+  .ls-expression-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .ls-expression-stack { height: 148px; }
+  .ls-variant-tray { position: absolute; z-index: 20; inset: 82px 0 0; border: 0; border-top: 1px solid var(--ls-line); background: var(--ls-bg); box-shadow: 0 -16px 40px color-mix(in srgb, var(--ls-bg) 45%, transparent); }
+  .ls-batch-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .ls-batch-select-links { flex: 1; }
+  .ls-batch-destination { width: 100%; order: 3; }
+  .ls-batch-bar > .ls-toolbar { width: 100%; order: 4; }
+  .ls-page { padding: 18px 14px; }
+  .ls-workspace-title { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; }
+  .ls-workspace-title h2 { font-size: 21px; }
+  .ls-stage-board-grid { overflow-x: auto; justify-content: flex-start; padding: 14px; }
+  .ls-stage-board-grid > article { min-width: 210px; }
+  .ls-live-controls { grid-template-columns: 1fr; }
+  .ls-settings-layout { display: block; }
+  .ls-settings-nav { flex-direction: row; overflow-x: auto; margin-bottom: 12px; }
+  .ls-settings-nav button { min-width: 150px; flex: 0 0 auto; }
+  .ls-settings-nav button[data-active="true"]::before { top: auto; right: 10px; bottom: -1px; left: 10px; width: auto; height: 2px; }
+  .ls-settings-card { padding: 15px; }
+  .ls-settings-form-grid, .ls-data-actions { grid-template-columns: 1fr; }
+  .ls-setting-row { grid-template-columns: 1fr auto; }
+  .ls-permission-grid, .ls-diagnostic-summary { grid-template-columns: 1fr 1fr; }
+  .ls-picker-controls { grid-template-columns: 1fr; }
+  .ls-picker-body { grid-template-columns: 1fr; }
+  .ls-picker-expression-grid { max-height: 300px; }
+  .ls-picker-variants { max-height: 220px; }
+  .ls-picker-variants > div { grid-template-columns: repeat(3, 1fr); max-height: 150px; }
+  .ls-picker-footer { align-items: stretch; flex-direction: column; }
+  .ls-picker-footer > .ls-toolbar { justify-content: flex-end; }
+  .ls-import-mapping { grid-template-columns: 1fr; }
+  .ls-mapping-preview { grid-column: 1; }
 }
-.ls2-nav-primary {
-  display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px;
-  max-width: 560px; margin: 0 auto;
+
+@media (max-width: 420px) {
+  .ls-drawer { padding: 14px; }
+  .ls-current-preview { min-height: 165px; grid-template-columns: 42% 1fr; padding: 10px; }
+  .ls-current-preview-media { height: 145px; }
+  .ls-drawer-primary-actions { grid-template-columns: 1fr; }
+  .ls-studio-brand small { display: none; }
+  .ls-studio-topbar nav button { font-size: 9px; }
+  .ls-studio-topbar nav button svg { display: none; }
+  .ls-studio-context .ls-button span { display: none; }
+  .ls-expression-stack { height: 132px; }
+  .ls-character-setup { padding: 12px; }
+  .ls-character-setup-head { align-items: stretch; flex-direction: column; }
+  .ls-character-toolbar { align-items: flex-start; flex-direction: column; }
+  .ls-character-expression-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ls-picker-variants > div { grid-template-columns: repeat(2, 1fr); }
+  .ls-picker-footer .ls-toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+  .ls-picker-footer .ls-button-primary { grid-column: 1 / -1; }
+  .ls-permission-grid, .ls-diagnostic-summary { grid-template-columns: 1fr; }
 }
-.ls2-nav-primary > button {
-  appearance: none; min-width: 0; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 7px 8px; border: 1px solid transparent; border-radius: var(--ls2-radius-sm);
-  color: var(--ls2-dim); background: transparent; cursor: pointer; transition: all var(--ls2-transition);
-}
-.ls2-nav-primary > button span { overflow: hidden; max-width: 100%; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-nav-primary > button:hover { color: var(--ls2-text); background: var(--ls2-fill-hover); }
-.ls2-nav-primary > button[data-active="true"] {
-  color: var(--ls2-accent);
-  border-color: color-mix(in srgb, var(--ls2-accent) 20%, var(--ls2-line));
-  background: var(--ls2-accent-soft);
-  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--ls2-accent) 72%, transparent);
-}
-.ls2-nav-menu {
-  position: absolute; top: calc(100% + 7px); right: 10px; left: 10px; z-index: 25;
-  max-width: 390px; margin-left: auto; overflow: hidden;
-  border: 1px solid var(--ls2-glass-border); border-radius: var(--ls2-radius-lg);
-  background: var(--lumiverse-bg-elevated, var(--lumiverse-bg, #191a21));
-  box-shadow: 0 22px 70px color-mix(in srgb,var(--ls2-canvas) 70%,transparent),var(--ls2-shadow);
-}
-.ls2-nav:has(.ls2-nav-menu)::after { content: ""; position: fixed; inset: 0; z-index: 24; pointer-events: none; background: color-mix(in srgb,var(--ls2-canvas) 38%,transparent); }
-.ls2-nav-menu-head { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 5px 7px 5px 13px; border-bottom: 1px solid var(--ls2-line); color: var(--ls2-muted); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.ls2-nav-menu > button {
-  appearance: none; width: 100%; min-height: 62px; display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 10px;
-  padding: 9px 12px; border: 0; border-bottom: 1px solid var(--ls2-line-subtle);
-  color: var(--ls2-muted); background: transparent; text-align: left; cursor: pointer; transition: all var(--ls2-transition);
-}
-.ls2-nav-menu > button:last-child { border-bottom: 0; }
-.ls2-nav-menu > button:hover, .ls2-nav-menu > button[data-active="true"] { color: var(--ls2-text); background: var(--ls2-fill-hover); }
-.ls2-nav-menu > button[data-active="true"] .ls2-nav-menu-icon { color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-nav-menu-icon { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
-.ls2-nav-menu > button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
-.ls2-nav-menu > button strong { color: inherit; font-size: 13px; }
-.ls2-nav-menu > button small { margin-top: 2px; color: var(--ls2-dim); font-size: 11px; }
-.ls2-content { flex: 1; min-height: 0; padding: 20px 16px 92px; }
-.ls2-view { display: flex; flex-direction: column; gap: 14px; min-width: 0; animation: ls2-enter .18s ease-out; }
 
-.ls2-view-header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 12px; padding: 2px 1px 3px; }
-.ls2-view-heading { min-width: 0; }
-.ls2-eyebrow { display: block; color: var(--ls2-accent); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.ls2-view-heading h2 { margin-top: 3px; font-size: 21px; line-height: 1.18; letter-spacing: -.025em; }
-.ls2-view-heading p { max-width: 520px; margin-top: 5px; color: var(--ls2-muted); font-size: 13px; line-height: 1.5; }
-.ls2-view-actions, .ls2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
-
-.ls2-surface {
-  min-width: 0; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius);
-  background: var(--ls2-panel); box-shadow: var(--ls2-shadow-sm);
-}
-.ls2-surface[data-padding="default"] { padding: 14px; }
-.ls2-surface[data-padding="small"] { padding: 9px 11px; }
-.ls2-surface[data-padding="none"] { padding: 0; overflow: hidden; }
-.ls2-surface[data-tone="accent"] { border-color: color-mix(in srgb, var(--ls2-accent) 32%, var(--ls2-line)); background: linear-gradient(135deg, var(--ls2-accent-soft), var(--ls2-panel)); }
-.ls2-surface[data-tone="danger"] { border-color: color-mix(in srgb, var(--ls2-danger) 36%, var(--ls2-line)); }
-.ls2-section-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-.ls2-section-title h3 { font-size: 13px; line-height: 1.3; letter-spacing: -.005em; }
-.ls2-section-title p { margin-top: 3px; color: var(--ls2-muted); font-size: 12px; line-height: 1.45; }
-.ls2-section-trailing { flex: 0 0 auto; }
-
-.ls2-button, .ls2-icon-button {
-  appearance: none; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
-  color: var(--ls2-text); background: var(--ls2-fill); cursor: pointer; transition: all var(--ls2-transition);
-}
-.ls2-button {
-  min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 7px 11px; font-size: 13px; font-weight: 700;
-}
-.ls2-button-small { min-height: 31px; padding: 5px 8px; font-size: 12px; }
-.ls2-button:hover:not(:disabled), .ls2-icon-button:hover:not(:disabled) { border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); transform: translateY(-1px); }
-.ls2-button-primary { color: var(--ls2-accent-fg); border-color: color-mix(in srgb, var(--ls2-accent) 75%, var(--ls2-line)); background: var(--ls2-accent); box-shadow: 0 5px 15px color-mix(in srgb, var(--ls2-accent) 18%, transparent); }
-.ls2-button-primary:hover:not(:disabled) { border-color: var(--ls2-accent-hover); background: var(--ls2-accent-hover); }
-.ls2-button-ghost { border-color: transparent; background: transparent; color: var(--ls2-muted); }
-.ls2-button-danger { color: var(--ls2-danger); border-color: color-mix(in srgb, var(--ls2-danger) 25%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-danger) 7%, transparent); }
-.ls2-button:disabled, .ls2-icon-button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-.ls2-icon-button { width: 32px; height: 32px; display: inline-grid; place-items: center; padding: 0; }
-.ls2-icon-button[data-active="true"] { color: var(--ls2-accent); border-color: color-mix(in srgb, var(--ls2-accent) 28%, var(--ls2-line)); background: var(--ls2-accent-soft); }
-.ls2-icon-button[data-danger="true"]:hover { color: var(--ls2-danger); border-color: color-mix(in srgb, var(--ls2-danger) 28%, var(--ls2-line)); }
-
-.ls2-status {
-  min-height: 23px; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
-  border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-muted); background: var(--ls2-fill);
-  font-size: 11px; font-weight: 750; white-space: nowrap; text-transform: capitalize;
-}
-.ls2-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ls2-dim); }
-.ls2-status[data-tone="accent"] { color: var(--ls2-accent); border-color: color-mix(in srgb, var(--ls2-accent) 30%, var(--ls2-line)); background: var(--ls2-accent-soft); }
-.ls2-status[data-tone="accent"] .ls2-status-dot { background: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
-.ls2-status[data-tone="success"] { color: var(--ls2-success); border-color: color-mix(in srgb, var(--ls2-success) 30%, var(--ls2-line)); }
-.ls2-status[data-tone="success"] .ls2-status-dot { background: var(--ls2-success); }
-.ls2-status[data-tone="warning"] { color: var(--ls2-warning); border-color: color-mix(in srgb, var(--ls2-warning) 30%, var(--ls2-line)); }
-.ls2-status[data-tone="warning"] .ls2-status-dot { background: var(--ls2-warning); }
-.ls2-status[data-tone="danger"] { color: var(--ls2-danger); border-color: color-mix(in srgb, var(--ls2-danger) 30%, var(--ls2-line)); }
-.ls2-status[data-tone="danger"] .ls2-status-dot { background: var(--ls2-danger); }
-
-.ls2-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.ls2-field-label { color: var(--ls2-muted); font-size: 12px; font-weight: 700; }
-.ls2-field-hint, .ls2-help { color: var(--ls2-dim); font-size: 11px; line-height: 1.45; }
-.ls2-input, .ls2-select {
-  width: 100%; min-height: 35px; padding: 7px 9px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
-  outline: none; color: var(--ls2-text); background: var(--ls2-input); transition: all var(--ls2-transition);
-  font-size: 13px;
-}
-.ls2-input:hover, .ls2-select:hover { border-color: var(--ls2-line-hover); }
-.ls2-input:focus, .ls2-select:focus { border-color: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
-.ls2-input::placeholder { color: var(--ls2-hint); }
-.ls2-select option { color: var(--ls2-text); background: var(--ls2-panel); }
-.ls2-range { width: 100%; accent-color: var(--ls2-accent); }
-.ls2-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
-.ls2-field-wide { grid-column: 1/-1; }
-.ls2-inline-field { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px; }
-.ls2-range-stack { display: grid; gap: 16px; }
-.ls2-locked-value { display: flex; align-items: center; gap: 7px; margin-top: 12px; padding: 8px 9px; border-radius: var(--ls2-radius-sm); color: var(--ls2-muted); background: var(--ls2-fill); font-size: 12px; }
-
-.ls2-toggle-row {
-  position: relative; min-height: 48px; display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 10px;
-  padding: 8px 0; border-top: 1px solid var(--ls2-line-subtle); cursor: pointer;
-}
-.ls2-toggle-row:first-child { border-top: 0; padding-top: 0; }
-.ls2-toggle-row:last-child { padding-bottom: 0; }
-.ls2-toggle-row[data-disabled="true"] { opacity: .5; cursor: not-allowed; }
-.ls2-toggle-copy { min-width: 0; display: flex; flex-direction: column; }
-.ls2-toggle-copy strong { font-size: 13px; }
-.ls2-toggle-copy small { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; line-height: 1.4; }
-.ls2-toggle-row input { position: absolute; opacity: 0; pointer-events: none; }
-.ls2-toggle-track { width: 34px; height: 20px; display: block; padding: 2px; border: 1px solid var(--ls2-line-hover); border-radius: 999px; background: var(--ls2-fill); transition: all var(--ls2-transition); }
-.ls2-toggle-track span { width: 14px; height: 14px; display: block; border-radius: 50%; background: var(--ls2-muted); transition: all var(--ls2-transition); }
-.ls2-toggle-row input:checked + .ls2-toggle-track { border-color: var(--ls2-accent); background: var(--ls2-accent); }
-.ls2-toggle-row input:checked + .ls2-toggle-track span { transform: translateX(14px); background: var(--ls2-accent-fg); }
-
-.ls2-segmented { min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
-.ls2-segmented button { min-width: 0; min-height: 33px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 8px; border: 0; border-radius: calc(var(--ls2-radius-sm) - 3px); color: var(--ls2-muted); background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; }
-.ls2-segmented button:hover { color: var(--ls2-text); }
-.ls2-segmented button[data-active="true"] { color: var(--ls2-text); background: var(--ls2-raised); box-shadow: var(--ls2-shadow-sm), inset 0 1px 0 color-mix(in srgb, var(--ls2-text) 6%, transparent); }
-
-.ls2-search { min-width: 0; flex: 1; min-height: 35px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); color: var(--ls2-dim); background: var(--ls2-input); transition: all var(--ls2-transition); }
-.ls2-search:focus-within { color: var(--ls2-accent); border-color: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
-.ls2-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--ls2-text); background: transparent; font-size: 13px; }
-.ls2-search input::placeholder { color: var(--ls2-hint); }
-.ls2-search button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; color: var(--ls2-dim); background: transparent; cursor: pointer; }
-
-.ls2-notice, .ls2-safe-note {
-  display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 9px; padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--ls2-accent) 22%, var(--ls2-line)); border-radius: var(--ls2-radius-sm);
-  color: var(--ls2-muted); background: var(--ls2-accent-soft); font-size: 12px;
-}
-.ls2-notice > div { display: flex; flex-direction: column; gap: 2px; }
-.ls2-notice strong { color: var(--ls2-text); }
-.ls2-notice[data-tone="success"], .ls2-safe-note { border-color: color-mix(in srgb, var(--ls2-success) 25%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-success) 7%, transparent); }
-.ls2-notice[data-tone="warning"] { border-color: color-mix(in srgb, var(--ls2-warning) 30%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-warning) 8%, transparent); }
-.ls2-notice[data-tone="danger"] { border-color: color-mix(in srgb, var(--ls2-danger) 30%, var(--ls2-line)); background: color-mix(in srgb, var(--ls2-danger) 8%, transparent); }
-.ls2-global-notice { position: sticky; top: 66px; z-index: 18; margin: 8px 10px 0; overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow-sm); }
-.ls2-global-notice-copy { padding: 8px 10px; color: var(--ls2-muted); font-size: 12px; }
-.ls2-progress { height: 2px; background: var(--ls2-fill); }
-.ls2-progress span { height: 100%; display: block; background: var(--ls2-accent); transition: width .2s ease; }
-
-.ls2-empty { min-height: 175px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 22px; text-align: center; }
-.ls2-empty-icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 11px; border: 1px solid color-mix(in srgb, var(--ls2-accent) 28%, var(--ls2-line)); border-radius: var(--ls2-radius-lg); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-empty strong { font-size: 15px; }
-.ls2-empty p { max-width: 390px; margin-top: 5px; color: var(--ls2-muted); font-size: 12px; line-height: 1.5; }
-.ls2-empty-action { margin-top: 14px; }
-
-.ls2-cue-monitor {
-  min-width: 0; min-height: 52px; display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 10px;
-  padding: 8px 9px 8px 12px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius);
-  background: linear-gradient(90deg,var(--ls2-fill),transparent),var(--ls2-panel);
-  box-shadow: inset 3px 0 0 color-mix(in srgb,var(--ls2-accent) 65%,transparent);
-}
-.ls2-cue-monitor[data-tone="danger"] { box-shadow: inset 3px 0 0 var(--ls2-danger); }
-.ls2-cue-monitor[data-tone="success"] { box-shadow: inset 3px 0 0 var(--ls2-success); }
-.ls2-cue-monitor[data-tone="warning"] { box-shadow: inset 3px 0 0 var(--ls2-warning); }
-.ls2-cue-monitor-light { width: 8px; height: 8px; border-radius: 50%; background: var(--ls2-accent); box-shadow: 0 0 0 4px var(--ls2-accent-soft); }
-.ls2-cue-monitor[data-tone="danger"] .ls2-cue-monitor-light { background: var(--ls2-danger); box-shadow: 0 0 0 4px color-mix(in srgb,var(--ls2-danger) 12%,transparent); }
-.ls2-cue-monitor[data-tone="success"] .ls2-cue-monitor-light { background: var(--ls2-success); box-shadow: 0 0 0 4px color-mix(in srgb,var(--ls2-success) 12%,transparent); }
-.ls2-detector-state { min-width: 0; }
-.ls2-detector-state > div { min-width: 0; display: flex; flex-direction: column; }
-.ls2-detector-state strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-cue-monitor-label { color: var(--ls2-dim); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.ls2-cue-monitor-meta { color: var(--ls2-dim); font-size: 11px; white-space: nowrap; }
-
-.ls2-onboarding { display: grid; gap: 12px; }
-.ls2-onboarding-stage {
-  position: relative; min-height: 430px; display: flex; align-items: flex-end; overflow: hidden;
-  border: 1px solid color-mix(in srgb,var(--ls2-accent) 20%,var(--ls2-line)); border-radius: var(--ls2-radius-lg);
-  background:
-    radial-gradient(ellipse at 50% 30%,color-mix(in srgb,var(--ls2-accent) 10%,transparent),transparent 48%),
-    linear-gradient(180deg,var(--ls2-canvas),color-mix(in srgb,var(--ls2-panel) 75%,var(--ls2-canvas)));
-  box-shadow: var(--ls2-shadow-sm),inset 0 1px 0 color-mix(in srgb,var(--ls2-text) 5%,transparent);
-}
-.ls2-rig { position: absolute; inset: 0 0 40%; overflow: hidden; pointer-events: none; }
-.ls2-rig-bar { position: absolute; top: 27px; left: 9%; right: 9%; height: 1px; background: var(--ls2-line-hover); box-shadow: 0 8px 0 var(--ls2-line-subtle); }
-.ls2-rig-bar::before, .ls2-rig-bar::after { content: ""; position: absolute; top: -9px; width: 1px; height: 19px; background: var(--ls2-line-hover); }
-.ls2-rig-bar::before { left: 13%; }
-.ls2-rig-bar::after { right: 13%; }
-.ls2-rig-lamp { position: absolute; top: 22px; width: 15px; height: 12px; border: 1px solid var(--ls2-line-hover); border-radius: 4px 4px 7px 7px; background: var(--ls2-raised); }
-.ls2-rig-lamp::before { content: ""; position: absolute; left: 4px; top: -6px; width: 5px; height: 6px; border-left: 1px solid var(--ls2-line-hover); border-right: 1px solid var(--ls2-line-hover); }
-.ls2-rig-lamp-left { left: 23%; transform: rotate(14deg); }
-.ls2-rig-lamp-center { left: calc(50% - 7px); }
-.ls2-rig-lamp-right { right: 23%; transform: rotate(-14deg); }
-.ls2-rig-beam { position: absolute; top: 35px; width: 130px; height: 180px; opacity: .4; background: linear-gradient(180deg,color-mix(in srgb,var(--ls2-accent) 15%,transparent),transparent 85%); clip-path: polygon(47% 0,53% 0,100% 100%,0 100%); }
-.ls2-rig-beam-left { left: 3%; transform: rotate(-8deg); transform-origin: top center; }
-.ls2-rig-beam-center { left: calc(50% - 65px); opacity: .65; }
-.ls2-rig-beam-right { right: 3%; transform: rotate(8deg); transform-origin: top center; }
-.ls2-rig-mark { position: absolute; left: 50%; bottom: 3px; width: 60px; height: 60px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--ls2-accent) 35%,var(--ls2-line)); border-radius: 50%; color: var(--ls2-accent); background: var(--ls2-accent-soft); transform: translateX(-50%); box-shadow: 0 0 45px var(--ls2-accent-soft); }
-.ls2-rig-floor { position: absolute; left: 10%; right: 10%; bottom: -7px; height: 1px; background: linear-gradient(90deg,transparent,var(--ls2-line-hover),transparent); }
-.ls2-onboarding-copy {
-  position: relative; z-index: 2; width: 100%; padding: 30px 28px 27px;
-  border-top: 1px solid var(--ls2-line-subtle);
-  background: linear-gradient(180deg,color-mix(in srgb,var(--ls2-panel) 78%,transparent),var(--ls2-panel));
-  backdrop-filter: blur(14px);
-}
-.ls2-kicker { display: inline-flex; align-items: center; gap: 7px; color: var(--ls2-muted); font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
-.ls2-kicker > span { width: 18px; height: 1px; background: var(--ls2-accent); }
-.ls2-onboarding-copy h3 { max-width: 440px; margin-top: 8px; font-size: 23px; line-height: 1.15; letter-spacing: -.025em; }
-.ls2-onboarding-copy p { max-width: 530px; margin-top: 9px; color: var(--ls2-muted); font-size: 13px; line-height: 1.55; }
-.ls2-onboarding-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-
-.ls2-cue-sheet { overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-lg); background: var(--ls2-panel); box-shadow: var(--ls2-shadow-sm); }
-.ls2-cue-sheet-head { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; }
-.ls2-cue-sheet-head > div { display: flex; flex-direction: column; gap: 2px; }
-.ls2-cue-sheet-head strong { font-size: 15px; }
-.ls2-cue-sheet-head > span { color: var(--ls2-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.ls2-cue-progress { height: 2px; background: var(--ls2-fill); }
-.ls2-cue-progress > span { height: 100%; display: block; background: var(--ls2-accent); transition: width var(--ls2-transition); }
-.ls2-cue-steps > button {
-  appearance: none; width: 100%; min-height: 64px; display: grid; grid-template-columns: 28px 34px minmax(0,1fr) auto; align-items: center; gap: 9px;
-  padding: 9px 13px; border: 0; border-top: 1px solid var(--ls2-line-subtle); color: var(--ls2-muted); background: transparent; text-align: left; cursor: pointer; transition: all var(--ls2-transition);
-}
-.ls2-cue-steps > button:hover { color: var(--ls2-text); background: var(--ls2-fill-hover); }
-.ls2-cue-steps > button[data-done="true"] { color: var(--ls2-text); }
-.ls2-cue-index { color: var(--ls2-dim); font: 11px/1 var(--lumiverse-font-mono,ui-monospace,monospace); }
-.ls2-cue-steps > button[data-done="true"] .ls2-cue-index { color: var(--ls2-success); }
-.ls2-cue-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); color: var(--ls2-accent); background: var(--ls2-fill); }
-.ls2-cue-copy { min-width: 0; display: flex; flex-direction: column; }
-.ls2-cue-copy strong, .ls2-cue-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-cue-copy strong { color: inherit; font-size: 13px; }
-.ls2-cue-copy small { margin-top: 2px; color: var(--ls2-dim); font-size: 11px; }
-
-.ls2-scene { position: relative; }
-.ls2-scene-head { display: flex; align-items: end; justify-content: space-between; gap: 10px; padding: 14px 15px 10px; }
-.ls2-scene-head h3 { margin-top: 2px; font-size: 17px; }
-.ls2-scene-head > span { color: var(--ls2-muted); font-size: 12px; }
-.ls2-scene-cast { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 1px; border-top: 1px solid var(--ls2-line); background: var(--ls2-line); }
-.ls2-scene-actor { min-width: 0; background: var(--ls2-panel); }
-.ls2-scene-media { position: relative; height: 235px; overflow: hidden; background: var(--lumiverse-card-image-bg, var(--ls2-canvas)); }
-.ls2-scene-media-file { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
-.ls2-scene-actor[data-focused="true"] .ls2-scene-media { box-shadow: inset 0 -3px 0 var(--ls2-accent); }
-.ls2-focus-flag { position: absolute; top: 9px; left: 9px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--ls2-accent) 35%, var(--ls2-line)); border-radius: 999px; color: var(--ls2-accent); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-.ls2-scene-actor-copy { min-width: 0; padding: 10px 11px 12px; }
-.ls2-scene-actor-copy strong, .ls2-scene-actor-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-scene-actor-copy strong { font-size: 13px; }
-.ls2-scene-actor-copy span { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; }
-
-.ls2-metric-grid { display: grid; grid-template-columns: repeat(3,1fr); overflow: hidden; border-top: 1px solid var(--ls2-line-subtle); border-bottom: 1px solid var(--ls2-line-subtle); }
-.ls2-metric-grid > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 9px; padding: 11px 13px; border-left: 1px solid var(--ls2-line-subtle); color: var(--ls2-accent); background: transparent; }
-.ls2-metric-grid > div:first-child { border-left: 0; }
-.ls2-metric-grid span { min-width: 0; color: var(--ls2-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.ls2-metric-grid strong { display: block; color: var(--ls2-text); font-size: 15px; line-height: 1.1; }
-
-.ls2-library-context { display: grid; grid-template-columns: auto minmax(0,1fr) minmax(120px,auto); align-items: center; gap: 9px; }
-.ls2-context-avatar { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ls2-accent) 25%, var(--ls2-line)); border-radius: 11px; color: var(--ls2-accent); background: var(--ls2-accent-soft); font-size: 12px; font-weight: 800; }
-.ls2-library-context > div { min-width: 0; display: flex; flex-direction: column; }
-.ls2-library-context strong, .ls2-library-context span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-library-context strong { font-size: 13px; }
-.ls2-library-context span { color: var(--ls2-muted); font-size: 11px; }
-.ls2-actor-select { min-width: 120px; width: auto; }
-.ls2-folder-section { min-width: 0; }
-.ls2-folder-section .ls2-section-title { align-items: center; margin-bottom: 7px; padding: 0 2px; }
-.ls2-folder-strip { display: flex; gap: 7px; padding: 1px 1px 5px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--lcs-scrollbar-thumb,var(--ls2-line)) transparent; }
-.ls2-folder-button {
-  flex: 0 0 auto; min-width: 130px; max-width: 190px; display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 8px;
-  padding: 7px 9px 7px 7px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius);
-  color: var(--ls2-muted); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition);
-}
-.ls2-folder-button:hover { color: var(--ls2-text); border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); }
-.ls2-folder-button[data-active="true"] { color: var(--ls2-text); border-color: color-mix(in srgb, var(--ls2-accent) 35%, var(--ls2-line)); background: var(--ls2-accent-soft); box-shadow: inset 0 -2px 0 var(--ls2-accent); }
-.ls2-folder-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--ls2-accent); background: var(--ls2-panel); }
-.ls2-folder-button > span:last-child { min-width: 0; display: flex; flex-direction: column; }
-.ls2-folder-button strong, .ls2-folder-button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-folder-button strong { font-size: 12px; }
-.ls2-folder-button small { color: var(--ls2-dim); font-size: 10px; }
-
-.ls2-library-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--ls2-line); background: var(--ls2-fill); }
-.ls2-library-subbar { min-height: 34px; display: flex; align-items: center; gap: 12px; padding: 5px 10px; border-bottom: 1px solid var(--ls2-line); color: var(--ls2-muted); font-size: 11px; }
-.ls2-pagination { margin-left: auto; display: flex; align-items: center; gap: 4px; }
-.ls2-pagination .ls2-icon-button { width: 25px; height: 25px; border-color: transparent; }
-.ls2-pagination span { min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
-.ls2-asset-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(118px,1fr)); gap: 8px; padding: 10px; }
-.ls2-asset-card { min-width: 0; overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); background: var(--ls2-fill); transition: all var(--ls2-transition); }
-.ls2-asset-card:hover { border-color: var(--ls2-line-hover); transform: translateY(-1px); box-shadow: var(--ls2-shadow-sm); }
-.ls2-asset-card[data-selected="true"] { border-color: var(--ls2-accent); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
-.ls2-asset-card[data-inspected="true"] { box-shadow: inset 0 -2px 0 var(--ls2-accent); }
-.ls2-asset-main { position: relative; width: 100%; height: 152px; display: block; padding: 0; border: 0; background: var(--lumiverse-card-image-bg, var(--ls2-canvas)); cursor: pointer; overflow: hidden; }
-.ls2-asset-media, .ls2-expression-choice-media { width: 100%; height: 100%; object-fit: cover; }
-.ls2-asset-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 8px 7px; background: linear-gradient(transparent, var(--lumiverse-scene-text-scrim, color-mix(in srgb,var(--ls2-canvas) 88%,transparent))); text-align: left; }
-.ls2-asset-overlay strong, .ls2-asset-overlay small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-asset-overlay strong { color: var(--ls2-text); font-size: 12px; }
-.ls2-asset-overlay small { color: color-mix(in srgb, var(--ls2-text) 72%, transparent); font-size: 10px; }
-.ls2-asset-check { position: absolute; top: 7px; right: 7px; width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid var(--ls2-glass-border); border-radius: 7px; color: var(--ls2-muted); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); }
-.ls2-asset-card[data-selected="true"] .ls2-asset-check { color: var(--ls2-accent-fg); border-color: var(--ls2-accent); background: var(--ls2-accent); }
-.ls2-media-fallback { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--ls2-dim); background: var(--ls2-fill); font-size: 10px; }
-
-.ls2-inspector { border-color: color-mix(in srgb, var(--ls2-accent) 25%, var(--ls2-line)); }
-.ls2-outfit-editor { border-color: color-mix(in srgb, var(--ls2-accent) 18%, var(--ls2-line)); }
-.ls2-toggle-stack { display: grid; gap: 7px; }
-.ls2-batch-bar {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ls2-accent) 24%, var(--ls2-line));
-  background: color-mix(in srgb, var(--ls2-accent) 7%, var(--ls2-panel));
-}
-.ls2-batch-bar > strong { flex: 0 0 auto; color: var(--ls2-text); font-size: 12px; }
-.ls2-batch-bar > span { color: var(--ls2-muted); font-size: 10px; }
-.ls2-batch-bar > .ls2-toolbar { margin-left: auto; }
-.ls2-batch-panel { border-color: color-mix(in srgb, var(--ls2-accent) 24%, var(--ls2-line)); }
-.ls2-disclosure { overflow: hidden; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); background: var(--ls2-panel); }
-.ls2-disclosure summary { min-height: 43px; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; color: var(--ls2-muted); cursor: pointer; list-style: none; font-size: 12px; font-weight: 700; }
-.ls2-disclosure summary::-webkit-details-marker { display: none; }
-.ls2-disclosure summary > span { display: flex; align-items: center; gap: 7px; }
-.ls2-disclosure[open] summary { color: var(--ls2-text); border-bottom: 1px solid var(--ls2-line); }
-.ls2-disclosure[open] summary > svg { transform: rotate(180deg); }
-.ls2-disclosure-body { display: grid; gap: 12px; padding: 13px; }
-
-.ls2-selection-hero { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; }
-.ls2-selection-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: var(--ls2-radius); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-selection-hero > div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
-.ls2-selection-hero strong { font-size: 13px; }
-.ls2-selection-hero span { color: var(--ls2-muted); font-size: 11px; }
-.ls2-action-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
-.ls2-rename-preview { display: grid; gap: 4px; margin: 0 0 11px; padding: 8px; border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
-.ls2-rename-preview > div { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 7px; font-size: 11px; }
-.ls2-rename-preview span, .ls2-rename-preview strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-rename-preview span { color: var(--ls2-muted); text-decoration: line-through; }
-.ls2-table-wrap { overflow: auto; }
-.ls2-matrix { min-width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 11px; }
-.ls2-matrix th { padding: 5px 6px; color: var(--ls2-muted); font-weight: 700; text-align: left; white-space: nowrap; }
-.ls2-matrix td { min-width: 40px; height: 30px; padding: 4px; border-radius: 6px; color: var(--ls2-dim); background: var(--ls2-fill); text-align: center; }
-.ls2-matrix td[data-complete="true"] { color: var(--ls2-success); background: color-mix(in srgb, var(--ls2-success) 9%, var(--ls2-fill)); }
-.ls2-matrix td svg { margin: auto; }
-.ls2-count { color: var(--ls2-muted); font-size: 11px; }
-
-.ls2-route-summary { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; }
-.ls2-route-icon, .ls2-settings-route-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); border-radius: var(--ls2-radius); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-route-summary > div { min-width: 0; display: flex; flex-direction: column; }
-.ls2-route-summary strong { overflow: hidden; margin-top: 2px; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-route-summary small { overflow: hidden; color: var(--ls2-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-
-.ls2-settings-route { border-color: color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); }
-.ls2-settings-route-hero { min-height: 78px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 14px; background: linear-gradient(120deg,var(--ls2-accent-soft),transparent 72%); }
-.ls2-settings-route-icon { width: 46px; height: 46px; }
-.ls2-settings-route-hero > div { min-width: 0; display: flex; flex-direction: column; }
-.ls2-settings-route-hero strong, .ls2-settings-route-hero small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-settings-route-hero strong { margin-top: 3px; font-size: 15px; }
-.ls2-settings-route-hero small { margin-top: 2px; color: var(--ls2-muted); font-size: 11px; }
-.ls2-settings-route-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; gap: 11px; padding: 14px; border-top: 1px solid var(--ls2-line); }
-.ls2-settings-route-form > .ls2-button { grid-column: 1/-1; justify-self: start; }
-.ls2-connection-list { display: grid; gap: 6px; }
-.ls2-connection-list > button {
-  appearance: none; width: 100%; min-height: 56px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 10px;
-  padding: 8px 10px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm);
-  color: var(--ls2-muted); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition);
-}
-.ls2-connection-list > button:hover { color: var(--ls2-text); border-color: var(--ls2-line-hover); background: var(--ls2-fill-hover); }
-.ls2-connection-list > button[data-selected="true"] { color: var(--ls2-text); border-color: var(--ls2-accent); background: var(--ls2-accent-soft); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
-.ls2-connection-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--ls2-line); border-radius: 10px; color: var(--ls2-accent); background: var(--ls2-panel); font-size: 10px; font-weight: 800; }
-.ls2-connection-list > button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
-.ls2-connection-list strong, .ls2-connection-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-connection-list strong { font-size: 12px; }
-.ls2-connection-list small { margin-top: 2px; color: var(--ls2-dim); font-size: 10px; }
-.ls2-connection-state { padding: 3px 7px; border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-warning); font-size: 10px; font-weight: 700; }
-.ls2-connection-state[data-ready="true"] { color: var(--ls2-success); border-color: color-mix(in srgb,var(--ls2-success) 30%,var(--ls2-line)); }
-.ls2-permission-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.ls2-permission-strip > span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid var(--ls2-line); border-radius: 999px; color: var(--ls2-warning); background: var(--ls2-fill); font-size: 10px; text-transform: capitalize; }
-.ls2-permission-strip > span[data-granted="true"] { color: var(--ls2-success); }
-
-.ls2-appearance-preview { display: grid; grid-template-columns: minmax(190px,1.25fr) minmax(130px,.75fr); align-items: center; }
-.ls2-preview-window { position: relative; min-height: 190px; overflow: hidden; border-right: 1px solid var(--ls2-line); background: var(--lumiverse-card-image-bg,var(--ls2-canvas)); }
-.ls2-preview-toolbar { height: 27px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--ls2-glass-border); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); }
-.ls2-preview-toolbar span { width: 6px; height: 6px; border-radius: 50%; background: var(--ls2-line-hover); }
-.ls2-preview-actors { position: absolute; inset: 40px 15px 25px; display: flex; align-items: flex-end; justify-content: center; }
-.ls2-preview-actors i { width: 42%; height: 78%; margin-right: -12%; border: 1px solid var(--ls2-line); border-radius: 50% 50% 14px 14px; opacity: .45; background: linear-gradient(160deg,var(--ls2-accent-soft),var(--ls2-raised)); transform: scale(.95); }
-.ls2-preview-actors i[data-focus] { z-index: 1; height: 92%; opacity: 1; border-color: var(--ls2-accent); transform: scale(1.04); }
-.ls2-preview-caption { position: absolute; left: 10px; right: 10px; bottom: 8px; overflow: hidden; color: var(--ls2-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
-.ls2-preview-copy { padding: 15px; }
-.ls2-preview-copy strong { display: block; font-size: 12px; }
-.ls2-preview-copy span { display: block; margin-top: 4px; color: var(--ls2-muted); font-size: 11px; line-height: 1.5; }
-
-.ls2-health-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
-.ls2-health-grid > div { min-width: 0; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 7px; padding: 8px; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
-.ls2-health-grid > div > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--ls2-warning); background: color-mix(in srgb, var(--ls2-warning) 8%, transparent); }
-.ls2-health-grid > div[data-good="true"] > span { color: var(--ls2-success); background: color-mix(in srgb, var(--ls2-success) 8%, transparent); }
-.ls2-health-grid strong, .ls2-health-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
-.ls2-health-grid strong { font-size: 11px; }
-.ls2-health-grid small { color: var(--ls2-dim); font-size: 10px; }
-.ls2-issue-list { display: grid; gap: 5px; }
-.ls2-issue-list > div { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 8px; padding: 8px; border-radius: var(--ls2-radius-sm); color: var(--ls2-muted); background: var(--ls2-fill); font-size: 11px; }
-.ls2-issue-list > div[data-tone="error"] { color: var(--ls2-danger); }
-.ls2-diagnostic-output { max-height: 500px; margin: 0; padding: 13px; overflow: auto; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); color: var(--ls2-muted); background: var(--ls2-canvas); font: 10px/1.55 var(--lumiverse-font-mono,ui-monospace,monospace); white-space: pre; }
-
-.ls2-savebar {
-  position: sticky; bottom: 0; z-index: 21; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 9px;
-  padding: 9px 12px calc(9px + env(safe-area-inset-bottom)); border-top: 1px solid var(--ls2-glass-border);
-  background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: 0 -8px 25px color-mix(in srgb,var(--ls2-canvas) 25%,transparent);
-}
-.ls2-savebar > div:first-child { display: flex; align-items: center; gap: 7px; color: var(--ls2-muted); font-size: 11px; }
-.ls2-save-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ls2-success); }
-.ls2-savebar[data-dirty="true"] .ls2-save-dot { background: var(--ls2-warning); box-shadow: 0 0 0 3px color-mix(in srgb,var(--ls2-warning) 12%,transparent); }
-
-.ls2-modal { display: flex; flex-direction: column; gap: 14px; color: var(--ls2-text); }
-.ls2-modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 2px; }
-.ls2-modal-section-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.ls2-modal-section-head > div { display: flex; flex-direction: column; }
-.ls2-modal-section-head strong { font-size: 12px; }
-.ls2-modal-section-head span { color: var(--ls2-muted); font-size: 11px; }
-.ls2-dropzone { position: relative; min-height: 185px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border: 1px dashed var(--ls2-line-hover); border-radius: var(--ls2-radius); text-align: center; background: var(--ls2-fill); transition: all var(--ls2-transition); }
-.ls2-dropzone:hover, .ls2-dropzone[data-dragging="true"] { border-color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.ls2-dropzone .ls2-button { pointer-events: none; }
-.ls2-dropzone-icon { width: 47px; height: 47px; display: grid; place-items: center; margin-bottom: 10px; border: 1px solid color-mix(in srgb,var(--ls2-accent) 28%,var(--ls2-line)); border-radius: var(--ls2-radius-lg); color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-dropzone strong { font-size: 14px; }
-.ls2-dropzone p { margin: 4px 0 12px; color: var(--ls2-muted); font-size: 11px; }
-.ls2-mapping-preview { display: grid; gap: 4px; margin-top: 10px; padding: 8px; border-radius: var(--ls2-radius-sm); background: var(--ls2-fill); }
-.ls2-mapping-preview > div { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 6px; color: var(--ls2-muted); font-size: 11px; }
-.ls2-mapping-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-mapping-preview small { color: var(--ls2-dim); font-size: 10px; }
-
-.ls2-picker-context { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
-.ls2-picker-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); gap: 8px; max-height: 410px; overflow: auto; padding: 2px; }
-.ls2-expression-choice { position: relative; min-width: 0; overflow: hidden; display: grid; grid-template-rows: 128px auto; padding: 0; border: 1px solid var(--ls2-line); border-radius: var(--ls2-radius); color: var(--ls2-text); background: var(--ls2-fill); text-align: left; cursor: pointer; transition: all var(--ls2-transition); }
-.ls2-expression-choice:hover { border-color: var(--ls2-line-hover); transform: translateY(-1px); }
-.ls2-expression-choice[data-selected="true"] { border-color: var(--ls2-accent); box-shadow: 0 0 0 2px var(--ls2-accent-soft); }
-.ls2-expression-choice > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; padding: 8px 9px; }
-.ls2-expression-choice strong, .ls2-expression-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-expression-choice strong { font-size: 12px; }
-.ls2-expression-choice small { color: var(--ls2-muted); font-size: 10px; }
-.ls2-choice-check { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: var(--ls2-accent-fg); background: var(--ls2-accent); box-shadow: var(--ls2-shadow-sm); }
-.ls2-picker-footer { display: grid; grid-template-columns: minmax(220px,1fr) auto; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--ls2-line); }
-
-.ls2-character-panel { min-height: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px; }
-.ls2-character-hero { display: grid; grid-template-columns: 50px minmax(0,1fr); align-items: center; gap: 12px; }
-.ls2-character-hero .ls2-context-avatar { width: 50px; height: 50px; border-radius: 15px; font-size: 13px; }
-.ls2-character-hero h2 { margin-top: 3px; font-size: 20px; }
-.ls2-character-hero p { margin-top: 4px; color: var(--ls2-muted); font-size: 12px; }
-.ls2-loading { min-height: 190px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--ls2-muted); font-size: 13px; }
-.ls2-loading span { width: 16px; height: 16px; border: 2px solid var(--ls2-line); border-top-color: var(--ls2-accent); border-radius: 50%; animation: ls2-spin .8s linear infinite; }
-
-.ls2-stage-root { width: 100%; height: 100%; position: relative; overflow: hidden; opacity: var(--ls2-stage-opacity,1); touch-action: none; }
-.ls2-stage-chrome { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: var(--ls2-radius-lg); }
-.ls2-stage-root[data-chrome="true"] .ls2-stage-chrome { border: 1px solid var(--ls2-glass-border); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow); }
-.ls2-stage-grab { position: absolute; top: 0; left: 0; right: 0; z-index: 5; min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; opacity: 0; transform: translateY(-4px); transition: all var(--ls2-transition); }
-.ls2-stage-root:hover .ls2-stage-grab, .ls2-stage-root:focus-within .ls2-stage-grab { opacity: 1; transform: none; }
-.ls2-stage-live { display: inline-flex; align-items: center; gap: 6px; color: var(--ls2-muted); font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
-.ls2-stage-live > span { width: 6px; height: 6px; border-radius: 50%; background: var(--ls2-accent); box-shadow: 0 0 0 3px var(--ls2-accent-soft); }
-.ls2-stage-actions { margin-left: auto; display: flex; gap: 2px; }
-.ls2-stage-actions button { width: 26px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; color: var(--ls2-muted); background: transparent; cursor: pointer; }
-.ls2-stage-actions button:hover { color: var(--ls2-text); background: var(--ls2-fill-hover); }
-.ls2-stage-ensemble { position: absolute; inset: 28px 4px 2px; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
-.ls2-stage-actor { position: relative; flex: 1 1 0; height: 100%; min-width: 0; margin-left: calc(var(--ls2-stage-overlap, .34) * -18%); opacity: var(--ls2-stage-idle-opacity,.46); transform: scale(.96); transform-origin: center bottom; filter: saturate(.78); transition: opacity var(--ls2-stage-transition),transform var(--ls2-stage-transition),filter var(--ls2-stage-transition); }
-.ls2-stage-actor:first-child { margin-left: 0; }
-.ls2-stage-actor[data-focused="true"] { z-index: 2; opacity: 1; transform: scale(var(--ls2-stage-focus-scale,1.035)); filter: none; }
-.ls2-stage-actor-frame { width: 100%; height: 100%; }
-.ls2-stage-actor-frame :is(img,video) { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
-.ls2-stage-root[data-transition="crossfade"] .ls2-stage-actor-frame :is(img,video) { animation: ls2-fade var(--ls2-stage-transition) ease-out; }
-.ls2-stage-root[data-transition="lift"] .ls2-stage-actor-frame :is(img,video) { animation: ls2-lift var(--ls2-stage-transition) ease-out; }
-.ls2-stage-actor figcaption { position: absolute; left: 6px; right: 6px; bottom: 7px; z-index: 3; min-width: 0; padding: 7px 8px; border: 1px solid var(--ls2-glass-border); border-radius: var(--ls2-radius-sm); background: var(--ls2-glass); backdrop-filter: blur(var(--ls2-glass-blur)); box-shadow: var(--ls2-shadow-sm); text-align: center; }
-.ls2-stage-actor figcaption strong, .ls2-stage-actor figcaption span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls2-stage-actor figcaption strong { font-size: 11px; }
-.ls2-stage-actor figcaption span { margin-top: 1px; color: var(--ls2-muted); font-size: 10px; }
-.ls2-stage-waiting { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--ls2-muted); text-align: center; }
-.ls2-stage-waiting > div { width: 44px; height: 44px; display: grid; place-items: center; margin-bottom: 8px; border: 1px solid color-mix(in srgb,var(--ls2-accent) 25%,var(--ls2-line)); border-radius: 14px; color: var(--ls2-accent); background: var(--ls2-accent-soft); }
-.ls2-stage-waiting strong { color: var(--ls2-text); font-size: 13px; }
-.ls2-stage-waiting span { margin-top: 2px; font-size: 10px; }
-.ls2-stage-resize { position: absolute; right: 1px; bottom: 1px; z-index: 7; width: 23px; height: 23px; padding: 0; border: 0; background: transparent; cursor: nwse-resize; touch-action: none; }
-.ls2-stage-resize span, .ls2-stage-resize::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 9px; height: 1px; background: var(--ls2-accent); transform: rotate(-45deg); transform-origin: right center; opacity: .7; }
-.ls2-stage-resize::after { width: 5px; right: 4px; bottom: 9px; }
-
-@keyframes ls2-enter { from { opacity: 0; transform: translateY(3px); } }
-@keyframes ls2-spin { to { transform: rotate(360deg); } }
-@keyframes ls2-fade { from { opacity: 0; } }
-@keyframes ls2-lift { from { opacity: 0; transform: translateY(8px) scale(.99); } }
-
-@media (min-width: 700px) {
-  .ls2-content { padding: 20px 18px 92px; }
-  .ls2-asset-grid { grid-template-columns: repeat(auto-fill,minmax(135px,1fr)); }
-}
-@container lumi-stage (max-width: 520px) {
-  .ls2-content { padding: 15px 10px 90px; }
-  .ls2-view-header { grid-template-columns: 1fr; align-items: start; }
-  .ls2-view-actions { justify-content: flex-start; }
-  .ls2-view-actions .ls2-button { flex: 1 1 0; }
-  .ls2-cue-monitor { grid-template-columns: auto minmax(0,1fr) auto; }
-  .ls2-cue-monitor-meta { display: none; }
-  .ls2-onboarding-stage { min-height: 420px; }
-  .ls2-onboarding-copy { padding: 26px 22px 23px; }
-  .ls2-settings-route-form { grid-template-columns: 1fr; }
-  .ls2-settings-route-form > .ls2-button { grid-column: auto; }
-  .ls2-form-grid, .ls2-action-grid, .ls2-picker-context, .ls2-appearance-preview { grid-template-columns: 1fr; }
-  .ls2-preview-window { border-right: 0; border-bottom: 1px solid var(--ls2-line); }
-  .ls2-library-context { grid-template-columns: auto minmax(0,1fr); }
-  .ls2-actor-select { grid-column: 1/-1; width: 100%; }
-  .ls2-library-toolbar { align-items: stretch; flex-direction: column; }
-  .ls2-library-toolbar .ls2-toolbar { justify-content: space-between; }
-  .ls2-batch-bar { align-items: flex-start; flex-wrap: wrap; }
-  .ls2-batch-bar > .ls2-toolbar { width: 100%; margin-left: 0; }
-  .ls2-asset-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; padding: 7px; }
-  .ls2-asset-main { height: 135px; }
-  .ls2-selection-hero { grid-template-columns: auto minmax(0,1fr); }
-  .ls2-selection-hero > .ls2-toolbar { grid-column: 1/-1; }
-  .ls2-health-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .ls2-picker-footer { grid-template-columns: 1fr; }
-}
-@container lumi-stage (max-width: 390px) {
-  .ls2-nav { padding-inline: 7px; }
-  .ls2-nav-primary { gap: 2px; }
-  .ls2-nav-primary > button { gap: 5px; padding-inline: 5px; }
-  .ls2-view-heading h2 { font-size: 19px; }
-  .ls2-asset-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .ls2-metric-grid > div { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 8px 4px; }
-  .ls2-onboarding-stage { min-height: 405px; }
-  .ls2-onboarding-copy { padding: 24px 18px 20px; }
-  .ls2-onboarding-copy h3 { font-size: 21px; }
-  .ls2-onboarding-actions .ls2-button { flex: 1 1 100%; }
-  .ls2-route-summary { grid-template-columns: auto minmax(0,1fr); }
-  .ls2-route-summary > .ls2-button { grid-column: 1/-1; }
-  .ls2-settings-route-hero { grid-template-columns: auto minmax(0,1fr); }
-  .ls2-settings-route-hero > .ls2-status { grid-column: 2; justify-self: start; }
-  .ls2-cue-steps > button { grid-template-columns: 24px 32px minmax(0,1fr) auto; padding-inline: 10px; }
-  .ls2-folder-button { min-width: 118px; }
-  .ls2-scene-cast { grid-template-columns: 1fr; }
-  .ls2-scene-media { height: 280px; }
-  .ls2-picker-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-}
-@media (max-width: 520px) {
-  .ls2-modal .ls2-form-grid, .ls2-modal .ls2-picker-context { grid-template-columns: 1fr; }
-  .ls2-modal .ls2-picker-footer { grid-template-columns: 1fr; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .ls2-root *, .ls2-modal *, .ls2-stage-root * { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  :where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-stage-root) *,
+  :where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-stage-root) *::before,
+  :where(.ls-drawer, .ls-studio, .ls-character-setup, .ls-import-modal, .ls-quick-picker, .ls-stage-root) *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
 }
 `;
 
@@ -6950,19 +7766,39 @@ function setup(ctx) {
     title: "LumiStage",
     shortName: "Stage",
     headerTitle: "LumiStage",
-    description: "Independent expression direction, media libraries, automation, and ensemble staging.",
+    description: "Independent outfit libraries, expression direction, and ensemble staging.",
     keywords: ["expressions", "sprites", "outfits", "stage", "batch"],
     iconSvg: LUMI_STAGE_ICON
   });
-  R(/* @__PURE__ */ u2(Studio, { client }), drawer.root);
   let characterTab = null;
   let inputAction = null;
   let floatWidget = null;
+  let studioModal = null;
   let unsubscribeInput = null;
   let unsubscribeDrag = null;
   let renderedCharacterId = null;
   let syncing = false;
   let disposed = false;
+  const openStudio = (characterId) => {
+    if (characterId) {
+      const active2 = ctx.getActiveChat();
+      client.refresh(active2.chatId, characterId);
+    }
+    if (studioModal) return;
+    studioModal = ctx.ui.showModal({
+      title: "LumiStage \u2014 Expression Studio",
+      width: 1440,
+      maxHeight: 980,
+      persistent: true
+    });
+    R(/* @__PURE__ */ u2(StudioWorkspace, { client }), studioModal.root);
+    studioModal.onDismiss(() => {
+      if (!studioModal) return;
+      R(null, studioModal.root);
+      studioModal = null;
+    });
+  };
+  R(/* @__PURE__ */ u2(DrawerDashboard, { client, onOpenStudio: () => openStudio() }), drawer.root);
   const saveAppearance = async (patch) => {
     try {
       await client.saveAppearance(patch);
@@ -6977,7 +7813,7 @@ function setup(ctx) {
     if (characterId === renderedCharacterId) return;
     renderedCharacterId = characterId;
     R(
-      characterId ? /* @__PURE__ */ u2(CharacterSetup, { client, characterId, onOpenStudio: () => drawer.activate() }) : null,
+      characterId ? /* @__PURE__ */ u2(CharacterSetup, { client, characterId, onOpenStudio: openStudio }) : null,
       characterTab.root
     );
   };
@@ -7127,6 +7963,11 @@ function setup(ctx) {
     destroyCharacterTab();
     destroyInputAction();
     destroyFloatWidget();
+    if (studioModal) {
+      R(null, studioModal.root);
+      studioModal.dismiss();
+      studioModal = null;
+    }
     R(null, drawer.root);
     drawer.destroy();
     removeStyle();

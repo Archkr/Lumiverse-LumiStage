@@ -1,17 +1,17 @@
 import type { JSX } from "preact";
-import type { ActorStageState } from "../types";
+import type { CharacterStageStateV2 } from "../types";
 import type { LumiStageClient } from "./client";
 import { Icon } from "./icons";
 import { useStableMedia } from "./media";
 import { useClientState } from "./primitives";
 
-function StageActor({ state, client }: { state: ActorStageState; client: LumiStageClient }) {
+function StageCharacter({ state, client }: { state: CharacterStageStateV2; client: LumiStageClient }) {
   const { backend } = useClientState(client);
-  const view = state.assetId ? backend.assetViews[state.assetId] : null;
+  const view = state.variantId ? backend.variantViews[state.variantId] : null;
   const src = useStableMedia(view?.url ?? null, view?.mediaKind ?? "image");
   return (
-    <figure class="ls2-stage-actor" data-focused={state.focused}>
-      <div class="ls2-stage-actor-frame">
+    <figure class="ls-stage-character" data-focused={state.focused}>
+      <div class="ls-stage-character-frame">
         {src && (view?.mediaKind === "video"
           ? <video key={src} src={src} muted loop playsInline autoPlay aria-label={state.label} />
           : <img key={src} src={src} alt={state.label} draggable={false} />)}
@@ -35,7 +35,7 @@ export function Stage(props: {
 }) {
   const { backend } = useClientState(props.client);
   const appearance = props.client.effectiveAppearance();
-  const actors = Object.values(backend.snapshot?.actors ?? {}).filter((actor) => !!actor.assetId)
+  const characters = Object.values(backend.snapshot?.characters ?? {}).filter((character) => !!character.variantId)
     .sort((a, b) => Number(a.focused) - Number(b.focused));
   const style = {
     "--ls2-stage-opacity": appearance.opacity,
@@ -71,30 +71,29 @@ export function Stage(props: {
   }
 
   return (
-    <div class="ls2-stage-root" style={style} data-chrome={appearance.showChrome} data-transition={appearance.transition}>
-      <div class="ls2-stage-chrome">
-        <div class="ls2-stage-grab">
-          <span class="ls2-stage-live"><span />LumiStage</span>
-          <div class="ls2-stage-actions">
+    <div class="ls-stage-root" style={style} data-chrome={appearance.showChrome} data-transition={appearance.transition}>
+      <div class="ls-stage-chrome">
+        <div class="ls-stage-grab">
+          <span class="ls-stage-live"><span />LumiStage</span>
+          <div class="ls-stage-actions">
             <button type="button" onClick={props.onQuick} title="Direct stage" aria-label="Direct stage"><Icon name="sparkles" size={15} /></button>
             <button type="button" onClick={props.onFullscreen} title="Toggle fullscreen" aria-label="Toggle fullscreen"><Icon name="expand" size={15} /></button>
             <button type="button" onClick={props.onHide} title="Hide stage" aria-label="Hide stage"><Icon name="close" size={15} /></button>
           </div>
         </div>
-        {actors.length ? (
-          <div class="ls2-stage-ensemble">
-            {actors.map((actor) => <StageActor key={actor.actorId} state={actor} client={props.client} />)}
+        {characters.length ? (
+          <div class="ls-stage-ensemble">
+            {characters.map((character) => <StageCharacter key={character.characterId} state={character} client={props.client} />)}
           </div>
         ) : (
-          <div class="ls2-stage-waiting">
+          <div class="ls-stage-waiting">
             <div><Icon name="stage" size={24} /></div>
             <strong>Stage ready</strong>
             <span>Choose a state or complete a reply.</span>
           </div>
         )}
-        <button type="button" class="ls2-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>
+        <button type="button" class="ls-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>
       </div>
     </div>
   );
 }
-

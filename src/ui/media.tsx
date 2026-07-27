@@ -9,7 +9,7 @@ export function Media(props: {
   contain?: boolean;
 }) {
   if (!props.src) {
-    return <div class={`ls2-media-fallback ${props.class ?? ""}`}><Icon name="image" size={22} /><span>Media unavailable</span></div>;
+    return <div class={`ls-media-fallback ${props.class ?? ""}`}><Icon name="image" size={22} /><span>Media unavailable</span></div>;
   }
   if (props.kind === "video") {
     return <video class={props.class} data-fit={props.contain ? "contain" : "cover"} src={props.src} muted loop playsInline autoPlay aria-label={props.label} />;
@@ -36,4 +36,3 @@ export function useStableMedia(src: string | null, kind: "image" | "video") {
   }, [src, kind, displayed]);
   return displayed;
 }
-

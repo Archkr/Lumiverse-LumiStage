@@ -5,7 +5,7 @@ export type IconName =
   | "diagnostics" | "search" | "plus" | "upload" | "sparkles" | "play"
   | "lock" | "unlock" | "check" | "close" | "expand" | "eye" | "eyeOff"
   | "undo" | "redo" | "copy" | "trash" | "move" | "tag" | "settings"
-  | "chevronLeft" | "chevronRight" | "chevronDown" | "image" | "actors"
+  | "chevronLeft" | "chevronRight" | "chevronDown" | "image" | "characters"
   | "outfit" | "expression" | "download" | "refresh" | "menu"
   | "info" | "warning" | "success";
 
@@ -40,7 +40,7 @@ const paths: Record<IconName, JSX.Element> = {
   chevronRight: <path d="m9 18 6-6-6-6" />,
   chevronDown: <path d="m6 9 6 6 6-6" />,
   image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m4 17 5-5 4 4 2-2 5 4" /></>,
-  actors: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="9" r="2.3" /><path d="M15 15a4.5 4.5 0 0 1 5.5 4.4" /></>,
+  characters: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="9" r="2.3" /><path d="M15 15a4.5 4.5 0 0 1 5.5 4.4" /></>,
   outfit: <><path d="M8 4 5 7l3 3v10h8V10l3-3-3-3c-.8 1.3-2.1 2-4 2S8.8 5.3 8 4Z" /></>,
   expression: <><circle cx="12" cy="12" r="9" /><path d="M8.5 10h.1m6.8 0h.1M8 15c1.2 1.3 2.5 2 4 2s2.8-.7 4-2" /></>,
   download: <><path d="M12 4v12m-4-4 4 4 4-4" /><path d="M4 19h16" /></>,

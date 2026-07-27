@@ -1,79 +1,57 @@
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 export const LUMI_STAGE_ID = "lumi_stage";
 
 export type MediaKind = "image" | "video";
 export type TransitionStyle = "crossfade" | "lift" | "cut";
-export type StudioView = "stage" | "library" | "automation" | "appearance" | "settings" | "diagnostics";
+export type StudioView = "library" | "stage" | "settings";
 
-export interface StageAsset {
+export interface StageVariantV2 {
   id: string;
   imageId: string;
   contentHash: string;
   fileName: string;
   mimeType: string;
   mediaKind: MediaKind;
-  enabled: boolean;
-  priority: number;
+  order: number;
   createdAt: number;
 }
 
-export interface ExpressionState {
+export interface ExpressionSlotV2 {
   id: string;
   name: string;
-  aliases: string[];
-  cues: string[];
-  tags: string[];
-  enabled: boolean;
-  priority: number;
   order: number;
-  assets: StageAsset[];
+  variants: StageVariantV2[];
 }
 
-export interface OutfitFolder {
+export interface OutfitFolderV2 {
   id: string;
   name: string;
-  aliases: string[];
-  tags: string[];
-  enabled: boolean;
-  priority: number;
   order: number;
-  allowAutoSwitch: boolean;
   defaultExpressionId: string | null;
-  expressions: ExpressionState[];
+  expressions: ExpressionSlotV2[];
 }
 
-export interface ActorProfile {
-  id: string;
-  name: string;
-  aliases: string[];
-  enabled: boolean;
-  order: number;
-  defaultOutfitId: string | null;
-  outfits: OutfitFolder[];
-}
-
-export interface CharacterProfileV1 {
-  schemaVersion: 1;
+export interface CharacterProfileV2 {
+  schemaVersion: 2;
   revision: number;
   characterId: string;
   characterName: string;
-  defaultActorId: string | null;
-  actors: ActorProfile[];
+  defaultOutfitId: string | null;
+  outfits: OutfitFolderV2[];
   createdAt: number;
   updatedAt: number;
 }
 
-export interface DetectionSettings {
+export interface DetectionSettingsV2 {
   enabled: boolean;
   connectionId: string | null;
   model: string | null;
   contextMessages: number;
   temperature: number;
-  stateConfidence: number;
-  outfitConfidence: number;
+  confidence: number;
 }
 
-export interface StageAppearanceSettings {
+export interface StageAppearanceSettingsV2 {
   transition: TransitionStyle;
   transitionMs: number;
   opacity: number;
@@ -90,95 +68,97 @@ export interface StageAppearanceSettings {
   visible: boolean;
 }
 
-export interface LumiStageSettingsV1 {
-  schemaVersion: 1;
+export interface LumiStageSettingsV2 {
+  schemaVersion: 2;
   revision: number;
-  detection: DetectionSettings;
-  appearance: StageAppearanceSettings;
+  detection: DetectionSettingsV2;
+  appearance: StageAppearanceSettingsV2;
   preloadAdjacent: number;
   updatedAt: number;
 }
 
-export interface ActorStageState {
-  actorId: string;
+export interface CharacterStageStateV2 {
   characterId: string;
   outfitId: string | null;
   expressionId: string | null;
-  assetId: string | null;
+  variantId: string | null;
   imageId: string | null;
   label: string;
   focused: boolean;
   confidence: number;
 }
 
-export interface StageSnapshotV1 {
-  schemaVersion: 1;
+export interface StageSnapshotV2 {
+  schemaVersion: 2;
   chatId: string;
   revision: number;
-  actors: Record<string, ActorStageState>;
-  focusedActorIds: string[];
+  characters: Record<string, CharacterStageStateV2>;
+  focusedCharacterIds: string[];
   updatedAt: number;
 }
 
-export interface DetectionActorDecision {
-  actorId: string;
+export interface DetectionCharacterDecisionV2 {
+  characterId: string;
   outfitId: string | null;
   expressionId: string | null;
+  variantId: string | null;
   confidence: number;
 }
 
-export interface DetectionDecisionV1 {
-  schemaVersion: 1;
-  focusedActorIds: string[];
-  actors: DetectionActorDecision[];
+export interface DetectionDecisionV2 {
+  schemaVersion: 2;
+  focusedCharacterIds: string[];
+  characters: DetectionCharacterDecisionV2[];
 }
 
-export interface DecisionRecord {
+export interface DecisionRecordV2 {
   messageId: string;
   swipeId: number;
   contentHash: string;
-  decision: DetectionDecisionV1;
+  decision: DetectionDecisionV2;
   provider: string | null;
   model: string | null;
   createdAt: number;
 }
 
 export type OverrideScope = "once" | "locked";
+export type OverrideLock = "outfit" | "state";
 
-export interface ManualOverride {
-  actorId: string;
-  outfitId?: string | null;
+export interface ManualOverrideV2 {
+  characterId: string;
+  outfitId: string | null;
   expressionId?: string | null;
+  variantId?: string | null;
   scope: OverrideScope;
+  lock: OverrideLock;
   createdAt: number;
 }
 
-export interface ChatTimelineV1 {
-  schemaVersion: 1;
+export interface ChatTimelineV2 {
+  schemaVersion: 2;
   revision: number;
   chatId: string;
-  decisions: DecisionRecord[];
-  manualOverrides: Record<string, ManualOverride>;
-  layoutOverride: Partial<StageAppearanceSettings> | null;
-  snapshot: StageSnapshotV1;
+  decisions: DecisionRecordV2[];
+  manualOverrides: Record<string, ManualOverrideV2>;
+  layoutOverride: Partial<StageAppearanceSettingsV2> | null;
+  snapshot: StageSnapshotV2;
   updatedAt: number;
 }
 
-export interface ArchiveAssetEntry {
+export interface ArchiveVariantEntryV2 {
   path: string;
   characterId: string;
-  actorId: string;
   outfitId: string;
   expressionId: string;
-  asset: StageAsset;
+  variant: StageVariantV2;
 }
 
-export interface LumiStageArchiveV1 {
-  schemaVersion: 1;
+export interface LumiStageArchiveV2 {
+  schemaVersion: 2;
   kind: "lumistage-archive";
   exportedAt: number;
-  profile: CharacterProfileV1;
-  assets: ArchiveAssetEntry[];
+  profile: CharacterProfileV2;
+  variants: ArchiveVariantEntryV2[];
 }
 
 export interface PermissionState {
@@ -190,7 +170,7 @@ export interface PermissionState {
   uiPanels: boolean;
 }
 
-export interface AssetView extends StageAsset {
+export interface VariantView extends StageVariantV2 {
   url: string | null;
   thumbUrl: string | null;
 }
@@ -205,12 +185,12 @@ export interface LlmConnectionView {
 }
 
 export interface FrontendState {
-  settings: LumiStageSettingsV1;
-  profile: CharacterProfileV1 | null;
-  stageProfiles: CharacterProfileV1[];
-  timeline: ChatTimelineV1 | null;
-  snapshot: StageSnapshotV1 | null;
-  assetViews: Record<string, AssetView>;
+  settings: LumiStageSettingsV2;
+  profile: CharacterProfileV2 | null;
+  stageProfiles: CharacterProfileV2[];
+  timeline: ChatTimelineV2 | null;
+  snapshot: StageSnapshotV2 | null;
+  variantViews: Record<string, VariantView>;
   connections: LlmConnectionView[];
   permissions: PermissionState;
   activeChatId: string | null;
@@ -224,37 +204,33 @@ export interface FrontendState {
   };
 }
 
-export type BatchMutation =
-  | { type: "set-enabled"; assetIds: string[]; enabled: boolean }
-  | { type: "set-priority"; assetIds: string[]; priority: number }
-  | { type: "add-tags"; expressionIds: string[]; tags: string[] }
-  | { type: "add-aliases"; expressionIds: string[]; aliases: string[] }
-  | { type: "rename"; expressionIds: string[]; find: string; replace: string }
-  | { type: "move"; assetIds: string[]; outfitId: string }
-  | { type: "duplicate"; assetIds: string[] }
-  | { type: "delete"; assetIds: string[] };
+export type BatchMutationV2 =
+  | { type: "move"; expressionIds: string[]; outfitId: string }
+  | { type: "copy"; expressionIds: string[]; outfitId: string }
+  | { type: "delete"; expressionIds: string[] };
 
-export type ImportLayout = "outfit-expression" | "actor-outfit-expression";
+export type ImportLayoutV2 = "automatic" | "outfit-expression" | "outfit-expression-variant";
 
-export interface ImportRequest {
+export interface ImportRequestV2 {
   requestId: string;
   characterId: string;
   uploadIds: string[];
-  layout: ImportLayout;
-  targetActorId?: string;
+  layout: ImportLayoutV2;
+  targetOutfitId?: string;
+  targetExpressionId?: string;
 }
 
 export type FrontendToBackend =
   | { type: "ready"; chatId: string | null; characterId: string | null }
   | { type: "refresh"; chatId: string | null; characterId: string | null }
-  | { type: "save-settings"; requestId: string; settings: LumiStageSettingsV1; expectedRevision: number }
-  | { type: "save-profile"; requestId: string; profile: CharacterProfileV1; expectedRevision: number }
-  | { type: "save-chat-layout"; requestId: string; chatId: string; layoutOverride: Partial<StageAppearanceSettings> | null; expectedRevision: number }
-  | { type: "apply-manual"; requestId: string; chatId: string; override: ManualOverride }
-  | { type: "clear-manual"; requestId: string; chatId: string; actorId: string }
+  | { type: "save-settings"; requestId: string; settings: LumiStageSettingsV2; expectedRevision: number }
+  | { type: "save-profile"; requestId: string; profile: CharacterProfileV2; expectedRevision: number }
+  | { type: "save-chat-layout"; requestId: string; chatId: string; layoutOverride: Partial<StageAppearanceSettingsV2> | null; expectedRevision: number }
+  | { type: "apply-manual"; requestId: string; chatId: string; override: ManualOverrideV2 }
+  | { type: "clear-manual"; requestId: string; chatId: string; characterId: string }
   | { type: "analyze-now"; requestId: string; chatId: string }
-  | ({ type: "import-assets" } & ImportRequest)
-  | { type: "delete-assets"; requestId: string; characterId: string; assetIds: string[] }
+  | ({ type: "import-assets" } & ImportRequestV2)
+  | { type: "delete-variants"; requestId: string; characterId: string; variantIds: string[] }
   | { type: "request-export"; requestId: string; characterId: string }
   | { type: "request-diagnostics"; requestId: string }
   | { type: "open-connections" }
@@ -262,17 +238,17 @@ export type FrontendToBackend =
 
 export type BackendToFrontend =
   | { type: "state"; state: FrontendState }
-  | { type: "profile"; profile: CharacterProfileV1; assetViews: Record<string, AssetView> }
-  | { type: "snapshot"; timeline: ChatTimelineV1; assetViews: Record<string, AssetView> }
+  | { type: "profile"; profile: CharacterProfileV2; variantViews: Record<string, VariantView> }
+  | { type: "snapshot"; timeline: ChatTimelineV2; variantViews: Record<string, VariantView> }
   | { type: "saved"; requestId: string; revision: number }
   | { type: "import-progress"; requestId: string; completed: number; total: number; message: string }
-  | { type: "import-complete"; requestId: string; profile: CharacterProfileV1; assetViews: Record<string, AssetView>; imported: number; skipped: number; errors: string[] }
-  | { type: "export-ready"; requestId: string; archive: LumiStageArchiveV1; urls: Record<string, string> }
+  | { type: "import-complete"; requestId: string; profile: CharacterProfileV2; variantViews: Record<string, VariantView>; imported: number; skipped: number; errors: string[] }
+  | { type: "export-ready"; requestId: string; archive: LumiStageArchiveV2; urls: Record<string, string> }
   | { type: "diagnostics"; requestId: string; report: Record<string, unknown> }
   | { type: "notice"; tone: "info" | "success" | "warning" | "error"; message: string }
   | { type: "error"; requestId?: string; code: string; message: string; currentRevision?: number };
 
-export const DEFAULT_SETTINGS: LumiStageSettingsV1 = {
+export const DEFAULT_SETTINGS: LumiStageSettingsV2 = {
   schemaVersion: SCHEMA_VERSION,
   revision: 0,
   detection: {
@@ -281,8 +257,7 @@ export const DEFAULT_SETTINGS: LumiStageSettingsV1 = {
     model: null,
     contextMessages: 5,
     temperature: 0.1,
-    stateConfidence: 0.6,
-    outfitConfidence: 0.85,
+    confidence: 0.6,
   },
   appearance: {
     transition: "crossfade",

@@ -1,8 +1,8 @@
 import { applyDecision, emptySnapshot, type CatalogEntry } from "./model";
 import type {
-  ChatTimelineV1,
-  DecisionRecord,
-  LumiStageSettingsV1,
+  ChatTimelineV2,
+  DecisionRecordV2,
+  LumiStageSettingsV2,
 } from "./types";
 
 export interface TimelineMessageKey {
@@ -13,9 +13,9 @@ export interface TimelineMessageKey {
 }
 
 export function findCachedDecision(
-  records: DecisionRecord[],
+  records: DecisionRecordV2[],
   message: Pick<TimelineMessageKey, "id" | "swipeId" | "contentHash">,
-): DecisionRecord | null {
+): DecisionRecordV2 | null {
   return records.find((record) =>
     record.messageId === message.id
     && record.swipeId === message.swipeId
@@ -23,7 +23,11 @@ export function findCachedDecision(
   ) ?? null;
 }
 
-export function upsertDecision(records: DecisionRecord[], incoming: DecisionRecord, limit = 2000): DecisionRecord[] {
+export function upsertDecision(
+  records: DecisionRecordV2[],
+  incoming: DecisionRecordV2,
+  limit = 2000,
+): DecisionRecordV2[] {
   return [
     ...records.filter((record) => !(
       record.messageId === incoming.messageId
@@ -34,14 +38,10 @@ export function upsertDecision(records: DecisionRecord[], incoming: DecisionReco
   ].slice(-limit);
 }
 
-/**
- * Drop deleted-message records and stale content for the currently selected
- * swipe while retaining inactive swipe records for instant restoration.
- */
 export function reconcileDecisionRecords(
-  records: DecisionRecord[],
+  records: DecisionRecordV2[],
   messages: TimelineMessageKey[],
-): DecisionRecord[] {
+): DecisionRecordV2[] {
   const active = new Map(messages.map((message) => [message.id, message]));
   return records.filter((record) => {
     const message = active.get(record.messageId);
@@ -52,27 +52,26 @@ export function reconcileDecisionRecords(
 }
 
 export function replayTimeline(
-  timeline: ChatTimelineV1,
+  timeline: ChatTimelineV2,
   catalog: CatalogEntry[],
-  settings: LumiStageSettingsV1,
+  settings: LumiStageSettingsV2,
   messages: TimelineMessageKey[],
   now = Date.now(),
-): ChatTimelineV1 {
+): ChatTimelineV2 {
   const decisions = reconcileDecisionRecords(timeline.decisions, messages);
   let snapshot = emptySnapshot(timeline.chatId, now);
   for (const message of messages) {
     if (message.role !== "assistant") continue;
-    const record = findCachedDecision(decisions, message);
-    if (record) {
-      snapshot = applyDecision(
-        snapshot,
-        catalog,
-        record.decision,
-        timeline.manualOverrides,
-        settings,
-        record.createdAt,
-      );
-    }
+    const cached = findCachedDecision(decisions, message);
+    if (!cached) continue;
+    snapshot = applyDecision(
+      snapshot,
+      catalog,
+      cached.decision,
+      timeline.manualOverrides,
+      settings,
+      cached.createdAt,
+    );
   }
   return {
     ...timeline,
@@ -96,7 +95,9 @@ export function resolveChatCharacterIds(chat: Record<string, unknown>): {
       ? chat.characterId
       : null;
   const groupIds = metadata.group === true && Array.isArray(metadata.character_ids)
-    ? metadata.character_ids.filter((id): id is string => typeof id === "string" && id.length > 0)
+    ? metadata.character_ids.filter(
+      (id): id is string => typeof id === "string" && id.length > 0,
+    )
     : directCharacterId ? [directCharacterId] : [];
   const muted = new Set(
     Array.isArray(metadata.muted_character_ids)
@@ -111,4 +112,3 @@ export function resolveChatCharacterIds(chat: Record<string, unknown>): {
       : characterIds[0] ?? null,
   };
 }
-

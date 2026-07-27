@@ -1,18 +1,25 @@
-import { SCHEMA_VERSION, type DetectionActorDecision, type DetectionDecisionV1, type LumiStageSettingsV1 } from "./types";
 import type { CatalogEntry } from "./model";
+import {
+  SCHEMA_VERSION,
+  type DetectionCharacterDecisionV2,
+  type DetectionDecisionV2,
+  type LumiStageSettingsV2,
+} from "./types";
 
 export interface DetectorResponse {
-  content?: string;
-  tool_calls?: Array<{ name?: string; args?: unknown }>;
+  content?: string | null;
+  tool_calls?: Array<{ name: string; args: unknown }>;
   provider?: string;
   model?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
-function nullableString(value: unknown): string | null {
+function requiredString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
@@ -21,28 +28,34 @@ function confidence(value: unknown): number {
   return Math.min(1, Math.max(0, number));
 }
 
-function normalizeActorDecision(value: unknown): DetectionActorDecision | null {
+function normalizeCharacterDecision(value: unknown): DetectionCharacterDecisionV2 | null {
   const raw = asRecord(value);
-  const actorId = nullableString(raw.actorId);
-  if (!actorId) return null;
+  const characterId = requiredString(raw.characterId);
+  const outfitId = requiredString(raw.outfitId);
+  const expressionId = requiredString(raw.expressionId);
+  const variantId = requiredString(raw.variantId);
+  if (!characterId || !outfitId || !expressionId || !variantId) return null;
   return {
-    actorId,
-    outfitId: nullableString(raw.outfitId),
-    expressionId: nullableString(raw.expressionId),
+    characterId,
+    outfitId,
+    expressionId,
+    variantId,
     confidence: confidence(raw.confidence),
   };
 }
 
-export function normalizeDecision(value: unknown): DetectionDecisionV1 | null {
+export function normalizeDecision(value: unknown): DetectionDecisionV2 | null {
   const raw = asRecord(value);
-  const actors = Array.isArray(raw.actors)
-    ? raw.actors.map(normalizeActorDecision).filter((item): item is DetectionActorDecision => !!item)
-    : [];
-  const focusedActorIds = Array.isArray(raw.focusedActorIds)
-    ? [...new Set(raw.focusedActorIds.filter((item): item is string => typeof item === "string" && !!item))]
-    : [];
-  if (actors.length === 0 && focusedActorIds.length === 0) return null;
-  return { schemaVersion: SCHEMA_VERSION, focusedActorIds, actors };
+  if (!Array.isArray(raw.characters) || !Array.isArray(raw.focusedCharacterIds)) return null;
+  const parsedCharacters = raw.characters.map(normalizeCharacterDecision);
+  if (parsedCharacters.some((item) => !item)) return null;
+  const characters = parsedCharacters as DetectionCharacterDecisionV2[];
+  const focusValues = raw.focusedCharacterIds.filter(
+    (item): item is string => typeof item === "string" && !!item,
+  );
+  if (focusValues.length !== raw.focusedCharacterIds.length || !characters.length) return null;
+  const focusedCharacterIds = [...new Set(focusValues)];
+  return { schemaVersion: SCHEMA_VERSION, focusedCharacterIds, characters };
 }
 
 function parseJsonText(value: string): unknown {
@@ -53,40 +66,36 @@ function parseJsonText(value: string): unknown {
   } catch {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try { return JSON.parse(text.slice(start, end + 1)); } catch { return null; }
+    if (start < 0 || end <= start) return null;
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      return null;
     }
-    return null;
   }
 }
 
-export function parseDetectorResponse(response: DetectorResponse): DetectionDecisionV1 | null {
+export function parseDetectorResponse(response: DetectorResponse): DetectionDecisionV2 | null {
   const tool = response.tool_calls?.find((item) => item.name === "set_stage_state");
   if (tool) return normalizeDecision(tool.args);
   if (typeof response.content === "string") return normalizeDecision(parseJsonText(response.content));
   return null;
 }
 
-function nodeSummary(entry: CatalogEntry): Record<string, unknown> {
+function characterSummary(entry: CatalogEntry): Record<string, unknown> {
   return {
-    actorId: entry.actor.id,
-    name: entry.actor.name,
-    aliases: entry.actor.aliases,
-    outfits: entry.actor.outfits.filter((outfit) => outfit.enabled).map((outfit) => ({
+    characterId: entry.characterId,
+    name: entry.profile.characterName,
+    outfits: entry.profile.outfits.map((outfit) => ({
       outfitId: outfit.id,
       name: outfit.name,
-      aliases: outfit.aliases,
-      allowAutoSwitch: outfit.allowAutoSwitch,
-      expressions: outfit.expressions.filter((expression) => expression.enabled).map((expression) => ({
+      expressions: outfit.expressions.map((expression) => ({
         expressionId: expression.id,
         name: expression.name,
-        aliases: expression.aliases,
-        cues: expression.cues,
-        tags: expression.tags,
-        sprites: expression.assets.map((asset) => ({
-          fileName: asset.fileName,
-          mediaKind: asset.mediaKind,
-          enabled: asset.enabled,
+        sprites: expression.variants.map((variant) => ({
+          variantId: variant.id,
+          fileName: variant.fileName,
+          mediaKind: variant.mediaKind,
         })),
       })),
     })),
@@ -96,55 +105,66 @@ function nodeSummary(entry: CatalogEntry): Record<string, unknown> {
 export function buildDetectorRequest(
   catalog: CatalogEntry[],
   recentMessages: Array<{ role: string; content: string }>,
-  currentStates: Record<string, { outfitId: string | null; expressionId: string | null }>,
-  settings: LumiStageSettingsV1,
+  currentStates: Record<string, {
+    outfitId: string | null;
+    expressionId: string | null;
+    variantId: string | null;
+  }>,
+  settings: LumiStageSettingsV2,
 ): Record<string, unknown> {
-  const catalogJson = JSON.stringify(catalog.map(nodeSummary));
-  const currentJson = JSON.stringify(currentStates);
   const system = [
-    "You direct a character sprite stage after a completed roleplay reply.",
-    "Choose only IDs present in the supplied catalog. Never invent IDs.",
-    "Identify every actor whose visible state materially changes and which actors are the visual focus.",
-    "The complete wardrobe is supplied in this single catalog: every enabled outfit folder, every enabled expression, and every sprite filename inside each expression.",
-    "Use outfit folder names, aliases, expression names, aliases, cues, tags, and sprite filenames together to choose the closest visible state.",
-    "An outfit is an ordinary selectable state. Return its ID whenever the scene best matches it; no separate outfit-change cue exists.",
-    "Expression means the complete sprite state inside the selected outfit, including facial emotion, body position, and action.",
-    "If a dimension is not supported by the text, return null so the current stage state remains sticky.",
-    "Confidence is 0..1 for the combined visible-state match.",
-    `Catalog: ${catalogJson}`,
-    `Current states: ${currentJson}`,
+    "You direct the visible character sprite stage after a completed roleplay reply.",
+    "Choose only IDs present in the complete catalog. Never invent or rewrite an ID.",
+    "The catalog contains every outfit folder, every expression, and every sprite filename.",
+    "Choose the exact sprite variant whose filename and expression best match the visible emotion, action, and presentation.",
+    "Outfits are ordinary selectable states and may change whenever the latest scene supports a different outfit.",
+    "Classify all relevant group-chat characters in this one call and identify the visual focus.",
+    "Return one complete outfit, expression, and exact sprite variant for every character you update.",
+    "Confidence is 0..1 for the complete visible-state match.",
+    `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
+    `Current states: ${JSON.stringify(currentStates)}`,
   ].join("\n");
   return {
     messages: [
       { role: "system", content: system },
       ...recentMessages.slice(-settings.detection.contextMessages),
-      { role: "user", content: "Set the sprite stage for the latest assistant reply. Call set_stage_state exactly once." },
+      {
+        role: "user",
+        content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once.",
+      },
     ],
     connection_id: settings.detection.connectionId ?? undefined,
     model: settings.detection.model ?? undefined,
     parameters: {
       temperature: settings.detection.temperature,
-      max_tokens: 420,
+      max_tokens: 560,
     },
     tools: [{
       name: "set_stage_state",
-      description: "Select focused actors and valid layered sprite states for the latest assistant reply.",
+      description: "Select focused characters and exact sprite variants for the latest reply.",
       parameters: {
         type: "object",
         additionalProperties: false,
-        required: ["focusedActorIds", "actors"],
+        required: ["focusedCharacterIds", "characters"],
         properties: {
-          focusedActorIds: { type: "array", items: { type: "string" } },
-          actors: {
+          focusedCharacterIds: { type: "array", items: { type: "string" } },
+          characters: {
             type: "array",
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["actorId", "outfitId", "expressionId", "confidence"],
+              required: [
+                "characterId",
+                "outfitId",
+                "expressionId",
+                "variantId",
+                "confidence",
+              ],
               properties: {
-                actorId: { type: "string" },
-                outfitId: { type: ["string", "null"] },
-                expressionId: { type: ["string", "null"] },
+                characterId: { type: "string" },
+                outfitId: { type: "string" },
+                expressionId: { type: "string" },
+                variantId: { type: "string" },
                 confidence: { type: "number", minimum: 0, maximum: 1 },
               },
             },
@@ -155,26 +175,31 @@ export function buildDetectorRequest(
   };
 }
 
-export function validateDecision(decision: DetectionDecisionV1, catalog: CatalogEntry[]): DetectionDecisionV1 {
-  const actors = new Map(catalog.map((entry) => [entry.actor.id, entry.actor]));
-  const validActors: DetectionActorDecision[] = [];
-  for (const item of decision.actors) {
-    const actor = actors.get(item.actorId);
-    if (!actor) continue;
-    const outfit = item.outfitId ? actor.outfits.find((candidate) => candidate.id === item.outfitId && candidate.enabled) : null;
-    const expression = item.expressionId
-      ? (outfit?.expressions ?? actor.outfits.flatMap((candidate) => candidate.expressions))
-        .find((candidate) => candidate.id === item.expressionId && candidate.enabled)
-      : null;
-    validActors.push({
-      ...item,
-      outfitId: outfit?.id ?? null,
-      expressionId: expression?.id ?? null,
-    });
+export function validateDecision(
+  decision: DetectionDecisionV2,
+  catalog: CatalogEntry[],
+): DetectionDecisionV2 {
+  const entries = new Map(catalog.map((entry) => [entry.characterId, entry.profile]));
+  const characters: DetectionCharacterDecisionV2[] = [];
+  let invalid = false;
+  for (const item of decision.characters) {
+    const profile = entries.get(item.characterId);
+    const outfit = profile?.outfits.find((candidate) => candidate.id === item.outfitId);
+    const expression = outfit?.expressions.find(
+      (candidate) => candidate.id === item.expressionId,
+    );
+    const variant = expression?.variants.find((candidate) => candidate.id === item.variantId);
+    if (!profile || !outfit || !expression || !variant) {
+      invalid = true;
+      break;
+    }
+    characters.push(item);
   }
+  const focusedCharacterIds = decision.focusedCharacterIds.filter((id) => entries.has(id));
+  if (focusedCharacterIds.length !== decision.focusedCharacterIds.length) invalid = true;
   return {
     schemaVersion: SCHEMA_VERSION,
-    focusedActorIds: decision.focusedActorIds.filter((actorId) => actors.has(actorId)),
-    actors: validActors,
+    focusedCharacterIds: invalid ? [] : focusedCharacterIds,
+    characters: invalid ? [] : characters,
   };
 }

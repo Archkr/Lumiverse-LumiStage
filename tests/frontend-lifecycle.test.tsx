@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, waitFor } from "@testing-library/preact";
 import { setup } from "../src/frontend";
 import { createTimeline, defaultSettings } from "../src/model";
 import type { BackendToFrontend, FrontendState } from "../src/types";
@@ -10,14 +11,27 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function handleRoot() {
-  const root = document.createElement("div");
-  document.body.append(root);
-  return root;
+function root() {
+  const element = document.createElement("div");
+  document.body.append(element);
+  return element;
+}
+
+function mountedHandle(target: Element, value: unknown = "") {
+  return {
+    componentId: crypto.randomUUID(),
+    element: target,
+    update: vi.fn(),
+    destroy: vi.fn(),
+    getValue: vi.fn(() => value),
+    refresh: vi.fn(),
+  };
 }
 
 function mockContext() {
   let backendHandler: ((message: BackendToFrontend) => void) | null = null;
+  let editorHandler: (() => void) | null = null;
+  const editorState = { open: false, characterId: null as string | null, activeTabId: null, extensions: {} };
   const removeStyle = vi.fn();
   const removeBackend = vi.fn();
   const removeChat = vi.fn();
@@ -25,7 +39,7 @@ function mockContext() {
   const removeInputClick = vi.fn();
   const removeDrag = vi.fn();
   const drawer = {
-    root: handleRoot(),
+    root: root(),
     tabId: "lumi_stage:studio",
     setTitle: vi.fn(),
     setShortName: vi.fn(),
@@ -35,7 +49,7 @@ function mockContext() {
     onActivate: vi.fn(() => vi.fn()),
   };
   const character = {
-    root: handleRoot(),
+    root: root(),
     tabId: "lumi_stage:profile",
     setTitle: vi.fn(),
     activate: vi.fn(),
@@ -53,7 +67,7 @@ function mockContext() {
   let visible = true;
   let fullscreen = false;
   const float = {
-    root: handleRoot(),
+    root: root(),
     widgetId: "widget",
     moveTo: vi.fn(),
     getPosition: vi.fn(() => ({ x: 1, y: 2 })),
@@ -65,6 +79,14 @@ function mockContext() {
     destroy: vi.fn(),
     onDragEnd: vi.fn(() => removeDrag),
   };
+  const modalRoot = root();
+  const modal = {
+    root: modalRoot,
+    modalId: "studio-modal",
+    dismiss: vi.fn(),
+    setTitle: vi.fn(),
+    onDismiss: vi.fn(() => vi.fn()),
+  };
   const context = {
     deferReady: vi.fn(),
     ready: vi.fn(),
@@ -74,25 +96,31 @@ function mockContext() {
       backendHandler = handler;
       return removeBackend;
     }),
-    dom: {
-      addStyle: vi.fn(() => removeStyle),
+    dom: { addStyle: vi.fn(() => removeStyle) },
+    components: {
+      mountBadge: vi.fn((target: Element) => mountedHandle(target)),
+      mountSelect: vi.fn((target: Element) => mountedHandle(target)),
+      mountSwitch: vi.fn((target: Element) => mountedHandle(target, false)),
+      mountModelCombobox: vi.fn((target: Element) => mountedHandle(target)),
+      mountNumberStepper: vi.fn((target: Element) => mountedHandle(target, 5)),
+      mountRangeSlider: vi.fn((target: Element) => mountedHandle(target, 50)),
+      mountPagination: vi.fn((target: Element) => mountedHandle(target)),
     },
-    events: {
-      on: vi.fn(() => removeChat),
-      emit: vi.fn(),
-    },
-    permissions: {
-      getGranted: vi.fn(async () => []),
-      request: vi.fn(),
-    },
+    events: { on: vi.fn(() => removeChat), emit: vi.fn() },
+    permissions: { getGranted: vi.fn(async () => []), request: vi.fn() },
     ui: {
       registerDrawerTab: vi.fn(() => drawer),
       registerCharacterEditorTab: vi.fn(() => character),
       registerInputBarAction: vi.fn(() => input),
       createFloatWidget: vi.fn(() => float),
+      showModal: vi.fn(() => modal),
+      showConfirm: vi.fn(async () => ({ confirmed: true })),
       characterEditor: {
-        getState: vi.fn(() => ({ open: false, characterId: null, activeTabId: null, extensions: {} })),
-        onChange: vi.fn(() => removeEditor),
+        getState: vi.fn(() => editorState),
+        onChange: vi.fn((handler: () => void) => {
+          editorHandler = handler;
+          return removeEditor;
+        }),
       },
     },
   };
@@ -102,6 +130,8 @@ function mockContext() {
     character,
     input,
     float,
+    modal,
+    editorState,
     removeBackend,
     removeChat,
     removeEditor,
@@ -110,6 +140,9 @@ function mockContext() {
     removeStyle,
     emitBackend(message: BackendToFrontend) {
       backendHandler?.(message);
+    },
+    emitEditor() {
+      editorHandler?.();
     },
   };
 }
@@ -122,7 +155,7 @@ function state(permissions: FrontendState["permissions"]): FrontendState {
     stageProfiles: [profile],
     timeline: createTimeline("chat", 1),
     snapshot: null,
-    assetViews: {},
+    variantViews: {},
     connections: [],
     permissions,
     activeChatId: "chat",
@@ -134,10 +167,12 @@ function state(permissions: FrontendState["permissions"]): FrontendState {
 }
 
 describe("frontend host lifecycle", () => {
-  it("registers permission-gated placements, removes them on revocation, and cleans every subscription", async () => {
+  it("registers permission-gated placements, opens the large Studio, and cleans subscriptions", async () => {
     const mock = mockContext();
     const cleanup = setup(mock.context as never);
-    await Promise.resolve();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(mock.context.deferReady).toHaveBeenCalledOnce();
     expect(mock.context.ui.registerDrawerTab).toHaveBeenCalledOnce();
     expect(mock.context.sendToBackend).toHaveBeenCalledWith({
@@ -146,17 +181,33 @@ describe("frontend host lifecycle", () => {
       characterId: "character-a",
     });
 
-    mock.emitBackend({ type: "state", state: state({
-      generation: true,
-      chats: true,
-      chatMutation: true,
-      characters: true,
-      images: true,
-      uiPanels: true,
-    }) });
+    await act(async () => {
+      mock.emitBackend({ type: "state", state: state({
+        generation: true,
+        chats: true,
+        chatMutation: true,
+        characters: true,
+        images: true,
+        uiPanels: true,
+      }) });
+    });
     expect(mock.context.ui.registerCharacterEditorTab).toHaveBeenCalledOnce();
     expect(mock.context.ui.registerInputBarAction).toHaveBeenCalledOnce();
     expect(mock.context.ui.createFloatWidget).toHaveBeenCalledOnce();
+    const open = mock.drawer.root.querySelector(".ls-drawer-primary-actions .ls-button-primary");
+    expect(open).not.toBeNull();
+    await waitFor(() => {
+      expect((open as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(open as HTMLButtonElement);
+    expect(mock.context.ui.showModal).toHaveBeenCalledWith(expect.objectContaining({
+      width: 1440,
+      maxHeight: 980,
+    }));
+
+    mock.editorState.open = true;
+    mock.editorState.characterId = "character-a";
+    expect(() => mock.emitEditor()).not.toThrow();
 
     mock.emitBackend({ type: "state", state: state({
       generation: true,

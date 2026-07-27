@@ -1,76 +1,96 @@
 import { describe, expect, it } from "vitest";
-import { buildDetectorRequest, parseDetectorResponse, validateDecision } from "../src/detector";
+import {
+  buildDetectorRequest,
+  parseDetectorResponse,
+  validateDecision,
+} from "../src/detector";
 import { buildCatalog, defaultSettings } from "../src/model";
-import { decision, profileA, profileB } from "./fixtures";
+import { profileA } from "./fixtures";
 
-describe("structured detector contract", () => {
-  it("prefers the named tool call and normalizes confidence", () => {
-    const parsed = parseDetectorResponse({
-      content: "not json",
+describe("detector contract", () => {
+  it("parses the exact structured character and variant result", () => {
+    const decision = parseDetectorResponse({
       tool_calls: [{
         name: "set_stage_state",
         args: {
-          focusedActorIds: ["actor-a", "actor-a"],
-          actors: [{ ...decision().actors[0], confidence: 7 }],
+          focusedCharacterIds: ["character-a"],
+          characters: [{
+            characterId: "character-a",
+            outfitId: "outfit-casual",
+            expressionId: "expression-neutral",
+            variantId: "variant-neutral-b",
+            confidence: 1.4,
+          }],
         },
       }],
     });
-    expect(parsed?.focusedActorIds).toEqual(["actor-a"]);
-    expect(parsed?.actors[0].confidence).toBe(1);
+    expect(decision?.schemaVersion).toBe(2);
+    expect(decision?.focusedCharacterIds).toEqual(["character-a"]);
+    expect(decision?.characters[0]).toEqual(expect.objectContaining({
+      variantId: "variant-neutral-b",
+      confidence: 1,
+    }));
   });
 
-  it("accepts fenced JSON fallback and rejects malformed output", () => {
-    expect(parseDetectorResponse({
-      content: `\`\`\`json\n${JSON.stringify(decision())}\n\`\`\``,
-    })?.actors[0].actorId).toBe("actor-a");
-    expect(parseDetectorResponse({ content: "certainly happy" })).toBeNull();
-  });
-
-  it("drops every invented or disabled catalog ID", () => {
+  it("rejects incomplete and mismatched IDs as complete units", () => {
     const catalog = buildCatalog([profileA()]);
-    const validated = validateDecision({
-      schemaVersion: 1,
-      focusedActorIds: ["actor-a", "invented"],
-      actors: [
-        { ...decision().actors[0], expressionId: "invented" },
-        { ...decision().actors[0], actorId: "invented" },
-      ],
-    }, catalog);
-    expect(validated.focusedActorIds).toEqual(["actor-a"]);
-    expect(validated.actors).toHaveLength(1);
-    expect(validated.actors[0].expressionId).toBeNull();
+    const parsed = parseDetectorResponse({
+      content: JSON.stringify({
+        focusedCharacterIds: ["character-a", "missing"],
+        characters: [
+          {
+            characterId: "character-a",
+            outfitId: "outfit-formal",
+            expressionId: "expression-neutral",
+            variantId: "variant-neutral-a",
+            confidence: 0.9,
+          },
+          {
+            characterId: "missing",
+            outfitId: "x",
+            expressionId: "y",
+            variantId: "z",
+            confidence: 1,
+          },
+        ],
+      }),
+    });
+    if (!parsed) throw new Error("Expected parsed decision.");
+    const validated = validateDecision(parsed, catalog);
+    expect(validated.focusedCharacterIds).toEqual([]);
+    expect(validated.characters).toEqual([]);
   });
 
-  it("classifies an ensemble in one low-temperature request using only recent context", () => {
-    const settings = defaultSettings(1);
-    settings.detection.contextMessages = 5;
+  it("sends every outfit, expression, and sprite filename in one catalog", () => {
+    const profile = profileA();
     const request = buildDetectorRequest(
-      buildCatalog([profileA(), profileB()]),
-      Array.from({ length: 8 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `message-${index}` })),
-      {},
-      settings,
+      buildCatalog([profile]),
+      [{ role: "assistant", content: "Aster smiles." }],
+      {
+        "character-a": {
+          outfitId: "outfit-casual",
+          expressionId: "expression-neutral",
+          variantId: "variant-neutral-a",
+        },
+      },
+      defaultSettings(1),
     );
-    expect(request.parameters).toMatchObject({ temperature: 0.1 });
-    expect(request.tools).toHaveLength(1);
-    const messages = request.messages as Array<{ role: string; content: string }>;
-    expect(messages.filter((item) => item.content.startsWith("message-")).map((item) => item.content))
-      .toEqual(["message-3", "message-4", "message-5", "message-6", "message-7"]);
-    expect(messages[0].content).toContain("actor-a");
-    expect(messages[0].content).toContain("actor-b");
-  });
-
-  it("sends every outfit folder and contained sprite filename in one catalog without cue-gated outfits", () => {
-    const request = buildDetectorRequest(buildCatalog([profileA()]), [], {}, defaultSettings(1));
-    const messages = request.messages as Array<{ role: string; content: string }>;
-    const system = messages[0].content;
-    expect(system).toContain('"name":"Casual"');
-    expect(system).toContain('"name":"Formal"');
-    expect(system).toContain('"fileName":"asset-expression-happy.png"');
-    expect(system).toContain('"fileName":"asset-expression-formal.png"');
-    expect(system).toContain("no separate outfit-change cue exists");
-    expect(system).not.toContain("explicitOutfitCue");
-    const tool = (request.tools as Array<{ parameters: { properties: { actors: { items: { required: string[]; properties: Record<string, unknown> } } } } }>)[0];
-    expect(tool.parameters.properties.actors.items.required).toEqual(["actorId", "outfitId", "expressionId", "confidence"]);
-    expect(tool.parameters.properties.actors.items.properties).not.toHaveProperty("poseId");
+    const system = String((request.messages as Array<{ content: string }>)[0].content);
+    expect(system).toContain("Casual");
+    expect(system).toContain("Formal");
+    expect(system).toContain("Neutral");
+    expect(system).toContain("neutral-soft.png");
+    expect(system).toContain("neutral-side.png");
+    expect(system).toContain("variant-neutral-b");
+    expect(system).toContain("Outfits are ordinary selectable states");
+    const tool = (request.tools as Array<Record<string, any>>)[0];
+    const required = tool.parameters.properties.characters.items.required;
+    expect(required).toEqual([
+      "characterId",
+      "outfitId",
+      "expressionId",
+      "variantId",
+      "confidence",
+    ]);
   });
 });

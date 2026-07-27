@@ -5,12 +5,13 @@ import type {
   SpindleFloatWidgetHandle,
   SpindleFrontendContext,
   SpindleInputBarActionHandle,
+  SpindleModalHandle,
 } from "lumiverse-spindle-types";
 import { LumiStageClient } from "./ui/client";
 import { LUMI_STAGE_ICON } from "./ui/icons";
 import { showQuickPicker } from "./ui/modals";
 import { Stage } from "./ui/stage";
-import { CharacterSetup, Studio } from "./ui/studio";
+import { CharacterSetup, DrawerDashboard, StudioWorkspace } from "./ui/studio";
 import { LUMI_STAGE_CSS } from "./ui/styles";
 
 function initialPosition(width: number, height: number, x: number, y: number) {
@@ -31,20 +32,42 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     title: "LumiStage",
     shortName: "Stage",
     headerTitle: "LumiStage",
-    description: "Independent expression direction, media libraries, automation, and ensemble staging.",
+    description: "Independent outfit libraries, expression direction, and ensemble staging.",
     keywords: ["expressions", "sprites", "outfits", "stage", "batch"],
     iconSvg: LUMI_STAGE_ICON,
   });
-  render(<Studio client={client} />, drawer.root);
 
   let characterTab: SpindleCharacterEditorTabHandle | null = null;
   let inputAction: SpindleInputBarActionHandle | null = null;
   let floatWidget: SpindleFloatWidgetHandle | null = null;
+  let studioModal: SpindleModalHandle | null = null;
   let unsubscribeInput: (() => void) | null = null;
   let unsubscribeDrag: (() => void) | null = null;
   let renderedCharacterId: string | null = null;
   let syncing = false;
   let disposed = false;
+
+  const openStudio = (characterId?: string) => {
+    if (characterId) {
+      const active = ctx.getActiveChat();
+      client.refresh(active.chatId, characterId);
+    }
+    if (studioModal) return;
+    studioModal = ctx.ui.showModal({
+      title: "LumiStage — Expression Studio",
+      width: 1440,
+      maxHeight: 980,
+      persistent: true,
+    });
+    render(<StudioWorkspace client={client} />, studioModal.root);
+    studioModal.onDismiss(() => {
+      if (!studioModal) return;
+      render(null, studioModal.root);
+      studioModal = null;
+    });
+  };
+
+  render(<DrawerDashboard client={client} onOpenStudio={() => openStudio()} />, drawer.root);
 
   const saveAppearance = async (patch: Partial<ReturnType<LumiStageClient["getSnapshot"]>["backend"]["settings"]["appearance"]>) => {
     try {
@@ -62,7 +85,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     renderedCharacterId = characterId;
     render(
       characterId
-        ? <CharacterSetup client={client} characterId={characterId} onOpenStudio={() => drawer.activate()} />
+        ? <CharacterSetup client={client} characterId={characterId} onOpenStudio={openStudio} />
         : null,
       characterTab.root,
     );
@@ -221,6 +244,11 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     destroyCharacterTab();
     destroyInputAction();
     destroyFloatWidget();
+    if (studioModal) {
+      render(null, studioModal.root);
+      studioModal.dismiss();
+      studioModal = null;
+    }
     render(null, drawer.root);
     drawer.destroy();
     removeStyle();

@@ -22,7 +22,7 @@ function normalizedKey(value) {
 }
 
 // src/types.ts
-var SCHEMA_VERSION = 1;
+var SCHEMA_VERSION = 2;
 var LUMI_STAGE_ID = "lumi_stage";
 var DEFAULT_SETTINGS = {
   schemaVersion: SCHEMA_VERSION,
@@ -33,8 +33,7 @@ var DEFAULT_SETTINGS = {
     model: null,
     contextMessages: 5,
     temperature: 0.1,
-    stateConfidence: 0.6,
-    outfitConfidence: 0.85
+    confidence: 0.6
   },
   appearance: {
     transition: "crossfade",
@@ -57,203 +56,211 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/model.ts
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function list(value) {
+  return Array.isArray(value) ? value : [];
+}
 function finite(value, fallback, min, max2) {
   const number = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max2, Math.max(min, number));
 }
-function strings(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean))];
+function integer(value, fallback, min = 0, max2 = 1e5) {
+  return Math.round(finite(value, fallback, min, max2));
+}
+function optionalId(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+function safeFileName(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  const cleaned = value.normalize("NFKC").replace(/[\\/:\0]/g, "-").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
 }
 function defaultSettings(now = Date.now()) {
   return structuredClone({ ...DEFAULT_SETTINGS, updatedAt: now });
 }
 function normalizeSettings(raw, now = Date.now()) {
-  const source = raw && typeof raw === "object" ? raw : {};
-  const detection = source.detection ?? DEFAULT_SETTINGS.detection;
-  const appearance = source.appearance ?? DEFAULT_SETTINGS.appearance;
+  const source = record(raw);
+  const detection = record(source.detection);
+  const appearance = record(source.appearance);
   return {
     schemaVersion: SCHEMA_VERSION,
-    revision: Math.max(0, Math.trunc(source.revision ?? 0)),
+    revision: integer(source.revision, 0),
     detection: {
       enabled: detection.enabled !== false,
-      connectionId: typeof detection.connectionId === "string" && detection.connectionId ? detection.connectionId : null,
-      model: typeof detection.model === "string" && detection.model ? detection.model : null,
-      contextMessages: Math.round(finite(detection.contextMessages, 5, 1, 20)),
+      connectionId: optionalId(detection.connectionId),
+      model: optionalId(detection.model),
+      contextMessages: integer(detection.contextMessages, 5, 1, 20),
       temperature: finite(detection.temperature, 0.1, 0, 1),
-      stateConfidence: finite(detection.stateConfidence, 0.6, 0, 1),
-      outfitConfidence: finite(detection.outfitConfidence, 0.85, 0, 1)
+      confidence: finite(detection.confidence ?? detection.stateConfidence, 0.6, 0, 1)
     },
     appearance: {
-      transition: ["crossfade", "lift", "cut"].includes(appearance.transition) ? appearance.transition : "crossfade",
-      transitionMs: Math.round(finite(appearance.transitionMs, 280, 0, 2e3)),
+      transition: ["crossfade", "lift", "cut"].includes(String(appearance.transition)) ? appearance.transition : "crossfade",
+      transitionMs: integer(appearance.transitionMs, 280, 0, 2e3),
       opacity: finite(appearance.opacity, 1, 0.1, 1),
       focusedScale: finite(appearance.focusedScale, 1.035, 0.8, 1.3),
       idleOpacity: finite(appearance.idleOpacity, 0.46, 0.05, 1),
       showCaptions: appearance.showCaptions !== false,
       showChrome: appearance.showChrome !== false,
       ensembleOverlap: finite(appearance.ensembleOverlap, 0.34, 0, 0.8),
-      width: Math.round(finite(appearance.width, 320, 180, 1200)),
-      height: Math.round(finite(appearance.height, 420, 220, 1e3)),
+      width: integer(appearance.width, 320, 180, 1200),
+      height: integer(appearance.height, 420, 220, 1e3),
       x: finite(appearance.x, -1, -1, 1e5),
       y: finite(appearance.y, -1, -1, 1e5),
       fullscreen: appearance.fullscreen === true,
       visible: appearance.visible !== false
     },
-    preloadAdjacent: Math.round(finite(source.preloadAdjacent, 3, 0, 12)),
+    preloadAdjacent: integer(source.preloadAdjacent, 3, 0, 12),
     updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : now
   };
 }
-function createExpression(name = "Neutral", now = Date.now()) {
+function createExpression(name = "Neutral") {
   return {
     id: createId("expression"),
     name: cleanName(name, "Neutral"),
-    aliases: [],
-    cues: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
     order: 0,
-    assets: []
+    variants: []
   };
 }
-function createOutfit(name = "Default", now = Date.now()) {
-  const expression = createExpression("Neutral", now);
+function createOutfit(name = "Default") {
+  const expression = createExpression("Neutral");
   return {
     id: createId("outfit"),
     name: cleanName(name),
-    aliases: [],
-    tags: [],
-    enabled: true,
-    priority: 0,
     order: 0,
-    allowAutoSwitch: true,
     defaultExpressionId: expression.id,
     expressions: [expression]
   };
 }
-function createActor(name, now = Date.now()) {
-  const outfit = createOutfit("Default", now);
-  return {
-    id: createId("actor"),
-    name: cleanName(name, "Actor"),
-    aliases: [],
-    enabled: true,
-    order: 0,
-    defaultOutfitId: outfit.id,
-    outfits: [outfit]
-  };
-}
 function createProfile(characterId, characterName2 = "Character", now = Date.now()) {
-  const actor = createActor(characterName2, now);
+  const outfit = createOutfit("Default");
   return {
     schemaVersion: SCHEMA_VERSION,
     revision: 0,
     characterId,
     characterName: cleanName(characterName2, "Character"),
-    defaultActorId: actor.id,
-    actors: [actor],
+    defaultOutfitId: outfit.id,
+    outfits: [outfit],
     createdAt: now,
     updatedAt: now
   };
 }
-function normalizeAsset(value, index) {
-  if (!value.imageId || !value.contentHash) return null;
-  const mimeType = typeof value.mimeType === "string" ? value.mimeType : "image/png";
+function normalizeVariant(value, index, now) {
+  const raw = record(value);
+  const imageId = optionalId(raw.imageId);
+  const contentHash = optionalId(raw.contentHash);
+  if (!imageId || !contentHash) return null;
+  const mimeType = typeof raw.mimeType === "string" && /^(?:image|video)\//.test(raw.mimeType) ? raw.mimeType : "image/png";
   return {
-    id: typeof value.id === "string" && value.id ? value.id : createId("asset"),
-    imageId: value.imageId,
-    contentHash: value.contentHash,
-    fileName: cleanName(value.fileName ?? `asset-${index}`),
+    id: optionalId(raw.id) ?? createId("variant"),
+    imageId,
+    contentHash,
+    fileName: safeFileName(raw.fileName, `variant-${index + 1}.png`),
     mimeType,
     mediaKind: mimeType.startsWith("video/") ? "video" : "image",
-    enabled: value.enabled !== false,
-    priority: finite(value.priority, 0, -1e3, 1e3),
-    createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now()
+    order: integer(raw.order, index),
+    createdAt: typeof raw.createdAt === "number" ? raw.createdAt : now
   };
 }
-function normalizeExpression(raw, index) {
+function normalizeExpression(value, index, now) {
+  const raw = record(value);
+  const sourceVariants = list(raw.variants).length ? list(raw.variants) : list(raw.assets);
+  const variants = sourceVariants.map((item, variantIndex) => normalizeVariant(item, variantIndex, now)).filter((item) => !!item).sort((a, b) => a.order - b.order).map((item, order) => ({ ...item, order }));
   return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : createId("expression"),
-    name: cleanName(raw.name ?? `Expression ${index + 1}`, `Expression ${index + 1}`),
-    aliases: strings(raw.aliases),
-    cues: strings(raw.cues),
-    tags: strings(raw.tags),
-    enabled: raw.enabled !== false,
-    priority: finite(raw.priority, 0, -1e3, 1e3),
-    order: finite(raw.order, index, 0, 1e5),
-    assets: (raw.assets ?? []).map(normalizeAsset).filter((asset) => !!asset)
+    id: optionalId(raw.id) ?? createId("expression"),
+    name: cleanName(typeof raw.name === "string" ? raw.name : `Expression ${index + 1}`, `Expression ${index + 1}`),
+    order: integer(raw.order, index),
+    variants
   };
 }
-function mergeExpression(target, source) {
-  target.aliases = [.../* @__PURE__ */ new Set([...target.aliases, ...source.aliases])];
-  target.cues = [.../* @__PURE__ */ new Set([...target.cues, ...source.cues])];
-  target.tags = [.../* @__PURE__ */ new Set([...target.tags, ...source.tags])];
-  const assetIds = new Set(target.assets.map((asset) => asset.id));
-  const hashes = new Set(target.assets.map((asset) => asset.contentHash));
-  target.assets.push(...source.assets.filter((asset) => !assetIds.has(asset.id) && !hashes.has(asset.contentHash)));
-  target.enabled ||= source.enabled;
-  target.priority = Math.max(target.priority, source.priority);
+function mergeVariants(target, source) {
+  const ids = new Set(target.variants.map((item) => item.id));
+  const hashes = new Set(target.variants.map((item) => item.contentHash));
+  for (const variant of source.variants) {
+    if (ids.has(variant.id) || hashes.has(variant.contentHash)) continue;
+    target.variants.push({ ...variant, order: target.variants.length });
+    ids.add(variant.id);
+    hashes.add(variant.contentHash);
+  }
 }
-function normalizeOutfit(raw, index) {
-  const legacyPoses = Array.isArray(raw.poses) ? raw.poses : [];
-  const sourceExpressions = [
-    ...Array.isArray(raw.expressions) ? raw.expressions : [],
-    ...legacyPoses.flatMap((pose) => Array.isArray(pose.expressions) ? pose.expressions : [])
-  ];
+function normalizeOutfit(value, index, now, forcedName) {
+  const raw = record(value);
   const expressions = [];
-  sourceExpressions.map(normalizeExpression).forEach((expression) => {
-    const match = expressions.find((item) => normalizedKey(item.name) === normalizedKey(expression.name));
-    if (match) mergeExpression(match, expression);
+  for (const [expressionIndex, entry] of list(raw.expressions).entries()) {
+    const expression = normalizeExpression(entry, expressionIndex, now);
+    const existing = expressions.find((item) => normalizedKey(item.name) === normalizedKey(expression.name));
+    if (existing) mergeVariants(existing, expression);
     else expressions.push({ ...expression, order: expressions.length });
-  });
-  if (expressions.length === 0) expressions.push(createExpression("Neutral"));
-  const legacyDefault = legacyPoses.find((pose) => pose.id === raw.defaultPoseId)?.defaultExpressionId ?? null;
-  const requestedDefault = raw.defaultExpressionId ?? legacyDefault;
+  }
+  if (!expressions.length) expressions.push(createExpression("Neutral"));
+  const requestedDefault = optionalId(raw.defaultExpressionId);
   return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : createId("outfit"),
-    name: cleanName(raw.name ?? `Outfit ${index + 1}`),
-    aliases: strings(raw.aliases),
-    tags: strings(raw.tags),
-    enabled: raw.enabled !== false,
-    priority: finite(raw.priority, 0, -1e3, 1e3),
-    order: finite(raw.order, index, 0, 1e5),
-    allowAutoSwitch: raw.allowAutoSwitch !== false,
-    defaultExpressionId: expressions.some((item) => item.id === requestedDefault) ? requestedDefault ?? null : expressions[0]?.id ?? null,
+    id: optionalId(raw.id) ?? createId("outfit"),
+    name: cleanName(forcedName ?? (typeof raw.name === "string" ? raw.name : `Outfit ${index + 1}`)),
+    order: integer(raw.order, index),
+    defaultExpressionId: expressions.some((item) => item.id === requestedDefault) ? requestedDefault : expressions[0]?.id ?? null,
     expressions
   };
 }
-function normalizeActor(raw, index) {
-  const outfits = (raw.outfits ?? []).map(normalizeOutfit);
-  if (outfits.length === 0) outfits.push(createOutfit("Default"));
+function legacyProfileParts(source) {
+  const modernOutfits = list(source.outfits);
+  if (modernOutfits.length) {
+    return { outfits: modernOutfits, defaultOutfitId: optionalId(source.defaultOutfitId) };
+  }
+  const legacyCharacters = list(source.actors).map(record);
+  if (!legacyCharacters.length) return { outfits: [], defaultOutfitId: null };
+  const selectedId = optionalId(source.defaultActorId);
+  const selected = legacyCharacters.find((item) => optionalId(item.id) === selectedId) ?? legacyCharacters[0];
+  const nameCounts = /* @__PURE__ */ new Map();
+  for (const owner of legacyCharacters) {
+    for (const outfit of list(owner.outfits).map(record)) {
+      const key = normalizedKey(typeof outfit.name === "string" ? outfit.name : "Default");
+      nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const outfits = legacyCharacters.flatMap((owner) => {
+    const ownerName = cleanName(typeof owner.name === "string" ? owner.name : "Character", "Character");
+    return list(owner.outfits).map((entry) => {
+      const outfit = record(entry);
+      const outfitName = cleanName(typeof outfit.name === "string" ? outfit.name : "Default");
+      return nameCounts.get(normalizedKey(outfitName)) > 1 ? { ...outfit, name: `${ownerName} / ${outfitName}` } : outfit;
+    });
+  });
   return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : createId("actor"),
-    name: cleanName(raw.name ?? `Actor ${index + 1}`, `Actor ${index + 1}`),
-    aliases: strings(raw.aliases),
-    enabled: raw.enabled !== false,
-    order: finite(raw.order, index, 0, 1e5),
-    defaultOutfitId: outfits.some((item) => item.id === raw.defaultOutfitId) ? raw.defaultOutfitId ?? null : outfits[0]?.id ?? null,
-    outfits
+    outfits,
+    defaultOutfitId: optionalId(selected.defaultOutfitId)
   };
 }
 function normalizeProfile(raw, characterId, characterName2 = "Character", now = Date.now()) {
   if (!raw || typeof raw !== "object") return createProfile(characterId, characterName2, now);
-  const source = raw;
-  const actors = (source.actors ?? []).map(normalizeActor);
-  if (actors.length === 0) actors.push(createActor(characterName2, now));
+  const source = record(raw);
+  const parts = legacyProfileParts(source);
+  const outfits = parts.outfits.map((item, index) => normalizeOutfit(item, index, now)).sort((a, b) => a.order - b.order).map((item, order) => ({ ...item, order }));
+  if (!outfits.length) outfits.push(createOutfit("Default"));
   return {
     schemaVersion: SCHEMA_VERSION,
-    revision: Math.max(0, Math.trunc(source.revision ?? 0)),
+    revision: integer(source.revision, 0),
     characterId,
-    characterName: cleanName(source.characterName ?? characterName2, "Character"),
-    defaultActorId: actors.some((item) => item.id === source.defaultActorId) ? source.defaultActorId ?? null : actors[0]?.id ?? null,
-    actors,
+    characterName: cleanName(
+      typeof source.characterName === "string" ? source.characterName : characterName2,
+      "Character"
+    ),
+    defaultOutfitId: outfits.some((item) => item.id === parts.defaultOutfitId) ? parts.defaultOutfitId : outfits[0]?.id ?? null,
+    outfits,
     createdAt: typeof source.createdAt === "number" ? source.createdAt : now,
     updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : now
   };
 }
 function emptySnapshot(chatId, now = Date.now()) {
-  return { schemaVersion: SCHEMA_VERSION, chatId, revision: 0, actors: {}, focusedActorIds: [], updatedAt: now };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    chatId,
+    revision: 0,
+    characters: {},
+    focusedCharacterIds: [],
+    updatedAt: now
+  };
 }
 function createTimeline(chatId, now = Date.now()) {
   return {
@@ -268,118 +275,148 @@ function createTimeline(chatId, now = Date.now()) {
   };
 }
 function buildCatalog(profiles) {
-  return profiles.flatMap(
-    (profile) => profile.actors.filter((actor) => actor.enabled).map((actor) => ({ characterId: profile.characterId, actor, profile }))
+  return profiles.map((profile) => ({ characterId: profile.characterId, profile }));
+}
+function allVariants(profile) {
+  return profile.outfits.flatMap(
+    (outfit) => outfit.expressions.flatMap((expression) => expression.variants)
   );
 }
-function allAssets(profile) {
-  return profile.actors.flatMap(
-    (actor) => actor.outfits.flatMap((outfit) => outfit.expressions.flatMap((expression) => expression.assets))
-  );
+function findCharacter(catalog, characterId) {
+  return catalog.find((entry) => entry.characterId === characterId) ?? null;
 }
-function findActor(catalog, actorId) {
-  return catalog.find((entry) => entry.actor.id === actorId) ?? null;
+function orderedOutfit(profile, id) {
+  return profile.outfits.find((item) => item.id === id) ?? profile.outfits.find((item) => item.id === profile.defaultOutfitId) ?? [...profile.outfits].sort((a, b) => a.order - b.order)[0] ?? null;
 }
-function enabledOutfit(actor, id) {
-  const requested = actor.outfits.find((item) => item.id === id && item.enabled);
-  if (requested) return requested;
-  return actor.outfits.find((item) => item.id === actor.defaultOutfitId && item.enabled) ?? actor.outfits.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || a.order - b.order)[0] ?? null;
+function orderedExpression(outfit, id) {
+  return outfit.expressions.find((item) => item.id === id) ?? outfit.expressions.find((item) => item.id === outfit.defaultExpressionId) ?? [...outfit.expressions].sort((a, b) => a.order - b.order)[0] ?? null;
 }
-function enabledExpression(outfit, id) {
-  const requested = outfit.expressions.find((item) => item.id === id && item.enabled);
-  if (requested) return requested;
-  return outfit.expressions.find((item) => item.id === outfit.defaultExpressionId && item.enabled) ?? outfit.expressions.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || a.order - b.order)[0] ?? null;
+function orderedVariant(expression, id) {
+  return expression.variants.find((item) => item.id === id) ?? [...expression.variants].sort((a, b) => a.order - b.order || a.createdAt - b.createdAt)[0] ?? null;
 }
-function enabledAsset(expression) {
-  return expression.assets.filter((item) => item.enabled).sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)[0] ?? null;
-}
-function resolveActorState(entry, previous, decision, override, settings, focused) {
-  const actor = entry.actor;
-  const currentOutfitId = override?.outfitId ?? previous?.outfitId ?? actor.defaultOutfitId;
-  const mayChangeOutfit = !!decision && decision.confidence >= settings.detection.outfitConfidence && actor.outfits.some((item) => item.id === decision.outfitId && item.enabled && item.allowAutoSwitch);
-  const outfitId = override?.outfitId ?? (mayChangeOutfit ? decision?.outfitId : currentOutfitId);
-  const outfit = enabledOutfit(actor, outfitId);
-  if (!outfit) return null;
-  const stateConfident = !!decision && decision.confidence >= settings.detection.stateConfidence;
-  const detectedExpressionId = stateConfident && outfit.expressions.some((item) => item.id === decision?.expressionId) ? decision?.expressionId : previous?.expressionId;
-  const expressionId = override?.expressionId ?? detectedExpressionId;
-  const expression = enabledExpression(outfit, expressionId);
-  if (!expression) return null;
-  const asset = enabledAsset(expression);
+function validPrevious(profile, previous) {
+  if (!previous) return null;
+  const outfit = profile.outfits.find((item) => item.id === previous.outfitId);
+  const expression = outfit?.expressions.find((item) => item.id === previous.expressionId);
+  if (!outfit || !expression) return null;
   return {
-    actorId: actor.id,
-    characterId: entry.characterId,
+    outfit,
+    expression,
+    variant: orderedVariant(expression, previous.variantId)
+  };
+}
+function resolveCharacterState(entry, previous, decision, override, settings, focused) {
+  const profile = entry.profile;
+  const prior = validPrevious(profile, previous);
+  const confident = !!decision && decision.confidence >= settings.detection.confidence;
+  const fullLock = override?.lock === "state";
+  const outfitLock = override?.lock === "outfit";
+  let decisionApplied = false;
+  let outfit = orderedOutfit(profile, override?.outfitId ?? prior?.outfit.id ?? profile.defaultOutfitId);
+  let expression = outfit ? orderedExpression(outfit, override?.expressionId ?? prior?.expression.id) : null;
+  let variant = expression ? orderedVariant(expression, override?.variantId ?? prior?.variant?.id) : null;
+  if (confident && !fullLock) {
+    const detectedOutfit = profile.outfits.find((item) => item.id === decision.outfitId);
+    const permittedOutfit = outfitLock ? profile.outfits.find((item) => item.id === override.outfitId) : detectedOutfit;
+    const detectedExpression = permittedOutfit?.expressions.find((item) => item.id === decision.expressionId);
+    const detectedVariant = detectedExpression?.variants.find((item) => item.id === decision.variantId);
+    if (permittedOutfit && detectedExpression && detectedVariant) {
+      outfit = permittedOutfit;
+      expression = detectedExpression;
+      variant = detectedVariant;
+      decisionApplied = true;
+    }
+  }
+  if (fullLock && override) {
+    outfit = orderedOutfit(profile, override.outfitId);
+    expression = outfit ? orderedExpression(outfit, override.expressionId) : null;
+    variant = expression ? orderedVariant(expression, override.variantId) : null;
+  }
+  if (!outfit || !expression) return null;
+  variant ??= orderedVariant(expression, null);
+  return {
+    characterId: profile.characterId,
     outfitId: outfit.id,
     expressionId: expression.id,
-    assetId: asset?.id ?? null,
-    imageId: asset?.imageId ?? null,
-    label: `${actor.name} \xB7 ${outfit.name} \xB7 ${expression.name}`,
+    variantId: variant?.id ?? null,
+    imageId: variant?.imageId ?? null,
+    label: `${profile.characterName} \xB7 ${outfit.name} \xB7 ${expression.name}`,
     focused,
-    confidence: decision?.confidence ?? previous?.confidence ?? 1
+    confidence: decisionApplied ? decision.confidence : previous?.confidence ?? 1
   };
 }
 function applyDecision(snapshot, catalog, decision, overrides, settings, now = Date.now()) {
-  const actors = { ...snapshot.actors };
-  const focused = new Set(decision.focusedActorIds.filter((id) => findActor(catalog, id)));
+  const characters = { ...snapshot.characters };
+  const focused = new Set(
+    decision.focusedCharacterIds.filter((id) => !!findCharacter(catalog, id))
+  );
   for (const entry of catalog) {
-    const item = decision.actors.find((candidate) => candidate.actorId === entry.actor.id) ?? null;
-    const state = resolveActorState(
+    const item = decision.characters.find((candidate) => candidate.characterId === entry.characterId) ?? null;
+    const state = resolveCharacterState(
       entry,
-      actors[entry.actor.id] ?? null,
+      characters[entry.characterId] ?? null,
       item,
-      overrides[entry.actor.id] ?? null,
+      overrides[entry.characterId] ?? null,
       settings,
-      focused.has(entry.actor.id)
+      focused.has(entry.characterId)
     );
-    if (state) actors[entry.actor.id] = state;
+    if (state) characters[entry.characterId] = state;
   }
-  for (const actorId of Object.keys(actors)) actors[actorId] = { ...actors[actorId], focused: focused.has(actorId) };
+  for (const characterId of Object.keys(characters)) {
+    characters[characterId] = { ...characters[characterId], focused: focused.has(characterId) };
+  }
   return {
     schemaVersion: SCHEMA_VERSION,
     chatId: snapshot.chatId,
     revision: snapshot.revision + 1,
-    actors,
-    focusedActorIds: [...focused],
+    characters,
+    focusedCharacterIds: [...focused],
     updatedAt: now
   };
 }
 function applyManualOverride(timeline, catalog, override, settings, now = Date.now()) {
-  const nextOverrides = { ...timeline.manualOverrides, [override.actorId]: override };
-  const focusIds = timeline.snapshot.focusedActorIds.length ? timeline.snapshot.focusedActorIds : [override.actorId];
+  const manualOverrides = { ...timeline.manualOverrides, [override.characterId]: override };
+  const focusIds = timeline.snapshot.focusedCharacterIds.length ? timeline.snapshot.focusedCharacterIds : [override.characterId];
   const decision = {
     schemaVersion: SCHEMA_VERSION,
-    focusedActorIds: focusIds,
-    actors: []
+    focusedCharacterIds: focusIds,
+    characters: []
   };
   return {
     ...timeline,
     revision: timeline.revision + 1,
-    manualOverrides: nextOverrides,
-    snapshot: applyDecision(timeline.snapshot, catalog, decision, nextOverrides, settings, now),
+    manualOverrides,
+    snapshot: applyDecision(timeline.snapshot, catalog, decision, manualOverrides, settings, now),
     updatedAt: now
   };
 }
-function clearManualOverride(timeline, actorId, now = Date.now()) {
-  const { [actorId]: _removed, ...manualOverrides } = timeline.manualOverrides;
+function clearManualOverride(timeline, characterId, now = Date.now()) {
+  const { [characterId]: _removed, ...manualOverrides } = timeline.manualOverrides;
   return { ...timeline, revision: timeline.revision + 1, manualOverrides, updatedAt: now };
 }
 function consumeOnceOverrides(overrides) {
-  return Object.fromEntries(Object.entries(overrides).filter(([, override]) => override.scope !== "once"));
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([, override]) => override.scope !== "once")
+  );
 }
 function inspectProfile(profile) {
   const issues = [];
-  const hashes = /* @__PURE__ */ new Map();
-  for (const actor of profile.actors) {
-    if (!actor.outfits.some((item) => item.enabled)) issues.push({ severity: "error", code: "actor-no-outfit", message: `${actor.name} has no enabled outfit.` });
-    const aliases = actor.aliases.map(normalizedKey);
-    if (new Set(aliases).size !== aliases.length) issues.push({ severity: "warning", code: "duplicate-alias", message: `${actor.name} contains duplicate aliases.` });
-    for (const outfit of actor.outfits) for (const expression of outfit.expressions) {
-      if (expression.assets.length === 0) issues.push({ severity: "info", code: "empty-expression", message: `${actor.name} / ${outfit.name} / ${expression.name} has no media.` });
-      for (const asset of expression.assets) hashes.set(asset.contentHash, (hashes.get(asset.contentHash) ?? 0) + 1);
-    }
+  if (!profile.outfits.length) {
+    issues.push({ severity: "error", code: "no-outfits", message: `${profile.characterName} has no outfits.` });
   }
-  for (const [hash, count] of hashes) if (count > 1) {
-    issues.push({ severity: "warning", code: "duplicate-content", message: `${count} media references share hash ${hash.slice(0, 10)}\u2026` });
+  for (const outfit of profile.outfits) {
+    if (!outfit.expressions.length) {
+      issues.push({ severity: "warning", code: "empty-outfit", message: `${outfit.name} has no expressions.` });
+    }
+    const names = outfit.expressions.map((item) => normalizedKey(item.name));
+    if (new Set(names).size !== names.length) {
+      issues.push({ severity: "warning", code: "duplicate-expression", message: `${outfit.name} contains duplicate expression names.` });
+    }
+    for (const expression of outfit.expressions) {
+      if (!expression.variants.length) {
+        issues.push({ severity: "info", code: "empty-expression", message: `${outfit.name} / ${expression.name} has no sprite variants.` });
+      }
+    }
   }
   return issues;
 }
@@ -894,7 +931,9 @@ function normalizedArchivePath(value) {
   const path = value.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!path || path.endsWith("/")) return null;
   const parts = path.split("/");
-  if (parts.some((part) => !part || part === "." || part === ".." || part.includes("\0"))) return null;
+  if (parts.some((part) => !part || part === "." || part === ".." || part.includes("\0"))) {
+    return null;
+  }
   if (parts[0] === "__MACOSX" || parts.some((part) => part.startsWith("."))) return null;
   return parts.join("/");
 }
@@ -902,34 +941,44 @@ function mimeForName(name) {
   const extension = name.split(".").pop()?.toLocaleLowerCase() ?? "";
   return MIME_TYPES[extension] ?? null;
 }
-function importTarget(candidate, layout, defaultActorName) {
+function importTarget(candidate, layout) {
   const folders = candidate.segments.map((segment) => cleanName(segment));
-  const expression = cleanName(candidate.fileName, "Neutral");
-  if (layout === "actor-outfit-expression") {
+  const leafExpression = cleanName(candidate.fileName, "Neutral");
+  if (layout === "outfit-expression-variant") {
     return {
-      actorName: folders[0] ?? defaultActorName,
-      outfitName: folders[1] ?? "Default",
-      expressionName: expression
+      outfitName: folders[0] ?? "Default",
+      expressionName: folders[1] ?? leafExpression
     };
   }
+  if (layout === "outfit-expression") {
+    return {
+      outfitName: folders[0] ?? "Default",
+      expressionName: leafExpression
+    };
+  }
+  if (folders.length >= 2) {
+    return { outfitName: folders[0], expressionName: folders[1] };
+  }
   return {
-    actorName: defaultActorName,
     outfitName: folders[0] ?? "Default",
-    expressionName: expression
+    expressionName: leafExpression
   };
 }
-function assertUnambiguousCandidates(candidates, layout, defaultActorName) {
+function assertUnambiguousCandidates(candidates, layout) {
   const paths = /* @__PURE__ */ new Map();
   const destinations = /* @__PURE__ */ new Map();
   const conflicts = [];
   for (const candidate of candidates) {
+    if (candidate.segments.length > 2) {
+      conflicts.push(`${candidate.path} is deeper than Outfit/Expression/Variant.ext`);
+      continue;
+    }
     const pathKey = candidate.path.normalize("NFKC").toLocaleLowerCase();
     const priorPath = paths.get(pathKey);
     if (priorPath) conflicts.push(`${priorPath} conflicts with ${candidate.path}`);
     else paths.set(pathKey, candidate.path);
-    const target = importTarget(candidate, layout, defaultActorName);
+    const target = importTarget(candidate, layout);
     const destinationKey = [
-      target.actorName,
       target.outfitName,
       target.expressionName,
       candidate.fileName
@@ -942,18 +991,22 @@ function assertUnambiguousCandidates(candidates, layout, defaultActorName) {
     }
   }
   if (conflicts.length) {
-    throw new Error(`Ambiguous import collisions: ${[...new Set(conflicts)].slice(0, 8).join("; ")}`);
+    throw new Error(
+      `Ambiguous import collisions: ${[...new Set(conflicts)].slice(0, 8).join("; ")}`
+    );
   }
 }
 function extractArchive(bytes) {
-  if (bytes.byteLength > MAX_ARCHIVE_BYTES) throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
+  if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error(`Archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
+  }
   let expandedBytes = 0;
   let acceptedCount = 0;
   const rejected = /* @__PURE__ */ new Map();
   const unzipped = unzipSync(bytes, {
     filter(info) {
       const path = normalizedArchivePath(info.name);
-      if (!path) return false;
+      if (!path || path === "manifest.json") return false;
       const mimeType = mimeForName(path);
       if (!mimeType) return false;
       acceptedCount += 1;
@@ -987,20 +1040,21 @@ function extractArchive(bytes) {
   return { candidates, errors };
 }
 function readLumiStageManifest(bytes) {
-  let manifestBytes = null;
   const data = unzipSync(bytes, {
     filter(info) {
       const path = normalizedArchivePath(info.name);
       if (path !== "manifest.json") return false;
-      if (info.originalSize > 5 * 1024 * 1024) throw new Error("LumiStage manifest exceeds 5 MB.");
+      if (info.originalSize > 5 * 1024 * 1024) {
+        throw new Error("LumiStage manifest exceeds 5 MB.");
+      }
       return true;
     }
   });
-  manifestBytes = data["manifest.json"] ?? null;
+  const manifestBytes = data["manifest.json"];
   if (!manifestBytes) return null;
   try {
     const parsed = JSON.parse(new TextDecoder().decode(manifestBytes));
-    if (parsed?.kind !== "lumistage-archive" || parsed.schemaVersion !== 1 || !parsed.profile || !Array.isArray(parsed.assets)) {
+    if (parsed.kind !== "lumistage-archive" || parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2 || !parsed.profile) {
       throw new Error("Unsupported LumiStage archive manifest.");
     }
     return parsed;
@@ -1019,29 +1073,16 @@ function directCandidate(fileName, bytes, mimeTypeHint) {
   const leaf = segments.pop() ?? fileName;
   return { path, fileName: leaf, bytes, mimeType, segments };
 }
-function findOrCreateActor(profile, name) {
+function findOrCreateOutfit(profile, name) {
   const key = normalizedKey(name);
-  let actor = profile.actors.find((item) => normalizedKey(item.name) === key || item.aliases.some((alias) => normalizedKey(alias) === key));
-  if (!actor) {
-    actor = createActor(name);
-    actor.outfits = [];
-    actor.defaultOutfitId = null;
-    actor.order = profile.actors.length;
-    profile.actors.push(actor);
-    profile.defaultActorId ??= actor.id;
-  }
-  return actor;
-}
-function findOrCreateOutfit(actor, name) {
-  const key = normalizedKey(name);
-  let outfit = actor.outfits.find((item) => normalizedKey(item.name) === key);
+  let outfit = profile.outfits.find((item) => normalizedKey(item.name) === key);
   if (!outfit) {
     outfit = createOutfit(name);
     outfit.expressions = [];
     outfit.defaultExpressionId = null;
-    outfit.order = actor.outfits.length;
-    actor.outfits.push(outfit);
-    actor.defaultOutfitId ??= outfit.id;
+    outfit.order = profile.outfits.length;
+    profile.outfits.push(outfit);
+    profile.defaultOutfitId ??= outfit.id;
   }
   return outfit;
 }
@@ -1056,7 +1097,7 @@ function findOrCreateExpression(outfit, name) {
   }
   return expression;
 }
-function settleHostUploads(prepared, results, layout, defaultActorName) {
+function settleHostUploads(prepared, results, layout) {
   const imported = [];
   const uploadedByPath = /* @__PURE__ */ new Map();
   const errors = [];
@@ -1075,15 +1116,20 @@ function settleHostUploads(prepared, results, layout, defaultActorName) {
     };
     uploadedByPath.set(item.candidate.path, uploaded);
     imported.push({
-      target: importTarget(item.candidate, layout, defaultActorName),
+      target: importTarget(item.candidate, layout),
       ...uploaded
     });
   }
   return { imported, uploadedByPath, errors };
 }
 function mergeImportedAssets(source, imported, characterName2, now = Date.now()) {
-  const profile = normalizeProfile(structuredClone(source), source.characterId, characterName2, now);
-  const hashes = new Set(allAssets(profile).map((asset) => asset.contentHash));
+  const profile = normalizeProfile(
+    structuredClone(source),
+    source.characterId,
+    characterName2,
+    now
+  );
+  const hashes = new Set(allVariants(profile).map((variant) => variant.contentHash));
   let importedCount = 0;
   let skipped = 0;
   for (const item of imported) {
@@ -1091,21 +1137,19 @@ function mergeImportedAssets(source, imported, characterName2, now = Date.now())
       skipped += 1;
       continue;
     }
-    const actor = findOrCreateActor(profile, item.target.actorName);
-    const outfit = findOrCreateOutfit(actor, item.target.outfitName);
+    const outfit = findOrCreateOutfit(profile, item.target.outfitName);
     const expression = findOrCreateExpression(outfit, item.target.expressionName);
-    const asset = {
-      id: createId("asset"),
+    const variant = {
+      id: createId("variant"),
       imageId: item.imageId,
       contentHash: item.contentHash,
       fileName: item.fileName,
       mimeType: item.mimeType,
       mediaKind: item.mimeType.startsWith("video/") ? "video" : "image",
-      enabled: true,
-      priority: 0,
+      order: expression.variants.length,
       createdAt: now
     };
-    expression.assets.push(asset);
+    expression.variants.push(variant);
     hashes.add(item.contentHash);
     importedCount += 1;
   }
@@ -1113,22 +1157,39 @@ function mergeImportedAssets(source, imported, characterName2, now = Date.now())
   profile.updatedAt = now;
   return { profile, imported: importedCount, skipped };
 }
+function archiveEntries(archive) {
+  const raw = archive;
+  const entries = Array.isArray(raw.variants) ? raw.variants : Array.isArray(raw.assets) ? raw.assets : [];
+  return entries.flatMap((value) => {
+    const entry = value && typeof value === "object" ? value : {};
+    const media = entry.variant && typeof entry.variant === "object" ? entry.variant : entry.asset && typeof entry.asset === "object" ? entry.asset : {};
+    return typeof entry.path === "string" && typeof media.id === "string" ? [{ path: entry.path, variantId: media.id }] : [];
+  });
+}
 function hydrateArchiveProfile(archive, characterId, characterName2, uploadedByPath, now = Date.now()) {
   const profile = normalizeProfile(
-    { ...structuredClone(archive.profile), characterId, characterName: characterName2, revision: 0, updatedAt: now },
+    {
+      ...structuredClone(archive.profile),
+      characterId,
+      characterName: characterName2,
+      revision: 0,
+      updatedAt: now
+    },
     characterId,
     characterName2,
     now
   );
-  const pathsByAssetId = new Map(archive.assets.map((entry) => [entry.asset.id, entry.path]));
-  for (const actor of profile.actors) for (const outfit of actor.outfits) {
+  const pathsByVariantId = new Map(
+    archiveEntries(archive).map((entry) => [entry.variantId, entry.path])
+  );
+  for (const outfit of profile.outfits) {
     for (const expression of outfit.expressions) {
-      expression.assets = expression.assets.flatMap((asset) => {
-        const path = pathsByAssetId.get(asset.id);
+      expression.variants = expression.variants.flatMap((variant) => {
+        const path = pathsByVariantId.get(variant.id);
         const upload = path ? uploadedByPath.get(path) : null;
         if (!upload) return [];
         return [{
-          ...asset,
+          ...variant,
           imageId: upload.imageId,
           contentHash: upload.contentHash,
           fileName: upload.fileName,
@@ -1142,50 +1203,67 @@ function hydrateArchiveProfile(archive, characterId, characterName2, uploadedByP
   profile.revision = 1;
   return profile;
 }
-function removeAssets(profile, assetIds, now = Date.now()) {
+function removeVariants(profile, variantIds, now = Date.now()) {
   const next = structuredClone(profile);
-  for (const actor of next.actors) for (const outfit of actor.outfits) {
-    for (const expression of outfit.expressions) expression.assets = expression.assets.filter((asset) => !assetIds.has(asset.id));
+  for (const outfit of next.outfits) {
+    for (const expression of outfit.expressions) {
+      expression.variants = expression.variants.filter((variant) => !variantIds.has(variant.id)).map((variant, order) => ({ ...variant, order }));
+    }
   }
   next.revision += 1;
   next.updatedAt = now;
   return next;
 }
-function assetReferenceCount(profiles, imageId) {
-  return profiles.reduce((sum, profile) => sum + allAssets(profile).filter((asset) => asset.imageId === imageId).length, 0);
+function variantReferenceCount(profiles, imageId) {
+  return profiles.reduce(
+    (sum, profile) => sum + allVariants(profile).filter((variant) => variant.imageId === imageId).length,
+    0
+  );
 }
 function unreferencedImageIds(profiles, candidateImageIds) {
-  return [...new Set(candidateImageIds)].filter((imageId) => assetReferenceCount(profiles, imageId) === 0);
+  return [...new Set(candidateImageIds)].filter(
+    (imageId) => variantReferenceCount(profiles, imageId) === 0
+  );
 }
 
 // src/detector.ts
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
-function nullableString(value) {
+function requiredString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 function confidence(value) {
   const number = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.min(1, Math.max(0, number));
 }
-function normalizeActorDecision(value) {
+function normalizeCharacterDecision(value) {
   const raw = asRecord(value);
-  const actorId = nullableString(raw.actorId);
-  if (!actorId) return null;
+  const characterId = requiredString(raw.characterId);
+  const outfitId = requiredString(raw.outfitId);
+  const expressionId = requiredString(raw.expressionId);
+  const variantId = requiredString(raw.variantId);
+  if (!characterId || !outfitId || !expressionId || !variantId) return null;
   return {
-    actorId,
-    outfitId: nullableString(raw.outfitId),
-    expressionId: nullableString(raw.expressionId),
+    characterId,
+    outfitId,
+    expressionId,
+    variantId,
     confidence: confidence(raw.confidence)
   };
 }
 function normalizeDecision(value) {
   const raw = asRecord(value);
-  const actors = Array.isArray(raw.actors) ? raw.actors.map(normalizeActorDecision).filter((item) => !!item) : [];
-  const focusedActorIds = Array.isArray(raw.focusedActorIds) ? [...new Set(raw.focusedActorIds.filter((item) => typeof item === "string" && !!item))] : [];
-  if (actors.length === 0 && focusedActorIds.length === 0) return null;
-  return { schemaVersion: SCHEMA_VERSION, focusedActorIds, actors };
+  if (!Array.isArray(raw.characters) || !Array.isArray(raw.focusedCharacterIds)) return null;
+  const parsedCharacters = raw.characters.map(normalizeCharacterDecision);
+  if (parsedCharacters.some((item) => !item)) return null;
+  const characters = parsedCharacters;
+  const focusValues = raw.focusedCharacterIds.filter(
+    (item) => typeof item === "string" && !!item
+  );
+  if (focusValues.length !== raw.focusedCharacterIds.length || !characters.length) return null;
+  const focusedCharacterIds = [...new Set(focusValues)];
+  return { schemaVersion: SCHEMA_VERSION, focusedCharacterIds, characters };
 }
 function parseJsonText(value) {
   const text = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
@@ -1195,14 +1273,12 @@ function parseJsonText(value) {
   } catch {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(text.slice(start, end + 1));
-      } catch {
-        return null;
-      }
+    if (start < 0 || end <= start) return null;
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      return null;
     }
-    return null;
   }
 }
 function parseDetectorResponse(response) {
@@ -1211,78 +1287,79 @@ function parseDetectorResponse(response) {
   if (typeof response.content === "string") return normalizeDecision(parseJsonText(response.content));
   return null;
 }
-function nodeSummary(entry) {
+function characterSummary(entry) {
   return {
-    actorId: entry.actor.id,
-    name: entry.actor.name,
-    aliases: entry.actor.aliases,
-    outfits: entry.actor.outfits.filter((outfit) => outfit.enabled).map((outfit) => ({
+    characterId: entry.characterId,
+    name: entry.profile.characterName,
+    outfits: entry.profile.outfits.map((outfit) => ({
       outfitId: outfit.id,
       name: outfit.name,
-      aliases: outfit.aliases,
-      allowAutoSwitch: outfit.allowAutoSwitch,
-      expressions: outfit.expressions.filter((expression) => expression.enabled).map((expression) => ({
+      expressions: outfit.expressions.map((expression) => ({
         expressionId: expression.id,
         name: expression.name,
-        aliases: expression.aliases,
-        cues: expression.cues,
-        tags: expression.tags,
-        sprites: expression.assets.map((asset) => ({
-          fileName: asset.fileName,
-          mediaKind: asset.mediaKind,
-          enabled: asset.enabled
+        sprites: expression.variants.map((variant) => ({
+          variantId: variant.id,
+          fileName: variant.fileName,
+          mediaKind: variant.mediaKind
         }))
       }))
     }))
   };
 }
 function buildDetectorRequest(catalog, recentMessages, currentStates, settings) {
-  const catalogJson = JSON.stringify(catalog.map(nodeSummary));
-  const currentJson = JSON.stringify(currentStates);
   const system = [
-    "You direct a character sprite stage after a completed roleplay reply.",
-    "Choose only IDs present in the supplied catalog. Never invent IDs.",
-    "Identify every actor whose visible state materially changes and which actors are the visual focus.",
-    "The complete wardrobe is supplied in this single catalog: every enabled outfit folder, every enabled expression, and every sprite filename inside each expression.",
-    "Use outfit folder names, aliases, expression names, aliases, cues, tags, and sprite filenames together to choose the closest visible state.",
-    "An outfit is an ordinary selectable state. Return its ID whenever the scene best matches it; no separate outfit-change cue exists.",
-    "Expression means the complete sprite state inside the selected outfit, including facial emotion, body position, and action.",
-    "If a dimension is not supported by the text, return null so the current stage state remains sticky.",
-    "Confidence is 0..1 for the combined visible-state match.",
-    `Catalog: ${catalogJson}`,
-    `Current states: ${currentJson}`
+    "You direct the visible character sprite stage after a completed roleplay reply.",
+    "Choose only IDs present in the complete catalog. Never invent or rewrite an ID.",
+    "The catalog contains every outfit folder, every expression, and every sprite filename.",
+    "Choose the exact sprite variant whose filename and expression best match the visible emotion, action, and presentation.",
+    "Outfits are ordinary selectable states and may change whenever the latest scene supports a different outfit.",
+    "Classify all relevant group-chat characters in this one call and identify the visual focus.",
+    "Return one complete outfit, expression, and exact sprite variant for every character you update.",
+    "Confidence is 0..1 for the complete visible-state match.",
+    `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
+    `Current states: ${JSON.stringify(currentStates)}`
   ].join("\n");
   return {
     messages: [
       { role: "system", content: system },
       ...recentMessages.slice(-settings.detection.contextMessages),
-      { role: "user", content: "Set the sprite stage for the latest assistant reply. Call set_stage_state exactly once." }
+      {
+        role: "user",
+        content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once."
+      }
     ],
     connection_id: settings.detection.connectionId ?? void 0,
     model: settings.detection.model ?? void 0,
     parameters: {
       temperature: settings.detection.temperature,
-      max_tokens: 420
+      max_tokens: 560
     },
     tools: [{
       name: "set_stage_state",
-      description: "Select focused actors and valid layered sprite states for the latest assistant reply.",
+      description: "Select focused characters and exact sprite variants for the latest reply.",
       parameters: {
         type: "object",
         additionalProperties: false,
-        required: ["focusedActorIds", "actors"],
+        required: ["focusedCharacterIds", "characters"],
         properties: {
-          focusedActorIds: { type: "array", items: { type: "string" } },
-          actors: {
+          focusedCharacterIds: { type: "array", items: { type: "string" } },
+          characters: {
             type: "array",
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["actorId", "outfitId", "expressionId", "confidence"],
+              required: [
+                "characterId",
+                "outfitId",
+                "expressionId",
+                "variantId",
+                "confidence"
+              ],
               properties: {
-                actorId: { type: "string" },
-                outfitId: { type: ["string", "null"] },
-                expressionId: { type: ["string", "null"] },
+                characterId: { type: "string" },
+                outfitId: { type: "string" },
+                expressionId: { type: "string" },
+                variantId: { type: "string" },
                 confidence: { type: "number", minimum: 0, maximum: 1 }
               }
             }
@@ -1293,30 +1370,109 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings) 
   };
 }
 function validateDecision(decision, catalog) {
-  const actors = new Map(catalog.map((entry) => [entry.actor.id, entry.actor]));
-  const validActors = [];
-  for (const item of decision.actors) {
-    const actor = actors.get(item.actorId);
-    if (!actor) continue;
-    const outfit = item.outfitId ? actor.outfits.find((candidate) => candidate.id === item.outfitId && candidate.enabled) : null;
-    const expression = item.expressionId ? (outfit?.expressions ?? actor.outfits.flatMap((candidate) => candidate.expressions)).find((candidate) => candidate.id === item.expressionId && candidate.enabled) : null;
-    validActors.push({
-      ...item,
-      outfitId: outfit?.id ?? null,
-      expressionId: expression?.id ?? null
-    });
+  const entries = new Map(catalog.map((entry) => [entry.characterId, entry.profile]));
+  const characters = [];
+  let invalid = false;
+  for (const item of decision.characters) {
+    const profile = entries.get(item.characterId);
+    const outfit = profile?.outfits.find((candidate) => candidate.id === item.outfitId);
+    const expression = outfit?.expressions.find(
+      (candidate) => candidate.id === item.expressionId
+    );
+    const variant = expression?.variants.find((candidate) => candidate.id === item.variantId);
+    if (!profile || !outfit || !expression || !variant) {
+      invalid = true;
+      break;
+    }
+    characters.push(item);
   }
+  const focusedCharacterIds = decision.focusedCharacterIds.filter((id) => entries.has(id));
+  if (focusedCharacterIds.length !== decision.focusedCharacterIds.length) invalid = true;
   return {
     schemaVersion: SCHEMA_VERSION,
-    focusedActorIds: decision.focusedActorIds.filter((actorId) => actors.has(actorId)),
-    actors: validActors
+    focusedCharacterIds: invalid ? [] : focusedCharacterIds,
+    characters: invalid ? [] : characters
   };
 }
 
 // src/storage.ts
-var settingsPath = () => "settings.v1.json";
-var profilePath = (characterId) => `profiles/${characterId}.v1.json`;
-var timelinePath = (chatId) => `chats/${chatId}.v1.json`;
+var settingsPath = () => "settings.v2.json";
+var profilePath = (characterId) => `profiles/${characterId}.v2.json`;
+var timelinePath = (chatId) => `chats/${chatId}.v2.json`;
+var oldSettingsPath = () => "settings.v1.json";
+var oldProfilePath = (characterId) => `profiles/${characterId}.v1.json`;
+var oldTimelinePath = (chatId) => `chats/${chatId}.v1.json`;
+function asRecord2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function migrateTimeline(raw, chatId, now = Date.now()) {
+  const source = asRecord2(raw);
+  if (source.schemaVersion === SCHEMA_VERSION && source.chatId === chatId) {
+    const timeline = source;
+    return {
+      ...timeline,
+      schemaVersion: SCHEMA_VERSION,
+      chatId,
+      decisions: Array.isArray(timeline.decisions) ? timeline.decisions : [],
+      manualOverrides: timeline.manualOverrides ?? {},
+      layoutOverride: timeline.layoutOverride ?? null,
+      snapshot: timeline.snapshot?.schemaVersion === SCHEMA_VERSION ? timeline.snapshot : emptySnapshot(chatId, now)
+    };
+  }
+  const legacySnapshot = asRecord2(source.snapshot);
+  const legacyStates = asRecord2(legacySnapshot.actors);
+  const characters = {};
+  const legacyToCharacter = /* @__PURE__ */ new Map();
+  for (const [legacyId, value] of Object.entries(legacyStates)) {
+    const state = asRecord2(value);
+    const characterId = typeof state.characterId === "string" ? state.characterId : null;
+    if (!characterId) continue;
+    legacyToCharacter.set(legacyId, characterId);
+    characters[characterId] = {
+      characterId,
+      outfitId: typeof state.outfitId === "string" ? state.outfitId : null,
+      expressionId: typeof state.expressionId === "string" ? state.expressionId : null,
+      variantId: typeof state.assetId === "string" ? state.assetId : null,
+      imageId: typeof state.imageId === "string" ? state.imageId : null,
+      label: typeof state.label === "string" ? state.label : "LumiStage",
+      focused: state.focused === true,
+      confidence: typeof state.confidence === "number" ? state.confidence : 1
+    };
+  }
+  const manualOverrides = {};
+  for (const [legacyId, value] of Object.entries(asRecord2(source.manualOverrides))) {
+    const item = asRecord2(value);
+    const characterId = typeof item.characterId === "string" ? item.characterId : legacyToCharacter.get(legacyId);
+    if (!characterId || typeof item.outfitId !== "string") continue;
+    manualOverrides[characterId] = {
+      characterId,
+      outfitId: item.outfitId,
+      expressionId: typeof item.expressionId === "string" ? item.expressionId : null,
+      variantId: typeof item.assetId === "string" ? item.assetId : null,
+      scope: item.scope === "once" ? "once" : "locked",
+      lock: typeof item.expressionId === "string" ? "state" : "outfit",
+      createdAt: typeof item.createdAt === "number" ? item.createdAt : now
+    };
+  }
+  const focusedCharacterIds = Array.isArray(legacySnapshot.focusedActorIds) ? legacySnapshot.focusedActorIds.map((id) => typeof id === "string" ? legacyToCharacter.get(id) : null).filter((id) => !!id) : [];
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    revision: typeof source.revision === "number" ? Math.max(0, Math.trunc(source.revision)) : 0,
+    chatId,
+    decisions: [],
+    manualOverrides,
+    layoutOverride: source.layoutOverride && typeof source.layoutOverride === "object" ? source.layoutOverride : null,
+    snapshot: {
+      schemaVersion: SCHEMA_VERSION,
+      chatId,
+      revision: typeof legacySnapshot.revision === "number" ? legacySnapshot.revision : 0,
+      characters,
+      focusedCharacterIds,
+      updatedAt: typeof legacySnapshot.updatedAt === "number" ? legacySnapshot.updatedAt : now
+    },
+    updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : now
+  };
+}
 var LumiStageRepository = class {
   constructor(storage) {
     this.storage = storage;
@@ -1339,12 +1495,24 @@ var LumiStageRepository = class {
     void next.then(cleanup, cleanup);
     return next;
   }
+  async readCurrentOrOld(currentPath, oldPath, userId) {
+    const current = await this.storage.getJson(currentPath, { fallback: null, userId });
+    if (current) return { raw: current, migrated: false };
+    const old = await this.storage.getJson(oldPath, { fallback: null, userId });
+    return { raw: old, migrated: !!old };
+  }
   async getSettings(userId) {
-    const key = this.key(userId, settingsPath());
+    const path = settingsPath();
+    const key = this.key(userId, path);
     const cached = this.settingsCache.get(key);
     if (cached) return structuredClone(cached);
-    const raw = await this.storage.getJson(settingsPath(), { fallback: null, userId });
+    const { raw, migrated } = await this.readCurrentOrOld(
+      path,
+      oldSettingsPath(),
+      userId
+    );
     const settings = raw ? normalizeSettings(raw) : defaultSettings();
+    if (migrated) await this.storage.setJson(path, settings, { indent: 2, userId });
     this.settingsCache.set(key, settings);
     return structuredClone(settings);
   }
@@ -1354,7 +1522,11 @@ var LumiStageRepository = class {
     return this.enqueue(key, async () => {
       const current = await this.getSettings(userId);
       if (current.revision !== expectedRevision) throw new RevisionConflict(current.revision);
-      const settings = normalizeSettings({ ...value, revision: current.revision + 1, updatedAt: Date.now() });
+      const settings = normalizeSettings({
+        ...value,
+        revision: current.revision + 1,
+        updatedAt: Date.now()
+      });
       await this.storage.setJson(path, settings, { indent: 2, userId });
       this.settingsCache.set(key, settings);
       return structuredClone(settings);
@@ -1365,8 +1537,13 @@ var LumiStageRepository = class {
     const key = this.key(userId, path);
     const cached = this.profileCache.get(key);
     if (cached) return structuredClone(cached);
-    const raw = await this.storage.getJson(path, { fallback: null, userId });
+    const { raw, migrated } = await this.readCurrentOrOld(
+      path,
+      oldProfilePath(characterId),
+      userId
+    );
     const profile = raw ? normalizeProfile(raw, characterId, characterName2) : createProfile(characterId, characterName2);
+    if (migrated) await this.storage.setJson(path, profile, { indent: 2, userId });
     this.profileCache.set(key, profile);
     return structuredClone(profile);
   }
@@ -1401,8 +1578,13 @@ var LumiStageRepository = class {
     const key = this.key(userId, path);
     const cached = this.timelineCache.get(key);
     if (cached) return structuredClone(cached);
-    const raw = await this.storage.getJson(path, { fallback: null, userId });
-    const timeline = raw?.schemaVersion === 1 && raw.chatId === chatId ? { ...raw, layoutOverride: raw.layoutOverride ?? null } : createTimeline(chatId);
+    const { raw, migrated } = await this.readCurrentOrOld(
+      path,
+      oldTimelinePath(chatId),
+      userId
+    );
+    const timeline = raw ? migrateTimeline(raw, chatId) : createTimeline(chatId);
+    if (migrated) await this.storage.setJson(path, timeline, { indent: 2, userId });
     this.timelineCache.set(key, timeline);
     return structuredClone(timeline);
   }
@@ -1412,7 +1594,11 @@ var LumiStageRepository = class {
     return this.enqueue(key, async () => {
       const current = await this.getTimeline(userId, value.chatId);
       if (current.revision !== expectedRevision) throw new RevisionConflict(current.revision);
-      const timeline = { ...structuredClone(value), schemaVersion: 1, updatedAt: Date.now() };
+      const timeline = {
+        ...structuredClone(value),
+        schemaVersion: SCHEMA_VERSION,
+        updatedAt: Date.now()
+      };
       await this.storage.setJson(path, timeline, { indent: 2, userId });
       this.timelineCache.set(key, timeline);
       return structuredClone(timeline);
@@ -1428,16 +1614,22 @@ var LumiStageRepository = class {
   }
   async listProfiles(userId) {
     const files = await this.storage.list("profiles/", userId);
+    const characterIds = /* @__PURE__ */ new Set();
+    for (const path of files) {
+      const match = /^profiles\/([^/]+)\.v[12]\.json$/.exec(path);
+      if (match) characterIds.add(match[1]);
+    }
     const profiles = [];
-    for (const file of files.filter((path) => /^profiles\/[^/]+\.v1\.json$/.test(path))) {
-      const characterId = file.slice("profiles/".length, -".v1.json".length);
+    for (const characterId of characterIds) {
       profiles.push(await this.getProfile(userId, characterId));
     }
     return profiles;
   }
   clearUser(userId) {
     for (const cache of [this.settingsCache, this.profileCache, this.timelineCache]) {
-      for (const key of cache.keys()) if (key.startsWith(`${userId}:`)) cache.delete(key);
+      for (const key of cache.keys()) {
+        if (key.startsWith(`${userId}:`)) cache.delete(key);
+      }
     }
   }
 };
@@ -1460,28 +1652,28 @@ async function confirmExtensionOwnedImageIds(imageIds, lookup) {
       return null;
     }
   }));
-  return records.filter((record) => !!record && record.owner_extension_identifier === LUMI_STAGE_ID).map((record) => record.id);
+  return records.filter((record2) => !!record2 && record2.owner_extension_identifier === LUMI_STAGE_ID).map((record2) => record2.id);
 }
 
 // src/timeline.ts
 function findCachedDecision(records, message) {
   return records.find(
-    (record) => record.messageId === message.id && record.swipeId === message.swipeId && record.contentHash === message.contentHash
+    (record2) => record2.messageId === message.id && record2.swipeId === message.swipeId && record2.contentHash === message.contentHash
   ) ?? null;
 }
 function upsertDecision(records, incoming, limit = 2e3) {
   return [
-    ...records.filter((record) => !(record.messageId === incoming.messageId && record.swipeId === incoming.swipeId && record.contentHash === incoming.contentHash)),
+    ...records.filter((record2) => !(record2.messageId === incoming.messageId && record2.swipeId === incoming.swipeId && record2.contentHash === incoming.contentHash)),
     incoming
   ].slice(-limit);
 }
 function reconcileDecisionRecords(records, messages) {
   const active = new Map(messages.map((message) => [message.id, message]));
-  return records.filter((record) => {
-    const message = active.get(record.messageId);
+  return records.filter((record2) => {
+    const message = active.get(record2.messageId);
     if (!message) return false;
-    if (record.swipeId !== message.swipeId) return true;
-    return record.contentHash === message.contentHash;
+    if (record2.swipeId !== message.swipeId) return true;
+    return record2.contentHash === message.contentHash;
   });
 }
 function replayTimeline(timeline, catalog, settings, messages, now = Date.now()) {
@@ -1489,17 +1681,16 @@ function replayTimeline(timeline, catalog, settings, messages, now = Date.now())
   let snapshot = emptySnapshot(timeline.chatId, now);
   for (const message of messages) {
     if (message.role !== "assistant") continue;
-    const record = findCachedDecision(decisions, message);
-    if (record) {
-      snapshot = applyDecision(
-        snapshot,
-        catalog,
-        record.decision,
-        timeline.manualOverrides,
-        settings,
-        record.createdAt
-      );
-    }
+    const cached = findCachedDecision(decisions, message);
+    if (!cached) continue;
+    snapshot = applyDecision(
+      snapshot,
+      catalog,
+      cached.decision,
+      timeline.manualOverrides,
+      settings,
+      cached.createdAt
+    );
   }
   return {
     ...timeline,
@@ -1512,7 +1703,9 @@ function replayTimeline(timeline, catalog, settings, messages, now = Date.now())
 function resolveChatCharacterIds(chat) {
   const metadata = chat.metadata && typeof chat.metadata === "object" && !Array.isArray(chat.metadata) ? chat.metadata : {};
   const directCharacterId = typeof chat.character_id === "string" ? chat.character_id : typeof chat.characterId === "string" ? chat.characterId : null;
-  const groupIds = metadata.group === true && Array.isArray(metadata.character_ids) ? metadata.character_ids.filter((id) => typeof id === "string" && id.length > 0) : directCharacterId ? [directCharacterId] : [];
+  const groupIds = metadata.group === true && Array.isArray(metadata.character_ids) ? metadata.character_ids.filter(
+    (id) => typeof id === "string" && id.length > 0
+  ) : directCharacterId ? [directCharacterId] : [];
   const muted = new Set(
     Array.isArray(metadata.muted_character_ids) ? metadata.muted_character_ids.filter((id) => typeof id === "string") : []
   );
@@ -1534,11 +1727,11 @@ var queueDepth = /* @__PURE__ */ new Map();
 var lastDetection = /* @__PURE__ */ new Map();
 var lastFrontendUserId = null;
 var onEvent = spindle.on;
-function asRecord2(value) {
+function asRecord3(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 function readString(value, keys) {
-  const raw = asRecord2(value);
+  const raw = asRecord3(value);
   for (const key of keys) if (typeof raw[key] === "string" && raw[key]) return raw[key];
   return null;
 }
@@ -1627,10 +1820,10 @@ async function mapWithConcurrency(items, limit, mapper) {
   }));
   return results;
 }
-async function assetViewsForProfiles(userId, profiles) {
-  const assets = profiles.flatMap(allAssets);
-  if (assets.length === 0) return {};
-  if (!hasPermission("images")) return Object.fromEntries(assets.map((asset) => [asset.id, { ...asset, url: null, thumbUrl: null }]));
+async function variantViewsForProfiles(userId, profiles) {
+  const variants = profiles.flatMap(allVariants);
+  if (variants.length === 0) return {};
+  if (!hasPermission("images")) return Object.fromEntries(variants.map((variant) => [variant.id, { ...variant, url: null, thumbUrl: null }]));
   const urls = /* @__PURE__ */ new Map();
   for (const profile of profiles) {
     let offset = 0;
@@ -1649,17 +1842,17 @@ async function assetViewsForProfiles(userId, profiles) {
       offset += page.data.length || 200;
     } while (offset < total);
   }
-  const missing = [...new Set(assets.map((asset) => asset.imageId).filter((id) => !urls.has(id)))];
+  const missing = [...new Set(variants.map((variant) => variant.imageId).filter((id) => !urls.has(id)))];
   const fetched = await mapWithConcurrency(
     missing,
     12,
     async (imageId) => spindle.images.get(imageId, { onlyOwned: true, specificity: "full", userId }).catch(() => null)
   );
   for (const item of fetched) if (item) urls.set(item.id, item.url);
-  return Object.fromEntries(assets.map((asset) => {
-    const url = urls.get(asset.imageId) ?? null;
+  return Object.fromEntries(variants.map((variant) => {
+    const url = urls.get(variant.imageId) ?? null;
     const separator = url?.includes("?") ? "&" : "?";
-    return [asset.id, { ...asset, url, thumbUrl: url ? `${url}${separator}size=sm` : null }];
+    return [variant.id, { ...variant, url, thumbUrl: url ? `${url}${separator}size=sm` : null }];
   }));
 }
 async function buildState(userId, chatId, characterId) {
@@ -1689,7 +1882,7 @@ async function buildState(userId, chatId, characterId) {
     stageProfiles: profiles,
     timeline,
     snapshot: timeline?.snapshot ?? null,
-    assetViews: await assetViewsForProfiles(userId, profiles),
+    variantViews: await variantViewsForProfiles(userId, profiles),
     connections: await connectionViews(userId),
     permissions: permissions(),
     activeChatId,
@@ -1730,8 +1923,8 @@ async function analyzeLatest(userId, chatId, force = false) {
   const settings = await repository.getSettings(userId);
   if (!settings.detection.enabled && !force) return;
   const set = await profilesForChat(userId, chatId);
-  if (set.catalog.length === 0 || !set.profiles.some((profile) => allAssets(profile).some((asset) => asset.enabled))) {
-    lastDetection.set(userId, { status: "error", message: "No enabled LumiStage media is configured for this chat.", at: Date.now() });
+  if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
+    lastDetection.set(userId, { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
     await sendState(userId);
     return;
   }
@@ -1741,17 +1934,17 @@ async function analyzeLatest(userId, chatId, force = false) {
   let timeline = await repository.getTimeline(userId, chatId);
   const expectedTimelineRevision = timeline.revision;
   const contentHash = await sha256(latest.content);
-  let record = findCachedDecision(timeline.decisions, {
+  let record2 = findCachedDecision(timeline.decisions, {
     id: latest.id,
     swipeId: latest.swipeId,
     contentHash
   });
-  lastDetection.set(userId, { status: "running", message: record ? "Restoring cached stage decision\u2026" : "Analyzing the latest reply\u2026", at: Date.now() });
+  lastDetection.set(userId, { status: "running", message: record2 ? "Restoring cached stage decision\u2026" : "Analyzing the latest reply\u2026", at: Date.now() });
   await sendState(userId);
-  if (!record) {
-    const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.actors).map(([actorId, state]) => [
-      actorId,
-      { outfitId: state.outfitId, expressionId: state.expressionId }
+  if (!record2) {
+    const currentStates = Object.fromEntries(Object.entries(timeline.snapshot.characters).map(([characterId, state]) => [
+      characterId,
+      { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId }
     ]));
     const request = buildDetectorRequest(
       set.catalog,
@@ -1763,8 +1956,10 @@ async function analyzeLatest(userId, chatId, force = false) {
     const parsed = parseDetectorResponse(response);
     if (!parsed) throw new Error("The detector did not return a valid stage decision.");
     const decision = validateDecision(parsed, set.catalog);
-    if (decision.actors.length === 0 && decision.focusedActorIds.length === 0) throw new Error("The detector returned no valid actors.");
-    record = {
+    if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
+      throw new Error("The detector returned no valid characters.");
+    }
+    record2 = {
       messageId: latest.id,
       swipeId: latest.swipeId,
       contentHash,
@@ -1773,14 +1968,14 @@ async function analyzeLatest(userId, chatId, force = false) {
       model: response.model ?? settings.detection.model,
       createdAt: Date.now()
     };
-    timeline.decisions = upsertDecision(timeline.decisions, record);
+    timeline.decisions = upsertDecision(timeline.decisions, record2);
   }
-  timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
   timeline.manualOverrides = consumeOnceOverrides(timeline.manualOverrides);
+  timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
   lastDetection.set(userId, {
     status: "success",
-    message: `Stage settled for ${record.decision.focusedActorIds.length || record.decision.actors.length} actor(s).`,
+    message: `Stage settled for ${record2.decision.focusedCharacterIds.length || record2.decision.characters.length} character(s).`,
     at: Date.now()
   });
   await sendState(userId);
@@ -1804,7 +1999,6 @@ function scheduleAnalysis(userId, chatId, delay = 120, force = false) {
 async function importAssets(userId, message) {
   if (!hasPermission("images")) throw new Error("Images permission is required to import media.");
   const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
-  const defaultActor = profile.actors.find((actor) => actor.id === message.targetActorId) ?? profile.actors.find((actor) => actor.id === profile.defaultActorId) ?? profile.actors[0];
   const candidates = [];
   const errors = [];
   let archiveManifest = null;
@@ -1830,8 +2024,8 @@ async function importAssets(userId, message) {
         await spindle.uploads.delete(uploadId, userId);
       }
     }
-    assertUnambiguousCandidates(candidates, message.layout, defaultActor?.name ?? profile.characterName);
-    const existingByHash = new Map(allAssets(profile).map((asset) => [asset.contentHash, asset]));
+    assertUnambiguousCandidates(candidates, message.layout);
+    const existingByHash = new Map(allVariants(profile).map((variant) => [variant.contentHash, variant]));
     const prepared = [];
     const reusedByPath = /* @__PURE__ */ new Map();
     let skipped = 0;
@@ -1862,7 +2056,7 @@ async function importAssets(userId, message) {
       strip_audio: candidate.mimeType.startsWith("video/")
     }));
     const results = uploadItems.length ? await spindle.images.uploadMany(uploadItems, { userId, concurrency: 8 }) : [];
-    const settled = settleHostUploads(prepared, results, message.layout, defaultActor?.name ?? profile.characterName);
+    const settled = settleHostUploads(prepared, results, message.layout);
     for (const [path, reused] of reusedByPath) settled.uploadedByPath.set(path, reused);
     errors.push(...settled.errors);
     for (let index = 0; index < prepared.length; index += 1) {
@@ -1876,16 +2070,25 @@ async function importAssets(userId, message) {
         message: `Stored ${index + 1} of ${prepared.length} media files\u2026`
       }, userId);
     }
-    const next = archiveManifest ? hydrateArchiveProfile(archiveManifest, message.characterId, profile.characterName, settled.uploadedByPath) : mergeImportedAssets(profile, settled.imported, profile.characterName).profile;
+    const selectedOutfit = profile.outfits.find((item) => item.id === message.targetOutfitId);
+    const selectedExpression = selectedOutfit?.expressions.find((item) => item.id === message.targetExpressionId);
+    const imported = settled.imported.map((item) => ({
+      ...item,
+      target: {
+        outfitName: selectedOutfit?.name ?? item.target.outfitName,
+        expressionName: selectedExpression?.name ?? item.target.expressionName
+      }
+    }));
+    const next = archiveManifest ? hydrateArchiveProfile(archiveManifest, message.characterId, profile.characterName, settled.uploadedByPath) : mergeImportedAssets(profile, imported, profile.characterName).profile;
     if (archiveManifest) next.revision = profile.revision + 1;
     const saved = await repository.replaceProfile(userId, next);
-    const views = await assetViewsForProfiles(userId, [saved]);
+    const views = await variantViewsForProfiles(userId, [saved]);
     send({
       type: "import-complete",
       requestId: message.requestId,
       profile: saved,
-      assetViews: views,
-      imported: settled.imported.length,
+      variantViews: views,
+      imported: imported.length,
       skipped,
       errors
     }, userId);
@@ -1894,17 +2097,16 @@ async function importAssets(userId, message) {
   }
 }
 function archiveForProfile(profile) {
-  const assets = [];
-  for (const actor of profile.actors) for (const outfit of actor.outfits) {
-    for (const expression of outfit.expressions) for (const asset of expression.assets) {
-      const extension = asset.fileName.includes(".") ? asset.fileName.split(".").pop() : asset.mimeType.split("/").pop();
-      assets.push({
-        path: `assets/${asset.contentHash}.${extension || "bin"}`,
+  const variants = [];
+  for (const outfit of profile.outfits) {
+    for (const expression of outfit.expressions) for (const variant of expression.variants) {
+      const extension = variant.fileName.includes(".") ? variant.fileName.split(".").pop() : variant.mimeType.split("/").pop();
+      variants.push({
+        path: `assets/${variant.contentHash}.${extension || "bin"}`,
         characterId: profile.characterId,
-        actorId: actor.id,
         outfitId: outfit.id,
         expressionId: expression.id,
-        asset
+        variant
       });
     }
   }
@@ -1913,7 +2115,7 @@ function archiveForProfile(profile) {
     kind: "lumistage-archive",
     exportedAt: Date.now(),
     profile,
-    assets
+    variants
   };
 }
 async function exportProfile(userId, characterId) {
@@ -1921,11 +2123,23 @@ async function exportProfile(userId, characterId) {
   const profile = await repository.getProfile(userId, characterId, await characterName(userId, characterId));
   const archive = archiveForProfile(profile);
   const urls = {};
-  await mapWithConcurrency(archive.assets, 8, async (entry) => {
-    const image = await spindle.images.get(entry.asset.imageId, { onlyOwned: true, specificity: "full", userId });
+  await mapWithConcurrency(archive.variants, 8, async (entry) => {
+    const image = await spindle.images.get(entry.variant.imageId, { onlyOwned: true, specificity: "full", userId });
     if (image?.url) urls[entry.path] = image.url;
   });
   return { archive, urls };
+}
+async function deleteOwnedImagesIfUnreferenced(userId, candidateImageIds) {
+  const profiles = await repository.listProfiles(userId);
+  const unreferenced = unreferencedImageIds(profiles, candidateImageIds);
+  const deletable = await confirmExtensionOwnedImageIds(
+    unreferenced,
+    (imageId) => spindle.images.get(
+      imageId,
+      { onlyOwned: true, specificity: "metadata", userId }
+    )
+  );
+  if (deletable.length) await spindle.images.deleteMany(deletable, { userId });
 }
 async function handleMessage(message, userId) {
   if (message.type === "ready" || message.type === "refresh") {
@@ -1937,7 +2151,7 @@ async function handleMessage(message, userId) {
   if (message.type === "character-editor") {
     if (!message.characterId) return;
     const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
-    send({ type: "profile", profile, assetViews: await assetViewsForProfiles(userId, [profile]) }, userId);
+    send({ type: "profile", profile, variantViews: await variantViewsForProfiles(userId, [profile]) }, userId);
     return;
   }
   if (message.type === "open-connections") {
@@ -1951,9 +2165,19 @@ async function handleMessage(message, userId) {
     return;
   }
   if (message.type === "save-profile") {
+    const before = await repository.getProfile(
+      userId,
+      message.profile.characterId,
+      message.profile.characterName
+    );
     const saved = await repository.saveProfile(userId, message.profile, message.expectedRevision);
+    const retainedIds = new Set(allVariants(saved).map((variant) => variant.id));
+    const removedImageIds = allVariants(before).filter((variant) => !retainedIds.has(variant.id)).map((variant) => variant.imageId);
+    if (removedImageIds.length && hasPermission("images")) {
+      await deleteOwnedImagesIfUnreferenced(userId, removedImageIds);
+    }
     send({ type: "saved", requestId: message.requestId, revision: saved.revision }, userId);
-    send({ type: "profile", profile: saved, assetViews: await assetViewsForProfiles(userId, [saved]) }, userId);
+    send({ type: "profile", profile: saved, variantViews: await variantViewsForProfiles(userId, [saved]) }, userId);
     return;
   }
   if (message.type === "save-chat-layout") {
@@ -1984,7 +2208,7 @@ async function handleMessage(message, userId) {
     const settings = await repository.getSettings(userId);
     const messages = await normalizedMessages(message.chatId);
     const current = await repository.getTimeline(userId, message.chatId);
-    let timeline = clearManualOverride(current, message.actorId);
+    let timeline = clearManualOverride(current, message.characterId);
     timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
     await repository.saveTimeline(userId, timeline, current.revision);
     await sendState(userId);
@@ -1998,21 +2222,14 @@ async function handleMessage(message, userId) {
     await importAssets(userId, message);
     return;
   }
-  if (message.type === "delete-assets") {
+  if (message.type === "delete-variants") {
     if (!hasPermission("images")) throw new Error("Images permission is required to delete media.");
     const profile = await repository.getProfile(userId, message.characterId, await characterName(userId, message.characterId));
-    const selected = new Set(message.assetIds);
-    const assets = allAssets(profile).filter((asset) => selected.has(asset.id));
-    const next = removeAssets(profile, selected);
-    await repository.replaceProfile(userId, next);
-    const profiles = await repository.listProfiles(userId);
-    const unreferenced = unreferencedImageIds(profiles, assets.map((asset) => asset.imageId));
-    const deletable = await confirmExtensionOwnedImageIds(
-      unreferenced,
-      (imageId) => spindle.images.get(imageId, { onlyOwned: true, specificity: "metadata", userId })
-    );
-    if (deletable.length) await spindle.images.deleteMany(deletable, { userId });
-    send({ type: "profile", profile: next, assetViews: await assetViewsForProfiles(userId, [next]) }, userId);
+    const selected = new Set(message.variantIds);
+    const variants = allVariants(profile).filter((variant) => selected.has(variant.id));
+    const next = await repository.replaceProfile(userId, removeVariants(profile, selected));
+    await deleteOwnedImagesIfUnreferenced(userId, variants.map((variant) => variant.imageId));
+    send({ type: "profile", profile: next, variantViews: await variantViewsForProfiles(userId, [next]) }, userId);
     return;
   }
   if (message.type === "request-export") {
@@ -2024,8 +2241,8 @@ async function handleMessage(message, userId) {
     const context = activeContexts.get(userId);
     const diagnosticProfiles = context?.chatId ? (await profilesForChat(userId, context.chatId)).profiles : context?.characterId ? [await repository.getProfile(userId, context.characterId, await characterName(userId, context.characterId))] : [];
     const profile = diagnosticProfiles.find((item) => item.characterId === context?.characterId) ?? diagnosticProfiles[0] ?? null;
-    const views = await assetViewsForProfiles(userId, diagnosticProfiles);
-    const media = diagnosticProfiles.flatMap(allAssets);
+    const views = await variantViewsForProfiles(userId, diagnosticProfiles);
+    const media = diagnosticProfiles.flatMap(allVariants);
     const settings = await repository.getSettings(userId);
     send({
       type: "diagnostics",
@@ -2046,13 +2263,13 @@ async function handleMessage(message, userId) {
         },
         media: {
           total: media.length,
-          missing: hasPermission("images") ? media.filter((asset) => !views[asset.id]?.url).length : null,
+          missing: hasPermission("images") ? media.filter((variant) => !views[variant.id]?.url).length : null,
           ownershipVerified: hasPermission("images")
         },
         catalog: profile ? {
-          actors: profile.actors.length,
-          outfits: profile.actors.reduce((sum, actor) => sum + actor.outfits.length, 0),
-          assets: allAssets(profile).length,
+          characters: 1,
+          outfits: profile.outfits.length,
+          variants: allVariants(profile).length,
           issues: inspectProfile(profile)
         } : null,
         detector: lastDetection.get(userId) ?? null
@@ -2108,7 +2325,7 @@ onEvent("GENERATION_STOPPED", (payload) => {
 });
 for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"]) {
   onEvent(event, (payload, eventUserId) => {
-    const raw = asRecord2(payload);
+    const raw = asRecord3(payload);
     const chatId = extractChatId(payload) ?? extractChatId(raw.message);
     const userId = resolveUserId(chatId, eventUserId);
     if (chatId && userId) scheduleAnalysis(userId, chatId, 280);
@@ -2125,7 +2342,7 @@ onEvent("MESSAGE_DELETED", (payload, eventUserId) => {
     const messages = await normalizedMessages(chatId);
     let timeline = await repository.getTimeline(userId, chatId);
     const expectedRevision = timeline.revision;
-    timeline.decisions = timeline.decisions.filter((record) => record.messageId !== messageId);
+    timeline.decisions = timeline.decisions.filter((record2) => record2.messageId !== messageId);
     timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
     await repository.saveTimeline(userId, timeline, expectedRevision);
     await sendState(userId);

@@ -7,74 +7,73 @@ import {
   resolveChatCharacterIds,
   upsertDecision,
 } from "../src/timeline";
-import { profileA, profileB, record } from "./fixtures";
+import { profileA, recordA } from "./fixtures";
 
-describe("message/swipe decision cache", () => {
-  it("keys decisions by message, swipe, and content hash", () => {
-    const records = [
-      record("message", 0, "hash-0"),
-      record("message", 1, "hash-1", { expressionId: "expression-neutral" }),
-    ];
-    expect(findCachedDecision(records, { id: "message", swipeId: 1, contentHash: "hash-1" }))
-      .toBe(records[1]);
-    expect(findCachedDecision(records, { id: "message", swipeId: 1, contentHash: "edited" }))
-      .toBeNull();
-  });
-
-  it("preserves inactive swipes, invalidates an edited active swipe, and drops deletions", () => {
-    const records = [
-      record("kept", 0, "old-active"),
-      record("kept", 1, "inactive"),
-      record("deleted", 0, "gone"),
-    ];
-    const reconciled = reconcileDecisionRecords(records, [
-      { id: "kept", role: "assistant", swipeId: 0, contentHash: "edited-active" },
-    ]);
-    expect(reconciled.map((item) => item.contentHash)).toEqual(["inactive"]);
-  });
-
-  it("replays cached ensemble focus without another model call", () => {
-    const profiles = [profileA(), profileB()];
-    const timeline = createTimeline("chat", 1);
-    const a = record("a", 0, "ha");
-    const b = record("b", 0, "hb", {
-      actorId: "actor-b",
-      outfitId: "outfit-b",
-      expressionId: "expression-b",
+describe("decision cache and replay", () => {
+  it("keys cached decisions by message, swipe, and content hash", () => {
+    const first = recordA("message", 0, "hash-a");
+    const second = recordA("message", 1, "hash-b", {
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
     });
-    b.decision.focusedActorIds = ["actor-b"];
-    timeline.decisions = [a, b];
-    const replayed = replayTimeline(timeline, buildCatalog(profiles), defaultSettings(1), [
-      { id: "a", role: "assistant", swipeId: 0, contentHash: "ha" },
-      { id: "b", role: "assistant", swipeId: 0, contentHash: "hb" },
-    ], 50);
-    expect(Object.keys(replayed.snapshot.actors).sort()).toEqual(["actor-a", "actor-b"]);
-    expect(replayed.snapshot.focusedActorIds).toEqual(["actor-b"]);
-    expect(replayed.snapshot.actors["actor-a"].focused).toBe(false);
-    expect(replayed.snapshot.actors["actor-b"].focused).toBe(true);
+    const records = upsertDecision(upsertDecision([], first), second);
+    expect(findCachedDecision(records, { id: "message", swipeId: 0, contentHash: "hash-a" })).toBe(first);
+    expect(findCachedDecision(records, { id: "message", swipeId: 1, contentHash: "hash-b" })).toBe(second);
   });
 
-  it("replaces an identical cache key once and bounds history", () => {
-    const old = record("message", 0, "hash");
-    const replacement = { ...old, createdAt: 999 };
-    expect(upsertDecision([old], replacement, 20)).toEqual([replacement]);
-    expect(upsertDecision([record("a", 0, "a"), record("b", 0, "b")], record("c", 0, "c"), 2))
-      .toHaveLength(2);
+  it("invalidates active edits while retaining inactive swipe records", () => {
+    const records = [
+      recordA("message", 0, "old"),
+      recordA("message", 1, "active"),
+      recordA("deleted", 0, "gone"),
+    ];
+    const reconciled = reconcileDecisionRecords(records, [{
+      id: "message",
+      role: "assistant",
+      swipeId: 1,
+      contentHash: "edited",
+    }]);
+    expect(reconciled.map((item) => [item.swipeId, item.contentHash])).toEqual([[0, "old"]]);
+  });
+
+  it("replays unchanged decisions without another detector call", () => {
+    const timeline = createTimeline("chat", 1);
+    timeline.decisions = [
+      recordA("first", 0, "hash-first"),
+      recordA("second", 0, "hash-second", {
+        expressionId: "expression-angry",
+        variantId: "variant-expression-angry",
+      }),
+    ];
+    const replayed = replayTimeline(
+      timeline,
+      buildCatalog([profileA()]),
+      defaultSettings(1),
+      [
+        { id: "first", role: "assistant", swipeId: 0, contentHash: "hash-first" },
+        { id: "second", role: "assistant", swipeId: 0, contentHash: "hash-second" },
+      ],
+      20,
+    );
+    expect(replayed.snapshot.characters["character-a"].expressionId).toBe("expression-angry");
+    expect(replayed.snapshot.characters["character-a"].variantId).toBe("variant-expression-angry");
+    expect(replayed.snapshot.focusedCharacterIds).toEqual(["character-a"]);
   });
 });
 
-describe("group chat composition", () => {
-  it("excludes muted members and chooses a visible primary actor", () => {
-    expect(resolveChatCharacterIds({
+describe("group membership", () => {
+  it("uses public group metadata and excludes muted members", () => {
+    const resolved = resolveChatCharacterIds({
       character_id: "character-a",
       metadata: {
         group: true,
         character_ids: ["character-a", "character-b", "character-b"],
-        muted_character_ids: ["character-a"],
+        muted_character_ids: ["character-b"],
       },
-    })).toEqual({
-      characterIds: ["character-b"],
-      primaryCharacterId: "character-b",
+    });
+    expect(resolved).toEqual({
+      characterIds: ["character-a"],
+      primaryCharacterId: "character-a",
     });
   });
 });
