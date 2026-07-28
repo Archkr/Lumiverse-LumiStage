@@ -328,9 +328,9 @@ The detector:
 - makes one structured generation call;
 - must copy the exact selected filename, including its extension, rather than inventing a `Character / Outfit / Emotion` label;
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
-- uses inherited reasoning disabled;
+- asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;
 - has a 60-second abort;
-- scales output allowance from 560 to 2,400 tokens for larger ensembles;
+- does not impose a completion-token cap, leaving output capacity to the selected connection/provider so mandatory-reasoning models can finish their structured answer;
 - fails clearly before generation when estimated input exceeds 24,000 tokens;
 - rejects unknown filenames, duplicate character decisions, and ambiguous folder/file combinations.
 

@@ -1671,8 +1671,7 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
     connection_id: settings.detection.connectionId ?? void 0,
     model: settings.detection.model ?? void 0,
     parameters: {
-      temperature: settings.detection.temperature,
-      max_tokens: Math.min(2400, Math.max(560, 560 + Math.max(0, catalog.length - 1) * 230))
+      temperature: settings.detection.temperature
     },
     reasoning: { source: "off" },
     tools

@@ -116,7 +116,8 @@ describe("detector contract", () => {
     expect(system).toContain("You may switch away from the current outfit");
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.reasoning).toEqual({ source: "off" });
-    expect((request.parameters as Record<string, unknown>).max_tokens).toBe(560);
+    expect(request.parameters).toEqual({ temperature: 0.1 });
+    expect((request.parameters as Record<string, unknown>)).not.toHaveProperty("max_tokens");
     const tool = (request.tools as Array<Record<string, any>>)[0];
     const required = tool.parameters.properties.characters.items.required;
     expect(required).toEqual([
@@ -171,7 +172,7 @@ describe("detector contract", () => {
     expect(stateLockLine).toContain('"fileName":"neutral-soft.png"');
   });
 
-  it("rejects duplicate character decisions and scales one-call output for ensembles", () => {
+  it("rejects duplicate character decisions without imposing a reasoning-hostile output cap", () => {
     const profile = profileA();
     const catalog = buildCatalog([profile]);
     const duplicate = {
@@ -201,7 +202,6 @@ describe("detector contract", () => {
       return buildCatalog([next])[0];
     });
     const request = buildDetectorRequest(ensembleCatalog, [], {}, defaultSettings(1));
-    expect((request.parameters as Record<string, unknown>).max_tokens).toBeGreaterThan(560);
-    expect((request.parameters as Record<string, unknown>).max_tokens).toBeLessThanOrEqual(2400);
+    expect((request.parameters as Record<string, unknown>)).not.toHaveProperty("max_tokens");
   });
 });

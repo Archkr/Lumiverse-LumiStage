@@ -322,7 +322,6 @@ export function buildDetectorRequest(
     model: settings.detection.model ?? undefined,
     parameters: {
       temperature: settings.detection.temperature,
-      max_tokens: Math.min(2400, Math.max(560, 560 + Math.max(0, catalog.length - 1) * 230)),
     },
     reasoning: { source: "off" },
     tools,
