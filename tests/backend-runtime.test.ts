@@ -8,14 +8,30 @@ describe("operator-scoped backend runtime", () => {
     const eventHandlers = new Map<string, EventHandler>();
     const charactersGet = vi.fn(async () => ({ id: "character-a", name: "Aster" }));
     const chatsGet = vi.fn(async () => ({ id: "chat-a", character_id: "character-a" }));
-    const connectionsList = vi.fn(async () => [{
-      id: "connection-a",
-      name: "Primary",
-      provider: "openai",
-      model: "gpt-4.1-mini",
-      is_default: true,
-      has_api_key: true,
-    }]);
+    const defaultConnectionModel = "gpt-4.1-mini";
+    let defaultConnectionUpdatedAt = 100;
+    const connectionsList = vi.fn(async () => [
+      {
+        id: "connection-a",
+        name: "Primary",
+        provider: "openai",
+        model: defaultConnectionModel,
+        preset_id: "preset-with-legacy-model",
+        is_default: true,
+        has_api_key: true,
+        updated_at: defaultConnectionUpdatedAt,
+      },
+      {
+        id: "connection-manual",
+        name: "Manual detector",
+        provider: "openai",
+        model: "manual-default",
+        preset_id: null,
+        is_default: false,
+        has_api_key: true,
+        updated_at: 200,
+      },
+    ]);
     const openDrawerTab = vi.fn(async () => undefined);
     const sendToFrontend = vi.fn();
     const staged = new Map<string, { fileName: string; data: Uint8Array }>();
@@ -199,7 +215,9 @@ describe("operator-scoped backend runtime", () => {
       expect.objectContaining({
         type: "state",
         state: expect.objectContaining({
-          connections: [expect.objectContaining({ id: "connection-a", hasApiKey: true })],
+          connections: expect.arrayContaining([
+            expect.objectContaining({ id: "connection-a", hasApiKey: true }),
+          ]),
         }),
       }),
       "user-a",
@@ -402,19 +420,26 @@ describe("operator-scoped backend runtime", () => {
       }
       return completedMessages;
     });
-    generateQuiet.mockResolvedValue({
-      tool_calls: [{
-        name: "set_stage_state",
-        args: {
-          focusedCharacterIds: ["character-a"],
-          characters: [{
-            characterId: "character-a",
-            outfitName: automaticOutfit.name,
-            expressionName: automaticExpression.name,
-            confidence: 1,
-          }],
-        },
-      }],
+    generateQuiet.mockImplementation(async (request: Record<string, unknown>) => {
+      const parameters = request.parameters as Record<string, unknown>;
+      return {
+        provider: "openai",
+        model: typeof parameters.model === "string" && parameters.model
+          ? parameters.model
+          : defaultConnectionModel,
+        tool_calls: [{
+          name: "set_stage_state",
+          args: {
+            focusedCharacterIds: ["character-a"],
+            characters: [{
+              characterId: "character-a",
+              outfitName: automaticOutfit.name,
+              expressionName: automaticExpression.name,
+              confidence: 1,
+            }],
+          },
+        }],
+      };
     });
     eventHandlers.get("GENERATION_STARTED")?.({
       generationId: "generation-one",
@@ -543,10 +568,7 @@ describe("operator-scoped backend runtime", () => {
       messageId: "assistant-final",
     }, "user-a");
     await new Promise((resolve) => setTimeout(resolve, 240));
-    expect(generateQuiet).toHaveBeenCalledTimes(2);
-    expect(generateQuiet.mock.calls[1][0].parameters).toEqual(expect.objectContaining({
-      model: "saved-model",
-    }));
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
 
     await handleFrontend({
       type: "analyze-now",
@@ -568,10 +590,18 @@ describe("operator-scoped backend runtime", () => {
       }),
       "user-a",
     );
-    expect(generateQuiet).toHaveBeenCalledTimes(3);
-    expect(generateQuiet.mock.calls[2][0].parameters).toEqual(expect.objectContaining({
-      model: "manual-model",
-    }));
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
+
+    eventHandlers.get("MESSAGE_EDITED")?.({
+      chatId: "chat-a",
+      message: {
+        id: "assistant-final",
+        role: "assistant",
+        content: "Aster smiles after the reply is complete.",
+      },
+    }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 360));
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
 
     generateQuiet.mockClear();
     await handleFrontend({
@@ -596,6 +626,28 @@ describe("operator-scoped backend runtime", () => {
     expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
     expect(generateRaw).not.toHaveBeenCalled();
 
+    generateQuiet.mockClear();
+    await handleFrontend({
+      type: "analyze-now",
+      requestId: "analyze-default-connection-default-model",
+      chatId: "chat-a",
+      detection: {
+        enabled: true,
+        connectionId: null,
+        model: null,
+        contextMessages: 3,
+        temperature: 0.2,
+        confidence: 0.7,
+      },
+    }, "user-a");
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
+    expect(generateQuiet).toHaveBeenCalledWith(expect.objectContaining({
+      connection_id: undefined,
+      parameters: expect.objectContaining({
+        model: "",
+      }),
+    }));
+
     sendToFrontend.mockClear();
     await handleFrontend({
       type: "request-diagnostics",
@@ -613,7 +665,36 @@ describe("operator-scoped backend runtime", () => {
       requestedConnectionName: "Primary",
       requestedModel: "saved-model",
       modelSource: "configured",
-      latestDecisionModel: "default-connection-override",
+      latestDecisionModel: defaultConnectionModel,
+      lastDispatch: expect.objectContaining({
+        trigger: "manual",
+        configuredConnectionId: null,
+        resolvedConnectionId: "connection-a",
+        connectionPresetId: "preset-with-legacy-model",
+        modelSource: "connection-default",
+        requestedModel: defaultConnectionModel,
+        sentModelParameter: "",
+        responseProvider: "openai",
+        responseModel: defaultConnectionModel,
+        providerInvoked: true,
+        status: "success",
+      }),
+    }));
+
+    generateQuiet.mockClear();
+    defaultConnectionUpdatedAt = 101;
+    eventHandlers.get("MESSAGE_EDITED")?.({
+      chatId: "chat-a",
+      message: {
+        id: "assistant-final",
+        role: "assistant",
+        content: "Aster smiles after the reply is complete.",
+      },
+    }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 360));
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
+    expect(generateQuiet.mock.calls[0][0].parameters).toEqual(expect.objectContaining({
+      model: "saved-model",
     }));
 
     await handleFrontend({ type: "open-connections" }, "user-a");

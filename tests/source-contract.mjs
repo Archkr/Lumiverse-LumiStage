@@ -77,14 +77,14 @@ for (const [label, text] of [["src/detector.ts", detector], ["dist/backend.js", 
   if (text.includes("max_tokens")) {
     violations.push(`${label}: detector requests must not impose a max_tokens output cap`);
   }
-  if (!text.includes("{ model: settings.detection.model }")) {
-    violations.push(`${label}: selected detector model is missing from quiet-call parameters`);
+  if (!text.includes('model: settings.detection.model ?? ""')) {
+    violations.push(`${label}: quiet-call parameters must explicitly neutralize stale preset models`);
   }
 }
 if (!backend.includes("spindle.generate.quiet") || backend.includes("spindle.generate.raw")) {
   violations.push("backend: every detector request must use the connection-aware quiet dispatch");
 }
-if (/^\s*model:\s*settings\.detection\.model\s*\?\?/m.test(detector)) {
+if (/connection_id:[^\n]*\n\s*model:\s*settings\.detection\.model[^\n]*\n\s*parameters:/m.test(detector)) {
   violations.push("src/detector.ts: selected model must not use the ignored top-level quiet-call field");
 }
 if (!frontend.includes("width: 1440") || !frontend.includes("maxHeight: 980")) {

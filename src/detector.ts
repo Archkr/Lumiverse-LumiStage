@@ -365,7 +365,7 @@ export function buildDetectorRequest(
     connection_id: settings.detection.connectionId ?? undefined,
     parameters: {
       temperature: settings.detection.temperature,
-      ...(settings.detection.model ? { model: settings.detection.model } : {}),
+      model: settings.detection.model ?? "",
     },
     reasoning: { source: "off" },
     tools,

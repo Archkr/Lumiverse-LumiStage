@@ -1729,7 +1729,7 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
     connection_id: settings.detection.connectionId ?? void 0,
     parameters: {
       temperature: settings.detection.temperature,
-      ...settings.detection.model ? { model: settings.detection.model } : {}
+      model: settings.detection.model ?? ""
     },
     reasoning: { source: "off" },
     tools
@@ -2161,12 +2161,14 @@ var activeContexts = /* @__PURE__ */ new Map();
 var chatUsers = /* @__PURE__ */ new Map();
 var generationUsers = /* @__PURE__ */ new Map();
 var activeGenerations = /* @__PURE__ */ new Map();
+var handledGenerationEnds = /* @__PURE__ */ new Map();
 var scheduled = /* @__PURE__ */ new Map();
 var analysisQueues = /* @__PURE__ */ new Map();
 var queueDepth = /* @__PURE__ */ new Map();
 var lastDetection = /* @__PURE__ */ new Map();
 var detectorFlights = /* @__PURE__ */ new Map();
 var recentDetectorRuns = /* @__PURE__ */ new Map();
+var lastDetectorDispatch = /* @__PURE__ */ new Map();
 var mediaViewCache = /* @__PURE__ */ new Map();
 var diagnosticCounters = /* @__PURE__ */ new Map();
 var onEvent = spindle.on;
@@ -2220,9 +2222,12 @@ function permissions() {
     uiPanels: hasPermission("ui_panels")
   };
 }
-async function connectionViews(userId) {
+async function connectionProfiles(userId) {
   if (!hasPermission("generation")) return [];
-  const connections = await spindle.connections.list(userId).catch(() => []);
+  return spindle.connections.list(userId).catch(() => []);
+}
+async function connectionViews(userId) {
+  const connections = await connectionProfiles(userId);
   return connections.map((connection) => ({
     id: connection.id,
     name: connection.name,
@@ -2231,6 +2236,25 @@ async function connectionViews(userId) {
     isDefault: connection.is_default,
     hasApiKey: connection.has_api_key
   }));
+}
+async function resolveDetectorDispatch(userId, settings) {
+  const connections = await connectionProfiles(userId);
+  const connection = settings.connectionId ? connections.find((candidate) => candidate.id === settings.connectionId) : connections.find((candidate) => candidate.is_default);
+  if (!connection) {
+    throw new Error(settings.connectionId ? "The configured LumiStage detector connection is no longer available." : "No default Lumiverse connection is configured.");
+  }
+  const configuredModel = settings.model?.trim() || null;
+  return {
+    configuredConnectionId: settings.connectionId,
+    resolvedConnectionId: connection.id,
+    resolvedConnectionName: connection.name,
+    connectionModel: connection.model,
+    connectionPresetId: connection.preset_id ?? null,
+    connectionUpdatedAt: Number.isFinite(connection.updated_at) ? connection.updated_at : null,
+    modelParameter: configuredModel ?? "",
+    requestedModel: configuredModel ?? connection.model,
+    modelSource: configuredModel ? "configured" : "connection-default"
+  };
 }
 async function generateDetector(userId, request, signal) {
   return spindle.generate.quiet({ ...request, userId, signal });
@@ -2261,6 +2285,17 @@ function markGenerationFinished(generationId) {
 }
 function generationInProgress(userId, chatId) {
   return Boolean(activeGenerations.get(queueKey(userId, chatId))?.size);
+}
+function markGenerationEndHandled(userId, chatId, generationId, messageId) {
+  const now = Date.now();
+  const key = generationId ? `${userId}:generation:${generationId}:${messageId}` : `${queueKey(userId, chatId)}:message:${messageId}`;
+  if (handledGenerationEnds.has(key)) return false;
+  handledGenerationEnds.set(key, now);
+  const cutoff = now - 5 * 6e4;
+  for (const [handledKey, handledAt] of handledGenerationEnds) {
+    if (handledAt < cutoff) handledGenerationEnds.delete(handledKey);
+  }
+  return true;
 }
 function enqueueAnalysis(userId, chatId, operation) {
   const key = queueKey(userId, chatId);
@@ -2441,7 +2476,7 @@ async function rebuildTimeline(timeline, catalog, settings, messages) {
   })));
   return replayTimeline(timeline, catalog, settings, keys);
 }
-async function analyzeLatest(userId, chatId, force = false, detectionOverride, expectedMessageId) {
+async function analyzeLatest(userId, chatId, force = false, detectionOverride, expectedMessageId, trigger = force ? "manual" : "completion") {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
     await sendState(userId).catch(() => void 0);
@@ -2450,6 +2485,7 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
   const persistedSettings = await repository.getSettings(userId);
   const settings = detectionOverride ? normalizeSettings({ ...persistedSettings, detection: detectionOverride }) : persistedSettings;
   if (!settings.detection.enabled && !force) return;
+  const dispatch = await resolveDetectorDispatch(userId, settings.detection);
   const set = await profilesForChat(userId, chatId);
   if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
@@ -2474,7 +2510,15 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
     detection: settings.detection,
     overrides: timeline.manualOverrides,
     recentMessages,
-    latest: { id: latest.id, swipeId: latest.swipeId, contentHash }
+    latest: { id: latest.id, swipeId: latest.swipeId, contentHash },
+    dispatch: {
+      configuredConnectionId: dispatch.configuredConnectionId,
+      resolvedConnectionId: dispatch.resolvedConnectionId,
+      connectionModel: dispatch.connectionModel,
+      connectionPresetId: dispatch.connectionPresetId,
+      connectionUpdatedAt: dispatch.connectionUpdatedAt,
+      modelParameter: dispatch.modelParameter
+    }
   }));
   let record2 = force ? null : findCachedDecision(timeline.decisions, {
     id: latest.id,
@@ -2482,9 +2526,10 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
     contentHash
   }, requestFingerprint);
   const detectorMessageKey = `${queueKey(userId, chatId)}:${latest.id}:${latest.swipeId}:${contentHash}`;
+  const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
   let detectorInputTokens = null;
   if (!record2) {
-    const recent = recentDetectorRuns.get(detectorMessageKey);
+    const recent = recentDetectorRuns.get(flightKey);
     const recentWindow = force ? 5e3 : 3e4;
     if (recent && Date.now() - recent.completedAt <= recentWindow && recent.requestFingerprint === requestFingerprint) {
       record2 = recent.record;
@@ -2506,37 +2551,62 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
       ...request
     } = builtRequest;
     detectorInputTokens = typeof estimatedInputTokens === "number" ? estimatedInputTokens : null;
-    const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
     let flight = detectorFlights.get(flightKey);
     if (!flight) {
+      const dispatchDiagnostic = {
+        ...dispatch,
+        trigger,
+        messageId: latest.id,
+        requestFingerprint,
+        providerInvoked: false,
+        responseProvider: null,
+        responseModel: null,
+        status: "running",
+        startedAt: Date.now(),
+        completedAt: null,
+        error: null
+      };
+      lastDetectorDispatch.set(queueKey(userId, chatId), dispatchDiagnostic);
       const started = (async () => {
-        const response = await generateDetector(
-          userId,
-          request,
-          AbortSignal.timeout(6e4)
-        );
-        const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
-        const parsed = parseDetectorResponse(response, detectorCatalog);
-        if (!parsed) throw new Error("The detector did not return a valid stage decision.");
-        const decision = validateDecision(parsed, detectorCatalog);
-        if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
-          throw new Error("The detector returned no valid characters.");
-        }
-        return {
-          record: {
-            messageId: latest.id,
-            swipeId: latest.swipeId,
-            contentHash,
+        try {
+          dispatchDiagnostic.providerInvoked = true;
+          const response = await generateDetector(
+            userId,
+            request,
+            AbortSignal.timeout(6e4)
+          );
+          dispatchDiagnostic.responseProvider = response.provider ?? null;
+          dispatchDiagnostic.responseModel = response.model ?? null;
+          const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
+          const parsed = parseDetectorResponse(response, detectorCatalog);
+          if (!parsed) throw new Error("The detector did not return a valid stage decision.");
+          const decision = validateDecision(parsed, detectorCatalog);
+          if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
+            throw new Error("The detector returned no valid characters.");
+          }
+          dispatchDiagnostic.status = "success";
+          dispatchDiagnostic.completedAt = Date.now();
+          return {
+            record: {
+              messageId: latest.id,
+              swipeId: latest.swipeId,
+              contentHash,
+              requestFingerprint,
+              decision,
+              provider: response.provider ?? null,
+              model: response.model ?? dispatch.requestedModel,
+              createdAt: Date.now()
+            },
+            detectorInputTokens: usedInputTokens,
             requestFingerprint,
-            decision,
-            provider: response.provider ?? null,
-            model: response.model ?? settings.detection.model,
-            createdAt: Date.now()
-          },
-          detectorInputTokens: usedInputTokens,
-          requestFingerprint,
-          completedAt: Date.now()
-        };
+            completedAt: Date.now()
+          };
+        } catch (error) {
+          dispatchDiagnostic.status = "error";
+          dispatchDiagnostic.completedAt = Date.now();
+          dispatchDiagnostic.error = error instanceof Error ? error.message : "Detector generation failed.";
+          throw error;
+        }
       })();
       const tracked = started.finally(() => {
         if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
@@ -2547,7 +2617,7 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
     const outcome = await flight;
     record2 = outcome.record;
     detectorInputTokens = outcome.detectorInputTokens;
-    recentDetectorRuns.set(detectorMessageKey, outcome);
+    recentDetectorRuns.set(flightKey, outcome);
     const cutoff = Date.now() - 6e4;
     for (const [key, recent] of recentDetectorRuns) {
       if (recent.completedAt < cutoff) recentDetectorRuns.delete(key);
@@ -2564,7 +2634,7 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
   });
   await sendState(userId).catch(() => void 0);
 }
-function scheduleAnalysis(userId, chatId, delay = 120, force = false, expectedMessageId) {
+function scheduleAnalysis(userId, chatId, delay = 120, force = false, expectedMessageId, trigger = force ? "manual" : "completion") {
   const key = queueKey(userId, chatId);
   if (!force && generationInProgress(userId, chatId)) return;
   const old = scheduled.get(key);
@@ -2576,7 +2646,8 @@ function scheduleAnalysis(userId, chatId, delay = 120, force = false, expectedMe
       chatId,
       force,
       void 0,
-      expectedMessageId
+      expectedMessageId,
+      trigger
     ).catch(async (error) => {
       lastDetection.set(queueKey(userId, chatId), {
         status: "error",
@@ -2975,7 +3046,7 @@ async function handleMessage(message, userId) {
     await enqueueAnalysis(
       userId,
       message.chatId,
-      () => analyzeLatest(userId, message.chatId, true, message.detection)
+      () => analyzeLatest(userId, message.chatId, true, message.detection, void 0, "manual")
     );
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
@@ -3033,6 +3104,7 @@ async function handleMessage(message, userId) {
     const views = await variantViewsForProfiles(userId, diagnosticProfiles);
     const media = diagnosticProfiles.flatMap(allVariants);
     const latestDecision = context?.chatId ? (await repository.getTimeline(userId, context.chatId)).decisions.slice().sort((left, right) => right.createdAt - left.createdAt)[0] ?? null : null;
+    const dispatchTrace = context?.chatId ? lastDetectorDispatch.get(queueKey(userId, context.chatId)) ?? null : null;
     const counters = countersFor(userId);
     const estimatedRequest = buildDetectorRequest(
       buildCatalog(diagnosticProfiles),
@@ -3063,7 +3135,28 @@ async function handleMessage(message, userId) {
         requestedConnectionName: requestedConnection?.name ?? null,
         requestedModel: settings.detection.model ?? requestedConnection?.model ?? null,
         modelSource: settings.detection.model ? "configured" : "connection-default",
-        latestDecisionModel: latestDecision?.model ?? null
+        latestDecisionModel: latestDecision?.model ?? null,
+        lastDispatch: dispatchTrace ? {
+          trigger: dispatchTrace.trigger,
+          messageId: dispatchTrace.messageId,
+          configuredConnectionId: dispatchTrace.configuredConnectionId,
+          resolvedConnectionId: dispatchTrace.resolvedConnectionId,
+          resolvedConnectionName: dispatchTrace.resolvedConnectionName,
+          connectionModel: dispatchTrace.connectionModel,
+          connectionPresetId: dispatchTrace.connectionPresetId,
+          connectionUpdatedAt: dispatchTrace.connectionUpdatedAt,
+          modelSource: dispatchTrace.modelSource,
+          requestedModel: dispatchTrace.requestedModel,
+          sentModelParameter: dispatchTrace.modelParameter,
+          responseProvider: dispatchTrace.responseProvider,
+          responseModel: dispatchTrace.responseModel,
+          requestFingerprint: dispatchTrace.requestFingerprint,
+          providerInvoked: dispatchTrace.providerInvoked,
+          status: dispatchTrace.status,
+          startedAt: dispatchTrace.startedAt,
+          completedAt: dispatchTrace.completedAt,
+          error: dispatchTrace.error
+        } : null
       },
       media: {
         total: media.length,
@@ -3124,13 +3217,13 @@ onEvent("GENERATION_STARTED", (payload, eventUserId) => {
 onEvent("GENERATION_ENDED", (payload, eventUserId) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
   const messageId = readString(payload, ["messageId", "message_id"]);
-  const remembered = generationId ? generationUsers.get(generationId) : null;
+  const remembered = markGenerationFinished(generationId);
   const chatId = extractChatId(payload) ?? remembered?.chatId ?? null;
   const userId = resolveUserId(chatId, eventUserId ?? remembered?.userId);
-  markGenerationFinished(generationId);
   if (!chatId || !userId || readString(payload, ["error"]) || !messageId) return;
+  if (!markGenerationEndHandled(userId, chatId, generationId, messageId)) return;
   if (generationInProgress(userId, chatId)) return;
-  scheduleAnalysis(userId, chatId, 120, false, messageId);
+  scheduleAnalysis(userId, chatId, 120, false, messageId, "completion");
 });
 onEvent("GENERATION_STOPPED", (payload) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
@@ -3144,7 +3237,8 @@ for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"]) {
     const userId = resolveUserId(chatId, eventUserId);
     const role = readString(changedMessage, ["role"]) ?? readString(payload, ["role"]);
     const messageId = role === "assistant" ? readString(changedMessage, ["id", "messageId", "message_id"]) ?? readString(payload, ["messageId", "message_id"]) ?? void 0 : void 0;
-    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId);
+    const trigger = event === "MESSAGE_EDITED" ? "edit" : "swipe";
+    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId, trigger);
   });
 }
 onEvent("MESSAGE_DELETED", (payload, eventUserId) => {
@@ -3197,6 +3291,7 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   }
   queueDepth.delete(key);
   lastDetection.delete(key);
+  lastDetectorDispatch.delete(key);
   settleBackground(repository.deleteTimeline(userId, chatId));
 });
 spindle.permissions.onChanged(() => {

@@ -327,6 +327,7 @@ The detector:
 - leaves exact variant selection to LumiStage, which randomly chooses among the selected expression's eligible variants;
 - receives current stage state and active manual locks;
 - waits for the exact completed assistant message and coalesces duplicate host/manual triggers into one structured generation call;
+- sends an empty quiet-call model override for “connection default,” preventing legacy preset model fields from replacing the connection’s resolved model;
 - must copy exact outfit and expression names from the catalog rather than inventing labels;
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
 - asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;
@@ -347,7 +348,8 @@ Cached decisions are fingerprinted with:
 - detector settings;
 - relevant context;
 - the completed message ID, swipe, and content;
-- current manual overrides.
+- current manual overrides;
+- the selected/default connection profile, preset, model, and update timestamp.
 
 Changing any of those inputs invalidates the cache. Forced analysis always bypasses it.
 
@@ -398,7 +400,7 @@ Failed or unavailable media is cleared instead of leaving a stale sprite visible
 |---|---:|---|
 | Automatic direction | On | Runs after successful completed assistant replies. |
 | Connection | Default Lumiverse connection | May use a dedicated configured LLM connection. |
-| Model | Connection default | Can be overridden when the connection exposes models. |
+| Model | Connection default | Blank explicitly uses the resolved connection model; legacy model fields in its preset are ignored. |
 | Context messages | 5 | Recent messages sent to the detector. |
 | Temperature | 0.1 | Low by default for stable structured selection. |
 | Confidence threshold | 0.6 | Applies to the complete accepted decision. |

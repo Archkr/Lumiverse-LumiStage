@@ -1,4 +1,4 @@
-import type { SpindleAPI } from "lumiverse-spindle-types";
+import type { ConnectionProfileDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { sha256 } from "./ids";
 import {
   allVariants,
@@ -62,6 +62,7 @@ const activeContexts = new Map<string, { chatId: string | null; characterId: str
 const chatUsers = new Map<string, string>();
 const generationUsers = new Map<string, { userId: string; chatId: string }>();
 const activeGenerations = new Map<string, Set<string>>();
+const handledGenerationEnds = new Map<string, number>();
 const scheduled = new Map<string, ReturnType<typeof setTimeout>>();
 const analysisQueues = new Map<string, Promise<void>>();
 const queueDepth = new Map<string, number>();
@@ -72,8 +73,33 @@ interface DetectorRunOutcome {
   requestFingerprint: string;
   completedAt: number;
 }
+type DetectorTrigger = "completion" | "edit" | "swipe" | "manual";
+interface DetectorDispatchSnapshot {
+  configuredConnectionId: string | null;
+  resolvedConnectionId: string;
+  resolvedConnectionName: string;
+  connectionModel: string;
+  connectionPresetId: string | null;
+  connectionUpdatedAt: number | null;
+  modelParameter: string;
+  requestedModel: string;
+  modelSource: "configured" | "connection-default";
+}
+interface DetectorDispatchDiagnostic extends DetectorDispatchSnapshot {
+  trigger: DetectorTrigger;
+  messageId: string;
+  requestFingerprint: string;
+  providerInvoked: boolean;
+  responseProvider: string | null;
+  responseModel: string | null;
+  status: "running" | "success" | "error";
+  startedAt: number;
+  completedAt: number | null;
+  error: string | null;
+}
 const detectorFlights = new Map<string, Promise<DetectorRunOutcome>>();
 const recentDetectorRuns = new Map<string, DetectorRunOutcome>();
+const lastDetectorDispatch = new Map<string, DetectorDispatchDiagnostic>();
 const mediaViewCache = new Map<string, Record<string, VariantView>>();
 const diagnosticCounters = new Map<string, {
   revisionConflicts: number;
@@ -145,9 +171,13 @@ function permissions(): PermissionState {
   };
 }
 
-async function connectionViews(userId: string): Promise<LlmConnectionView[]> {
+async function connectionProfiles(userId: string): Promise<ConnectionProfileDTO[]> {
   if (!hasPermission("generation")) return [];
-  const connections = await spindle.connections.list(userId).catch(() => []);
+  return spindle.connections.list(userId).catch(() => []);
+}
+
+async function connectionViews(userId: string): Promise<LlmConnectionView[]> {
+  const connections = await connectionProfiles(userId);
   return connections.map((connection) => ({
     id: connection.id,
     name: connection.name,
@@ -156,6 +186,33 @@ async function connectionViews(userId: string): Promise<LlmConnectionView[]> {
     isDefault: connection.is_default,
     hasApiKey: connection.has_api_key,
   }));
+}
+
+async function resolveDetectorDispatch(
+  userId: string,
+  settings: DetectionSettingsV2,
+): Promise<DetectorDispatchSnapshot> {
+  const connections = await connectionProfiles(userId);
+  const connection = settings.connectionId
+    ? connections.find((candidate) => candidate.id === settings.connectionId)
+    : connections.find((candidate) => candidate.is_default);
+  if (!connection) {
+    throw new Error(settings.connectionId
+      ? "The configured LumiStage detector connection is no longer available."
+      : "No default Lumiverse connection is configured.");
+  }
+  const configuredModel = settings.model?.trim() || null;
+  return {
+    configuredConnectionId: settings.connectionId,
+    resolvedConnectionId: connection.id,
+    resolvedConnectionName: connection.name,
+    connectionModel: connection.model,
+    connectionPresetId: connection.preset_id ?? null,
+    connectionUpdatedAt: Number.isFinite(connection.updated_at) ? connection.updated_at : null,
+    modelParameter: configuredModel ?? "",
+    requestedModel: configuredModel ?? connection.model,
+    modelSource: configuredModel ? "configured" : "connection-default",
+  };
 }
 
 async function generateDetector(
@@ -197,6 +254,25 @@ function markGenerationFinished(generationId: string | null): { userId: string; 
 
 function generationInProgress(userId: string, chatId: string): boolean {
   return Boolean(activeGenerations.get(queueKey(userId, chatId))?.size);
+}
+
+function markGenerationEndHandled(
+  userId: string,
+  chatId: string,
+  generationId: string | null,
+  messageId: string,
+): boolean {
+  const now = Date.now();
+  const key = generationId
+    ? `${userId}:generation:${generationId}:${messageId}`
+    : `${queueKey(userId, chatId)}:message:${messageId}`;
+  if (handledGenerationEnds.has(key)) return false;
+  handledGenerationEnds.set(key, now);
+  const cutoff = now - 5 * 60_000;
+  for (const [handledKey, handledAt] of handledGenerationEnds) {
+    if (handledAt < cutoff) handledGenerationEnds.delete(handledKey);
+  }
+  return true;
 }
 
 function enqueueAnalysis(userId: string, chatId: string, operation: () => Promise<void>): Promise<void> {
@@ -432,6 +508,7 @@ async function analyzeLatest(
   force = false,
   detectionOverride?: DetectionSettingsV2,
   expectedMessageId?: string,
+  trigger: DetectorTrigger = force ? "manual" : "completion",
 ): Promise<void> {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
@@ -443,6 +520,7 @@ async function analyzeLatest(
     ? normalizeSettings({ ...persistedSettings, detection: detectionOverride })
     : persistedSettings;
   if (!settings.detection.enabled && !force) return;
+  const dispatch = await resolveDetectorDispatch(userId, settings.detection);
   const set = await profilesForChat(userId, chatId);
   if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
@@ -471,6 +549,14 @@ async function analyzeLatest(
     overrides: timeline.manualOverrides,
     recentMessages,
     latest: { id: latest.id, swipeId: latest.swipeId, contentHash },
+    dispatch: {
+      configuredConnectionId: dispatch.configuredConnectionId,
+      resolvedConnectionId: dispatch.resolvedConnectionId,
+      connectionModel: dispatch.connectionModel,
+      connectionPresetId: dispatch.connectionPresetId,
+      connectionUpdatedAt: dispatch.connectionUpdatedAt,
+      modelParameter: dispatch.modelParameter,
+    },
   }));
   let record = force ? null : findCachedDecision(timeline.decisions, {
     id: latest.id,
@@ -478,9 +564,10 @@ async function analyzeLatest(
     contentHash,
   }, requestFingerprint);
   const detectorMessageKey = `${queueKey(userId, chatId)}:${latest.id}:${latest.swipeId}:${contentHash}`;
+  const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
   let detectorInputTokens: number | null = null;
   if (!record) {
-    const recent = recentDetectorRuns.get(detectorMessageKey);
+    const recent = recentDetectorRuns.get(flightKey);
     const recentWindow = force ? 5_000 : 30_000;
     if (
       recent
@@ -510,39 +597,64 @@ async function analyzeLatest(
     detectorInputTokens = typeof estimatedInputTokens === "number"
       ? estimatedInputTokens
       : null;
-    const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
     let flight = detectorFlights.get(flightKey);
     if (!flight) {
+      const dispatchDiagnostic: DetectorDispatchDiagnostic = {
+        ...dispatch,
+        trigger,
+        messageId: latest.id,
+        requestFingerprint,
+        providerInvoked: false,
+        responseProvider: null,
+        responseModel: null,
+        status: "running",
+        startedAt: Date.now(),
+        completedAt: null,
+        error: null,
+      };
+      lastDetectorDispatch.set(queueKey(userId, chatId), dispatchDiagnostic);
       const started = (async (): Promise<DetectorRunOutcome> => {
-        const response = await generateDetector(
-          userId,
-          request,
-          AbortSignal.timeout(60_000),
-        );
-        const usedInputTokens = response.usage?.prompt_tokens
-          ?? response.usage?.input_tokens
-          ?? detectorInputTokens;
-        const parsed = parseDetectorResponse(response, detectorCatalog);
-        if (!parsed) throw new Error("The detector did not return a valid stage decision.");
-        const decision = validateDecision(parsed, detectorCatalog);
-        if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
-          throw new Error("The detector returned no valid characters.");
-        }
-        return {
-          record: {
-            messageId: latest.id,
-            swipeId: latest.swipeId,
-            contentHash,
+        try {
+          dispatchDiagnostic.providerInvoked = true;
+          const response = await generateDetector(
+            userId,
+            request,
+            AbortSignal.timeout(60_000),
+          );
+          dispatchDiagnostic.responseProvider = response.provider ?? null;
+          dispatchDiagnostic.responseModel = response.model ?? null;
+          const usedInputTokens = response.usage?.prompt_tokens
+            ?? response.usage?.input_tokens
+            ?? detectorInputTokens;
+          const parsed = parseDetectorResponse(response, detectorCatalog);
+          if (!parsed) throw new Error("The detector did not return a valid stage decision.");
+          const decision = validateDecision(parsed, detectorCatalog);
+          if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
+            throw new Error("The detector returned no valid characters.");
+          }
+          dispatchDiagnostic.status = "success";
+          dispatchDiagnostic.completedAt = Date.now();
+          return {
+            record: {
+              messageId: latest.id,
+              swipeId: latest.swipeId,
+              contentHash,
+              requestFingerprint,
+              decision,
+              provider: response.provider ?? null,
+              model: response.model ?? dispatch.requestedModel,
+              createdAt: Date.now(),
+            },
+            detectorInputTokens: usedInputTokens,
             requestFingerprint,
-            decision,
-            provider: response.provider ?? null,
-            model: response.model ?? settings.detection.model,
-            createdAt: Date.now(),
-          },
-          detectorInputTokens: usedInputTokens,
-          requestFingerprint,
-          completedAt: Date.now(),
-        };
+            completedAt: Date.now(),
+          };
+        } catch (error) {
+          dispatchDiagnostic.status = "error";
+          dispatchDiagnostic.completedAt = Date.now();
+          dispatchDiagnostic.error = error instanceof Error ? error.message : "Detector generation failed.";
+          throw error;
+        }
       })();
       const tracked = started.finally(() => {
         if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
@@ -553,7 +665,7 @@ async function analyzeLatest(
     const outcome = await flight;
     record = outcome.record;
     detectorInputTokens = outcome.detectorInputTokens;
-    recentDetectorRuns.set(detectorMessageKey, outcome);
+    recentDetectorRuns.set(flightKey, outcome);
     const cutoff = Date.now() - 60_000;
     for (const [key, recent] of recentDetectorRuns) {
       if (recent.completedAt < cutoff) recentDetectorRuns.delete(key);
@@ -580,6 +692,7 @@ function scheduleAnalysis(
   delay = 120,
   force = false,
   expectedMessageId?: string,
+  trigger: DetectorTrigger = force ? "manual" : "completion",
 ): void {
   const key = queueKey(userId, chatId);
   if (!force && generationInProgress(userId, chatId)) return;
@@ -593,6 +706,7 @@ function scheduleAnalysis(
       force,
       undefined,
       expectedMessageId,
+      trigger,
     ).catch(async (error) => {
        lastDetection.set(queueKey(userId, chatId), {
         status: "error",
@@ -1035,7 +1149,7 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     await enqueueAnalysis(
       userId,
       message.chatId,
-      () => analyzeLatest(userId, message.chatId, true, message.detection),
+      () => analyzeLatest(userId, message.chatId, true, message.detection, undefined, "manual"),
     );
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
@@ -1103,6 +1217,9 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
       : null;
+    const dispatchTrace = context?.chatId
+      ? lastDetectorDispatch.get(queueKey(userId, context.chatId)) ?? null
+      : null;
     const counters = countersFor(userId);
     const estimatedRequest = buildDetectorRequest(
       buildCatalog(diagnosticProfiles),
@@ -1136,6 +1253,27 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         requestedModel: settings.detection.model ?? requestedConnection?.model ?? null,
         modelSource: settings.detection.model ? "configured" : "connection-default",
         latestDecisionModel: latestDecision?.model ?? null,
+        lastDispatch: dispatchTrace ? {
+          trigger: dispatchTrace.trigger,
+          messageId: dispatchTrace.messageId,
+          configuredConnectionId: dispatchTrace.configuredConnectionId,
+          resolvedConnectionId: dispatchTrace.resolvedConnectionId,
+          resolvedConnectionName: dispatchTrace.resolvedConnectionName,
+          connectionModel: dispatchTrace.connectionModel,
+          connectionPresetId: dispatchTrace.connectionPresetId,
+          connectionUpdatedAt: dispatchTrace.connectionUpdatedAt,
+          modelSource: dispatchTrace.modelSource,
+          requestedModel: dispatchTrace.requestedModel,
+          sentModelParameter: dispatchTrace.modelParameter,
+          responseProvider: dispatchTrace.responseProvider,
+          responseModel: dispatchTrace.responseModel,
+          requestFingerprint: dispatchTrace.requestFingerprint,
+          providerInvoked: dispatchTrace.providerInvoked,
+          status: dispatchTrace.status,
+          startedAt: dispatchTrace.startedAt,
+          completedAt: dispatchTrace.completedAt,
+          error: dispatchTrace.error,
+        } : null,
       },
       media: {
         total: media.length,
@@ -1199,13 +1337,13 @@ onEvent("GENERATION_STARTED", (payload, eventUserId) => {
 onEvent("GENERATION_ENDED", (payload, eventUserId) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
   const messageId = readString(payload, ["messageId", "message_id"]);
-  const remembered = generationId ? generationUsers.get(generationId) : null;
+  const remembered = markGenerationFinished(generationId);
   const chatId = extractChatId(payload) ?? remembered?.chatId ?? null;
   const userId = resolveUserId(chatId, eventUserId ?? remembered?.userId);
-  markGenerationFinished(generationId);
   if (!chatId || !userId || readString(payload, ["error"]) || !messageId) return;
+  if (!markGenerationEndHandled(userId, chatId, generationId, messageId)) return;
   if (generationInProgress(userId, chatId)) return;
-  scheduleAnalysis(userId, chatId, 120, false, messageId);
+  scheduleAnalysis(userId, chatId, 120, false, messageId, "completion");
 });
 
 onEvent("GENERATION_STOPPED", (payload) => {
@@ -1227,7 +1365,8 @@ for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"] as cons
           ?? undefined
         )
       : undefined;
-    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId);
+    const trigger: DetectorTrigger = event === "MESSAGE_EDITED" ? "edit" : "swipe";
+    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId, trigger);
   });
 }
 
@@ -1283,6 +1422,7 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   }
   queueDepth.delete(key);
   lastDetection.delete(key);
+  lastDetectorDispatch.delete(key);
   settleBackground(repository.deleteTimeline(userId, chatId));
 });
 

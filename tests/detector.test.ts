@@ -122,7 +122,7 @@ describe("detector contract", () => {
     expect(system).toContain("You may switch away from the current outfit");
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.reasoning).toEqual({ source: "off" });
-    expect(request.parameters).toEqual({ temperature: 0.1 });
+    expect(request.parameters).toEqual({ temperature: 0.1, model: "" });
     expect(request.parameters).not.toHaveProperty("max_tokens");
     const tool = (request.tools as Array<Record<string, any>>)[0];
     const required = tool.parameters.properties.characters.items.required;
@@ -363,5 +363,19 @@ describe("detector contract", () => {
       model: "reasoning-model",
     });
     expect(request.parameters).not.toHaveProperty("max_tokens");
+
+    settings.detection.model = null;
+    const defaultModelRequest = buildDetectorRequest(ensembleCatalog, [], {}, settings);
+    const defaultModelParameters = defaultModelRequest.parameters as Record<string, unknown>;
+    expect(defaultModelParameters).toEqual({
+      temperature: 0.1,
+      model: "",
+    });
+    const mergedQuietParameters = {
+      model: "stale-preset-model",
+      ...defaultModelParameters,
+    };
+    const mergedModel = String(mergedQuietParameters.model).trim();
+    expect(mergedModel || "connection-default-model").toBe("connection-default-model");
   });
 });
