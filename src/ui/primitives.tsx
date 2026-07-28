@@ -88,7 +88,12 @@ export function Toggle(props: { checked: boolean; onChange: (value: boolean) => 
 }
 
 export function Status({ tone = "neutral", children }: { tone?: "neutral" | "accent" | "success" | "warning" | "danger"; children: ComponentChildren }) {
-  return <span class="ls-status" data-tone={tone}><span class="ls-status-dot" />{children}</span>;
+  return (
+    <span class="ls-status" data-tone={tone}>
+      <span class="ls-status-dot" aria-hidden="true" />
+      <span class="ls-status-label">{children}</span>
+    </span>
+  );
 }
 
 export function ViewHeader(props: {

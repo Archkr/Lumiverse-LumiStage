@@ -89,7 +89,13 @@ export function Stage(props: {
   }
 
   return (
-    <div class="ls-stage-root" style={style} data-chrome={appearance.showChrome} data-transition={appearance.transition}>
+    <div
+      class="ls-stage-root"
+      style={style}
+      data-chrome={appearance.showChrome}
+      data-empty={characters.length === 0}
+      data-transition={appearance.transition}
+    >
       <div class="ls-stage-chrome">
         <div class="ls-stage-grab">
           <span class="ls-stage-live"><span />LumiStage</span>
@@ -111,10 +117,12 @@ export function Stage(props: {
             ))}
           </div>
         ) : (
-          <div class="ls-stage-waiting">
+          <div class="ls-stage-waiting" role="status">
             <div><Icon name="stage" size={24} /></div>
-            <strong>Stage ready</strong>
-            <span>Choose a state or complete a reply.</span>
+            <span class="ls-stage-waiting-copy">
+              <strong>Stage ready</strong>
+              <span>Choose a state or complete a reply.</span>
+            </span>
           </div>
         )}
         <button type="button" class="ls-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>

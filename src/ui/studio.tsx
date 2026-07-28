@@ -147,7 +147,7 @@ export function DrawerDashboard(props: {
     <div class="ls-drawer">
       <ProgressNotice client={props.client} />
       <div class="ls-drawer-cue-line">
-        <span />
+        <span class="ls-drawer-cue-rule" aria-hidden="true" />
         <small>{backend.activeChatId ? "LIVE CHAT" : "CHARACTER WORKSPACE"}</small>
         <Status tone={ready ? "success" : "warning"}>{ready ? "Ready" : "Attention"}</Status>
       </div>

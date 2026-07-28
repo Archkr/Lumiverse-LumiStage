@@ -7,6 +7,8 @@ const styles = readFileSync(resolve(root, "src/ui/styles.ts"), "utf8");
 const studio = readFileSync(resolve(root, "src/ui/studio.tsx"), "utf8");
 const frontend = readFileSync(resolve(root, "src/frontend.tsx"), "utf8");
 const controls = readFileSync(resolve(root, "src/ui/host-controls.tsx"), "utf8");
+const primitives = readFileSync(resolve(root, "src/ui/primitives.tsx"), "utf8");
+const stage = readFileSync(resolve(root, "src/ui/stage.tsx"), "utf8");
 
 describe("replacement frontend design contract", () => {
   it("uses opaque Lumiverse-derived surfaces without a fixed palette", () => {
@@ -67,6 +69,17 @@ describe("replacement frontend design contract", () => {
     expect(styles).toMatch(/\.ls-picker-expression-grid\s*\{[^}]*grid-auto-rows:\s*160px/);
     expect(styles).toMatch(/\.ls-picker-expression-grid\s*\{[^}]*overflow-y:\s*auto/);
     expect(styles).toMatch(/\.ls-picker-expression\s*\{[^}]*height:\s*160px/);
+  });
+
+  it("keeps drawer status copy bounded and adapts the empty stage to short widgets", () => {
+    expect(studio).toContain('class="ls-drawer-cue-rule"');
+    expect(styles).not.toContain(".ls-drawer-cue-line > span {");
+    expect(primitives).toContain('class="ls-status-label"');
+    expect(styles).toMatch(/\.ls-status-label\s*\{[^}]*text-overflow:\s*ellipsis/);
+    expect(stage).toContain('data-empty={characters.length === 0}');
+    expect(stage).toContain('class="ls-stage-waiting-copy"');
+    expect(styles).toContain("container-name: lumi-stage");
+    expect(styles).toContain("@container lumi-stage (max-height: 180px)");
   });
 
   it("uses the visible detector draft for manual analysis", () => {
