@@ -401,6 +401,27 @@ describe("operator-scoped backend runtime", () => {
       }));
     }, { timeout: 2_000 });
 
+    generateQuiet.mockClear();
+    await expectCompletion({
+      type: "analyze-now",
+      requestId: "analyze-selected-model",
+      chatId: "chat-a",
+      detection: {
+        enabled: true,
+        connectionId: "connection-manual",
+        model: "manual-model",
+        contextMessages: 3,
+        temperature: 0.2,
+        confidence: 0.7,
+      },
+    }, "analyze-selected-model");
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
+    expect(generateQuiet.mock.calls[0][0]).toEqual(expect.objectContaining({
+      connection_id: "connection-manual",
+      model: "manual-model",
+      parameters: expect.objectContaining({ temperature: 0.2 }),
+    }));
+
     await handleFrontend({ type: "open-connections" }, "user-a");
     expect(openDrawerTab).toHaveBeenCalledWith("connections", { userId: "user-a" });
   });

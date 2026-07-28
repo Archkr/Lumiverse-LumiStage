@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalog, createTimeline, defaultSettings } from "../src/model";
+import { applyDecision, buildCatalog, createTimeline, defaultSettings } from "../src/model";
 import {
   findCachedDecision,
   reconcileDecisionRecords,
@@ -64,6 +64,76 @@ describe("decision cache and replay", () => {
     expect(replayed.snapshot.characters["character-a"].expressionId).toBe("expression-angry");
     expect(replayed.snapshot.characters["character-a"].variantId).toBe("variant-expression-angry");
     expect(replayed.snapshot.focusedCharacterIds).toEqual(["character-a"]);
+  });
+
+  it("preserves the last valid stage while a swipe or regeneration has no replacement decision", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const timeline = createTimeline("chat", 1);
+    const current = recordA("message", 0, "old-swipe");
+    timeline.decisions = [current];
+    timeline.snapshot = applyDecision(
+      timeline.snapshot,
+      catalog,
+      current.decision,
+      {},
+      settings,
+      10,
+    );
+
+    const swiped = replayTimeline(
+      timeline,
+      catalog,
+      settings,
+      [{ id: "message", role: "assistant", swipeId: 1, contentHash: "new-swipe" }],
+      20,
+    );
+    expect(swiped.snapshot.characters["character-a"]).toEqual(
+      timeline.snapshot.characters["character-a"],
+    );
+    expect(swiped.snapshot.focusedCharacterIds).toEqual(["character-a"]);
+
+    const regenerating = replayTimeline(
+      { ...timeline, decisions: [] },
+      catalog,
+      settings,
+      [],
+      30,
+    );
+    expect(regenerating.snapshot.characters["character-a"]).toEqual(
+      timeline.snapshot.characters["character-a"],
+    );
+    expect(regenerating.snapshot.focusedCharacterIds).toEqual(["character-a"]);
+  });
+
+  it("rolls back to the latest surviving decision after a message is deleted", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const first = recordA("first", 0, "first");
+    const second = recordA("second", 0, "second", {
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+    });
+    const timeline = createTimeline("chat", 1);
+    timeline.decisions = [first, second];
+    timeline.snapshot = applyDecision(
+      applyDecision(timeline.snapshot, catalog, first.decision, {}, settings, 10),
+      catalog,
+      second.decision,
+      {},
+      settings,
+      20,
+    );
+
+    const replayed = replayTimeline(
+      timeline,
+      catalog,
+      settings,
+      [{ id: "first", role: "assistant", swipeId: 0, contentHash: "first" }],
+      30,
+    );
+    expect(replayed.snapshot.characters["character-a"].expressionId).toBe("expression-happy");
+    expect(replayed.snapshot.characters["character-a"].variantId).toBe("variant-expression-happy");
   });
 });
 

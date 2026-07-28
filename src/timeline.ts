@@ -62,6 +62,29 @@ export function replayTimeline(
   now = Date.now(),
 ): ChatTimelineV2 {
   const decisions = reconcileDecisionRecords(timeline.decisions, messages);
+  const retainedSnapshot = applyDecision(
+    timeline.snapshot,
+    catalog,
+    {
+      schemaVersion: 2,
+      focusedCharacterIds: [],
+      characters: [],
+    },
+    timeline.manualOverrides,
+    settings,
+    now,
+  );
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  const latestDecision = latestAssistant
+    ? decisions.find((record) =>
+        record.messageId === latestAssistant.id
+        && record.swipeId === latestAssistant.swipeId
+        && record.contentHash === latestAssistant.contentHash
+      )
+    : null;
+  const latestDecisionRejected = latestDecision?.decision.characters.some(
+    (character) => character.confidence < settings.detection.confidence,
+  ) ?? false;
   let snapshot = emptySnapshot(timeline.chatId, now);
   for (const message of messages) {
     if (message.role !== "assistant") continue;
@@ -79,6 +102,14 @@ export function replayTimeline(
       settings,
       cached.createdAt,
     );
+  }
+  if (
+    !latestAssistant
+    || !latestDecision
+    || latestDecisionRejected
+    || Object.keys(snapshot.characters).length === 0
+  ) {
+    snapshot = retainedSnapshot;
   }
   return {
     ...timeline,

@@ -5101,13 +5101,18 @@ var LumiStageClient = class {
     const requestId = createId("manual");
     await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
-  async analyzeNow() {
+  async analyzeNow(detection) {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) {
       this.notify("warning", "Open a chat before running detection.");
       return;
     }
-    await this.request({ type: "analyze-now", requestId: createId("analyze"), chatId });
+    await this.request({
+      type: "analyze-now",
+      requestId: createId("analyze"),
+      chatId,
+      detection
+    });
   }
   uploadFile(file, onProgress, timeoutMs = 10 * 6e4) {
     return new Promise((resolve, reject) => {
@@ -7575,7 +7580,7 @@ function SettingsView({ client }) {
           ),
           /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: [
             /* @__PURE__ */ u2(Button, { icon: "settings", onClick: () => client.send({ type: "open-connections" }), children: "Manage connections" }),
-            /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => void client.analyzeNow().catch(() => void 0), children: "Analyze current reply" })
+            /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => void client.analyzeNow(draft.detection).catch(() => void 0), children: "Analyze current reply" })
           ] })
         ] }) }),
         section === "stage" && /* @__PURE__ */ u2("section", { class: "ls-settings-card", children: [

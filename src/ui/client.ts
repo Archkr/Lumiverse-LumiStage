@@ -7,6 +7,7 @@ import { createProfile, createTimeline, defaultSettings } from "../model";
 import type {
   BackendToFrontend,
   CharacterProfileV2,
+  DetectionSettingsV2,
   FrontendState,
   FrontendToBackend,
   ImportLayoutV2,
@@ -373,13 +374,18 @@ export class LumiStageClient {
     await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
 
-  async analyzeNow(): Promise<void> {
+  async analyzeNow(detection?: DetectionSettingsV2): Promise<void> {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) {
       this.notify("warning", "Open a chat before running detection.");
       return;
     }
-    await this.request({ type: "analyze-now", requestId: createId("analyze"), chatId });
+    await this.request({
+      type: "analyze-now",
+      requestId: createId("analyze"),
+      chatId,
+      detection,
+    });
   }
 
   private uploadFile(

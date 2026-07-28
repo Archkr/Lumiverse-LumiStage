@@ -1994,6 +1994,25 @@ function reconcileDecisionRecords(records, messages) {
 }
 function replayTimeline(timeline, catalog, settings, messages, now = Date.now()) {
   const decisions = reconcileDecisionRecords(timeline.decisions, messages);
+  const retainedSnapshot = applyDecision(
+    timeline.snapshot,
+    catalog,
+    {
+      schemaVersion: 2,
+      focusedCharacterIds: [],
+      characters: []
+    },
+    timeline.manualOverrides,
+    settings,
+    now
+  );
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  const latestDecision = latestAssistant ? decisions.find(
+    (record2) => record2.messageId === latestAssistant.id && record2.swipeId === latestAssistant.swipeId && record2.contentHash === latestAssistant.contentHash
+  ) : null;
+  const latestDecisionRejected = latestDecision?.decision.characters.some(
+    (character) => character.confidence < settings.detection.confidence
+  ) ?? false;
   let snapshot = emptySnapshot(timeline.chatId, now);
   for (const message of messages) {
     if (message.role !== "assistant") continue;
@@ -2009,6 +2028,9 @@ function replayTimeline(timeline, catalog, settings, messages, now = Date.now())
       settings,
       cached.createdAt
     );
+  }
+  if (!latestAssistant || !latestDecision || latestDecisionRejected || Object.keys(snapshot.characters).length === 0) {
+    snapshot = retainedSnapshot;
   }
   return {
     ...timeline,
@@ -2303,13 +2325,14 @@ async function rebuildTimeline(timeline, catalog, settings, messages) {
   })));
   return replayTimeline(timeline, catalog, settings, keys);
 }
-async function analyzeLatest(userId, chatId, force = false) {
+async function analyzeLatest(userId, chatId, force = false, detectionOverride) {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
     await sendState(userId).catch(() => void 0);
     return;
   }
-  const settings = await repository.getSettings(userId);
+  const persistedSettings = await repository.getSettings(userId);
+  const settings = detectionOverride ? normalizeSettings({ ...persistedSettings, detection: detectionOverride }) : persistedSettings;
   if (!settings.detection.enabled && !force) return;
   const set = await profilesForChat(userId, chatId);
   if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
@@ -2790,7 +2813,11 @@ async function handleMessage(message, userId) {
     return;
   }
   if (message.type === "analyze-now") {
-    await enqueueAnalysis(userId, message.chatId, () => analyzeLatest(userId, message.chatId, true));
+    await enqueueAnalysis(
+      userId,
+      message.chatId,
+      () => analyzeLatest(userId, message.chatId, true, message.detection)
+    );
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
   }

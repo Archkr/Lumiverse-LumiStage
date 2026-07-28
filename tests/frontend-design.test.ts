@@ -68,4 +68,8 @@ describe("replacement frontend design contract", () => {
     expect(styles).toMatch(/\.ls-picker-expression-grid\s*\{[^}]*overflow-y:\s*auto/);
     expect(styles).toMatch(/\.ls-picker-expression\s*\{[^}]*height:\s*160px/);
   });
+
+  it("uses the visible detector draft for manual analysis", () => {
+    expect(studio).toContain("client.analyzeNow(draft.detection)");
+  });
 });

@@ -84,7 +84,11 @@ describe("correlated client request lifecycle", () => {
       createdAt: 1,
     });
     await client.clearManual("character-a");
-    await client.analyzeNow();
+    await client.analyzeNow({
+      ...backend.settings.detection,
+      connectionId: "connection-manual",
+      model: "model-manual",
+    });
     await client.deleteVariants(["variant-neutral-a"]);
     await expect(client.diagnostics()).resolves.toEqual({ ok: true });
 
@@ -98,6 +102,14 @@ describe("correlated client request lifecycle", () => {
       "delete-variants",
       "request-diagnostics",
     ]));
+    expect(sendToBackend.mock.calls.map(([message]) => message).find(
+      (message) => message.type === "analyze-now",
+    )).toEqual(expect.objectContaining({
+      detection: expect.objectContaining({
+        connectionId: "connection-manual",
+        model: "model-manual",
+      }),
+    }));
     expect(client.getSnapshot().busy).toBe(false);
     expect(client.getSnapshot().progress).toBeNull();
     client.destroy();

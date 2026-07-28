@@ -9,6 +9,7 @@ import {
   createTimeline,
   inspectProfile,
   isValidManualOverride,
+  normalizeSettings,
   type CatalogEntry,
 } from "./model";
 import {
@@ -38,6 +39,7 @@ import {
   type BackendToFrontend,
   type CharacterProfileV2,
   type ChatTimelineV2,
+  type DetectionSettingsV2,
   type FrontendState,
   type FrontendToBackend,
   type LlmConnectionView,
@@ -381,13 +383,21 @@ async function rebuildTimeline(
   return replayTimeline(timeline, catalog, settings, keys);
 }
 
-async function analyzeLatest(userId: string, chatId: string, force = false): Promise<void> {
+async function analyzeLatest(
+  userId: string,
+  chatId: string,
+  force = false,
+  detectionOverride?: DetectionSettingsV2,
+): Promise<void> {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
     await sendState(userId).catch(() => undefined);
     return;
   }
-  const settings = await repository.getSettings(userId);
+  const persistedSettings = await repository.getSettings(userId);
+  const settings = detectionOverride
+    ? normalizeSettings({ ...persistedSettings, detection: detectionOverride })
+    : persistedSettings;
   if (!settings.detection.enabled && !force) return;
   const set = await profilesForChat(userId, chatId);
   if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
@@ -927,7 +937,11 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     return;
   }
   if (message.type === "analyze-now") {
-    await enqueueAnalysis(userId, message.chatId, () => analyzeLatest(userId, message.chatId, true));
+    await enqueueAnalysis(
+      userId,
+      message.chatId,
+      () => analyzeLatest(userId, message.chatId, true, message.detection),
+    );
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
   }

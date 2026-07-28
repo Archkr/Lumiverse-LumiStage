@@ -1064,7 +1064,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                 />
                 <div class="ls-settings-inline-actions">
                   <Button icon="settings" onClick={() => client.send({ type: "open-connections" })}>Manage connections</Button>
-                  <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => void client.analyzeNow().catch(() => undefined)}>Analyze current reply</Button>
+                  <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => void client.analyzeNow(draft.detection).catch(() => undefined)}>Analyze current reply</Button>
                 </div>
               </section>
             </>
