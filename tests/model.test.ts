@@ -11,6 +11,7 @@ import {
   normalizeSettings,
   resolveCharacterState,
   inspectProfile,
+  suggestMergedExpressionName,
 } from "../src/model";
 import { profileA, profileB } from "./fixtures";
 
@@ -241,6 +242,64 @@ describe("state resolution", () => {
 });
 
 describe("expression-slot batch operations", () => {
+  it("suggests a shared base name for numbered import slots", () => {
+    expect(suggestMergedExpressionName([
+      { name: "Happy_1" },
+      { name: "Happy-2" },
+      { name: "Happy (3)" },
+    ])).toBe("Happy");
+    expect(suggestMergedExpressionName([
+      { name: "Drinking coffee" },
+      { name: "Holding mug" },
+    ])).toBe("Drinking coffee");
+  });
+
+  it("merges selected slots, deduplicates variants, and preserves a stable target and default", () => {
+    const profile = profileA();
+    const outfit = profile.outfits[0];
+    const first = outfit.expressions[0];
+    const second = outfit.expressions[1];
+    first.name = "Happy 1";
+    second.name = "Happy 2";
+    second.variants.push({
+      ...first.variants[0],
+      id: "duplicate-content-variant",
+      imageId: "duplicate-content-image",
+      order: second.variants.length,
+    });
+    outfit.defaultExpressionId = second.id;
+
+    const merged = applyBatchMutation(profile, {
+      type: "merge",
+      expressionIds: [first.id, second.id],
+      outfitId: outfit.id,
+      name: "Happy",
+    }, 10);
+    const result = merged.outfits[0].expressions.find((item) => item.id === first.id);
+    expect(result?.name).toBe("Happy");
+    expect(result?.variants.map((item) => item.fileName)).toEqual([
+      "neutral-soft.png",
+      "neutral-side.png",
+      "happy.png",
+    ]);
+    expect(result?.variants.map((item) => item.order)).toEqual([0, 1, 2]);
+    expect(merged.outfits[0].expressions.some((item) => item.id === second.id)).toBe(false);
+    expect(merged.outfits[0].defaultExpressionId).toBe(first.id);
+    expect(merged.updatedAt).toBe(10);
+    expect(profile.outfits[0].expressions.some((item) => item.id === second.id)).toBe(true);
+  });
+
+  it("rejects merging into an unselected expression name", () => {
+    const profile = profileA();
+    const unchanged = applyBatchMutation(profile, {
+      type: "merge",
+      expressionIds: ["expression-neutral", "expression-happy"],
+      outfitId: "outfit-casual",
+      name: "Angry",
+    }, 10);
+    expect(unchanged).toBe(profile);
+  });
+
   it("moves slots and merges variants into matching destination names", () => {
     const profile = profileA();
     profile.outfits[1].expressions.push({

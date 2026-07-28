@@ -209,6 +209,7 @@ export interface FrontendState {
 export type BatchMutationV2 =
   | { type: "move"; expressionIds: string[]; outfitId: string }
   | { type: "copy"; expressionIds: string[]; outfitId: string }
+  | { type: "merge"; expressionIds: string[]; outfitId: string; name: string }
   | { type: "delete"; expressionIds: string[] };
 
 export type ImportLayoutV2 = "automatic" | "outfit-expression" | "outfit-expression-variant";

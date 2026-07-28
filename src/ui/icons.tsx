@@ -4,7 +4,7 @@ export type IconName =
   | "aperture" | "stage" | "library" | "batch" | "automation" | "appearance"
   | "diagnostics" | "search" | "plus" | "upload" | "sparkles" | "play"
   | "lock" | "unlock" | "check" | "close" | "expand" | "eye" | "eyeOff"
-  | "undo" | "redo" | "copy" | "trash" | "move" | "tag" | "settings"
+  | "undo" | "redo" | "copy" | "trash" | "move" | "merge" | "tag" | "settings"
   | "chevronLeft" | "chevronRight" | "chevronDown" | "image" | "characters"
   | "outfit" | "expression" | "download" | "refresh" | "menu"
   | "info" | "warning" | "success";
@@ -34,6 +34,7 @@ const paths: Record<IconName, JSX.Element> = {
   copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
   trash: <><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7" /><path d="M10 11v6m4-6v6" /></>,
   move: <><path d="M12 3v18m0-18-3 3m3-3 3 3m-3 15-3-3m3 3 3-3M3 12h18M3 12l3-3m-3 3 3 3m15-3-3-3m3 3-3 3" /></>,
+  merge: <><path d="M5 4v4c0 2.2 1.8 4 4 4h10" /><path d="M5 20v-4c0-2.2 1.8-4 4-4m6-4 4 4-4 4" /></>,
   tag: <><path d="M20 13 13 20l-9-9V4h7z" /><circle cx="8" cy="8" r="1" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
   chevronLeft: <path d="m15 18-6-6 6-6" />,

@@ -171,6 +171,19 @@ function mergeVariants(target: ExpressionSlotV2, source: ExpressionSlotV2): void
   }
 }
 
+export function suggestMergedExpressionName(
+  expressions: Array<Pick<ExpressionSlotV2, "name">>,
+): string {
+  const names = expressions.map((expression) => cleanName(expression.name, ""));
+  const bases = names.map((name) =>
+    name.replace(/\s+\(?\d+\)?$/u, "").trim()
+  );
+  const firstBase = bases[0];
+  return firstBase && bases.every((base) => normalizedKey(base) === normalizedKey(firstBase))
+    ? firstBase
+    : names[0] || "Merged expression";
+}
+
 function normalizeOutfit(value: unknown, index: number, now: number, forcedName?: string): OutfitFolderV2 {
   const raw = record(value);
   const expressions = list(raw.expressions)
@@ -590,6 +603,32 @@ export function applyBatchMutation(
     for (const outfit of next.outfits) {
       outfit.expressions = outfit.expressions.filter((item) => !ids.has(item.id));
     }
+  } else if (mutation.type === "merge") {
+    const outfit = next.outfits.find((item) => item.id === mutation.outfitId);
+    if (!outfit) return profile;
+    const selected = outfit.expressions.filter((expression) => ids.has(expression.id));
+    if (selected.length < 2) return profile;
+    const name = cleanName(mutation.name, suggestMergedExpressionName(selected));
+    const conflict = outfit.expressions.some(
+      (expression) =>
+        !ids.has(expression.id)
+        && normalizedKey(expression.name) === normalizedKey(name),
+    );
+    if (conflict) return profile;
+    const target = selected.find(
+      (expression) => normalizedKey(expression.name) === normalizedKey(name),
+    ) ?? selected[0];
+    const mergedDefault = selected.some(
+      (expression) => expression.id === outfit.defaultExpressionId,
+    );
+    for (const expression of selected) {
+      if (expression.id !== target.id) mergeVariants(target, expression);
+    }
+    target.name = name;
+    outfit.expressions = outfit.expressions.filter(
+      (expression) => !ids.has(expression.id) || expression.id === target.id,
+    );
+    if (mergedDefault) outfit.defaultExpressionId = target.id;
   } else {
     const destination = next.outfits.find((item) => item.id === mutation.outfitId);
     if (!destination) return profile;

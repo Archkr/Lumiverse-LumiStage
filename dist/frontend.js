@@ -4639,6 +4639,14 @@ function mergeVariants(target, source) {
     hashes.add(variant.contentHash);
   }
 }
+function suggestMergedExpressionName(expressions) {
+  const names = expressions.map((expression) => cleanName(expression.name, ""));
+  const bases = names.map(
+    (name) => name.replace(/\s+\(?\d+\)?$/u, "").trim()
+  );
+  const firstBase = bases[0];
+  return firstBase && bases.every((base) => normalizedKey(base) === normalizedKey(firstBase)) ? firstBase : names[0] || "Merged expression";
+}
 function emptySnapshot(chatId, now = Date.now()) {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -4717,6 +4725,30 @@ function applyBatchMutation(profile, mutation, now = Date.now()) {
     for (const outfit of next.outfits) {
       outfit.expressions = outfit.expressions.filter((item) => !ids.has(item.id));
     }
+  } else if (mutation.type === "merge") {
+    const outfit = next.outfits.find((item) => item.id === mutation.outfitId);
+    if (!outfit) return profile;
+    const selected = outfit.expressions.filter((expression) => ids.has(expression.id));
+    if (selected.length < 2) return profile;
+    const name = cleanName(mutation.name, suggestMergedExpressionName(selected));
+    const conflict = outfit.expressions.some(
+      (expression) => !ids.has(expression.id) && normalizedKey(expression.name) === normalizedKey(name)
+    );
+    if (conflict) return profile;
+    const target = selected.find(
+      (expression) => normalizedKey(expression.name) === normalizedKey(name)
+    ) ?? selected[0];
+    const mergedDefault = selected.some(
+      (expression) => expression.id === outfit.defaultExpressionId
+    );
+    for (const expression of selected) {
+      if (expression.id !== target.id) mergeVariants(target, expression);
+    }
+    target.name = name;
+    outfit.expressions = outfit.expressions.filter(
+      (expression) => !ids.has(expression.id) || expression.id === target.id
+    );
+    if (mergedDefault) outfit.defaultExpressionId = target.id;
   } else {
     const destination = next.outfits.find((item) => item.id === mutation.outfitId);
     if (!destination) return profile;
@@ -5397,6 +5429,10 @@ var paths = {
     /* @__PURE__ */ u2("path", { d: "M10 11v6m4-6v6" })
   ] }),
   move: /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("path", { d: "M12 3v18m0-18-3 3m3-3 3 3m-3 15-3-3m3 3 3-3M3 12h18M3 12l3-3m-3 3 3 3m15-3-3-3m3 3-3 3" }) }),
+  merge: /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2("path", { d: "M5 4v4c0 2.2 1.8 4 4 4h10" }),
+    /* @__PURE__ */ u2("path", { d: "M5 20v-4c0-2.2 1.8-4 4-4m6-4 4 4-4 4" })
+  ] }),
   tag: /* @__PURE__ */ u2(S, { children: [
     /* @__PURE__ */ u2("path", { d: "M20 13 13 20l-9-9V4h7z" }),
     /* @__PURE__ */ u2("circle", { cx: "8", cy: "8", r: "1" })
@@ -6918,6 +6954,51 @@ function BatchBar(props) {
     });
     if (confirmed) props.mutate({ type: "delete", expressionIds: [...props.selected] });
   }
+  function merge() {
+    const expressions = props.outfit.expressions.filter(
+      (expression) => props.selected.has(expression.id)
+    );
+    if (expressions.length < 2) return;
+    showTextPrompt(
+      props.client,
+      {
+        title: `Merge ${expressions.length} expressions`,
+        label: "Merged expression name",
+        placeholder: "Happy",
+        initial: suggestMergedExpressionName(expressions),
+        submitLabel: "Continue"
+      },
+      async (value) => {
+        const name = cleanName(value, suggestMergedExpressionName(expressions));
+        const conflict = props.outfit.expressions.find(
+          (expression) => !props.selected.has(expression.id) && normalizedKey(expression.name) === normalizedKey(name)
+        );
+        if (conflict) {
+          throw new Error(
+            `"${conflict.name}" already exists in this outfit. Include it in the selection or choose another name.`
+          );
+        }
+        const variantCount = new Set(
+          expressions.flatMap(
+            (expression) => expression.variants.map((variant) => variant.contentHash)
+          )
+        ).size;
+        const { confirmed } = await props.client.ctx.ui.showConfirm({
+          title: `Merge into ${name}?`,
+          message: `Combine ${variantCount} unique sprite variant${variantCount === 1 ? "" : "s"} from ${expressions.length} expression slots. The source slots will become one expression, and the change can be undone until the Studio is closed.`,
+          confirmLabel: "Merge expressions"
+        });
+        if (confirmed) {
+          props.mutate({
+            type: "merge",
+            expressionIds: expressions.map((expression) => expression.id),
+            outfitId: props.outfit.id,
+            name
+          });
+        }
+      }
+    );
+  }
   return /* @__PURE__ */ u2("div", { class: "ls-batch-bar", role: "toolbar", "aria-label": "Expression batch actions", children: [
     /* @__PURE__ */ u2("div", { class: "ls-batch-count", children: [
       /* @__PURE__ */ u2("span", { children: props.selected.size }),
@@ -6967,6 +7048,17 @@ function BatchBar(props) {
           disabled: !props.selected.size || !destination,
           onClick: () => props.mutate({ type: "copy", expressionIds: [...props.selected], outfitId: destination }),
           children: "Copy"
+        }
+      ),
+      /* @__PURE__ */ u2(
+        Button,
+        {
+          size: "small",
+          icon: "merge",
+          disabled: props.selected.size < 2,
+          title: "Combine selected expression slots into one",
+          onClick: merge,
+          children: "Merge"
         }
       ),
       /* @__PURE__ */ u2(

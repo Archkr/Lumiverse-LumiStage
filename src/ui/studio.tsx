@@ -6,7 +6,9 @@ import {
   createExpression,
   createOutfit,
   inspectProfile,
+  suggestMergedExpressionName,
 } from "../model";
+import { cleanName, normalizedKey } from "../ids";
 import type {
   BatchMutationV2,
   CharacterProfileV2,
@@ -460,6 +462,53 @@ function BatchBar(props: {
     });
     if (confirmed) props.mutate({ type: "delete", expressionIds: [...props.selected] });
   }
+  function merge() {
+    const expressions = props.outfit.expressions.filter((expression) =>
+      props.selected.has(expression.id)
+    );
+    if (expressions.length < 2) return;
+    showTextPrompt(
+      props.client,
+      {
+        title: `Merge ${expressions.length} expressions`,
+        label: "Merged expression name",
+        placeholder: "Happy",
+        initial: suggestMergedExpressionName(expressions),
+        submitLabel: "Continue",
+      },
+      async (value) => {
+        const name = cleanName(value, suggestMergedExpressionName(expressions));
+        const conflict = props.outfit.expressions.find(
+          (expression) =>
+            !props.selected.has(expression.id)
+            && normalizedKey(expression.name) === normalizedKey(name),
+        );
+        if (conflict) {
+          throw new Error(
+            `"${conflict.name}" already exists in this outfit. Include it in the selection or choose another name.`,
+          );
+        }
+        const variantCount = new Set(
+          expressions.flatMap((expression) =>
+            expression.variants.map((variant) => variant.contentHash)
+          ),
+        ).size;
+        const { confirmed } = await props.client.ctx.ui.showConfirm({
+          title: `Merge into ${name}?`,
+          message: `Combine ${variantCount} unique sprite variant${variantCount === 1 ? "" : "s"} from ${expressions.length} expression slots. The source slots will become one expression, and the change can be undone until the Studio is closed.`,
+          confirmLabel: "Merge expressions",
+        });
+        if (confirmed) {
+          props.mutate({
+            type: "merge",
+            expressionIds: expressions.map((expression) => expression.id),
+            outfitId: props.outfit.id,
+            name,
+          });
+        }
+      },
+    );
+  }
   return (
     <div class="ls-batch-bar" role="toolbar" aria-label="Expression batch actions">
       <div class="ls-batch-count">
@@ -502,6 +551,15 @@ function BatchBar(props: {
           onClick={() => props.mutate({ type: "copy", expressionIds: [...props.selected], outfitId: destination })}
         >
           Copy
+        </Button>
+        <Button
+          size="small"
+          icon="merge"
+          disabled={props.selected.size < 2}
+          title="Combine selected expression slots into one"
+          onClick={merge}
+        >
+          Merge
         </Button>
         <Button
           size="small"

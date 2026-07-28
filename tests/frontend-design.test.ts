@@ -55,6 +55,9 @@ describe("replacement frontend design contract", () => {
     expect(studio).toContain("Select all filtered");
     expect(studio).toMatch(/>\s*Move\s*<\/Button>/);
     expect(studio).toMatch(/>\s*Copy\s*<\/Button>/);
+    expect(studio).toMatch(/>\s*Merge\s*<\/Button>/);
+    expect(studio).toContain('type: "merge"');
+    expect(studio).toContain("Merged expression name");
     expect(styles).toContain("@media (max-width: 720px)");
     expect(styles).toContain("@media (max-width: 420px)");
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
