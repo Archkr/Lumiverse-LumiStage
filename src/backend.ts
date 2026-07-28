@@ -9,7 +9,6 @@ import {
   createTimeline,
   inspectProfile,
   isValidManualOverride,
-  normalizeSettings,
   type CatalogEntry,
 } from "./model";
 import {
@@ -86,23 +85,34 @@ interface DetectorDispatchSnapshot {
   modelSource: "configured" | "connection-default";
 }
 interface DetectorDispatchDiagnostic extends DetectorDispatchSnapshot {
+  dispatchId: string;
   trigger: DetectorTrigger;
   messageId: string;
+  settingsRevision: number;
+  settingsEpoch: number;
   requestFingerprint: string;
   providerInvoked: boolean;
   responseProvider: string | null;
   responseModel: string | null;
-  status: "running" | "success" | "error";
+  status: "running" | "success" | "cancelled" | "error";
   startedAt: number;
   completedAt: number | null;
   error: string | null;
 }
-const detectorFlights = new Map<string, Promise<DetectorRunOutcome>>();
+interface DetectorFlight {
+  promise: Promise<DetectorRunOutcome>;
+  controller: AbortController;
+  userId: string;
+  settingsEpoch: number;
+}
+const detectorFlights = new Map<string, DetectorFlight>();
 const recentDetectorRuns = new Map<string, DetectorRunOutcome>();
 const lastDetectorDispatch = new Map<string, DetectorDispatchDiagnostic>();
+const detectorSettingsEpochs = new Map<string, number>();
 const mediaViewCache = new Map<string, Record<string, VariantView>>();
 const diagnosticCounters = new Map<string, {
   revisionConflicts: number;
+  obsoleteDetectorCancellations: number;
   cleanupFailures: string[];
 }>();
 
@@ -138,9 +148,36 @@ function settleBackground(operation: Promise<unknown>): void {
 }
 
 function countersFor(userId: string) {
-  const current = diagnosticCounters.get(userId) ?? { revisionConflicts: 0, cleanupFailures: [] };
+  const current = diagnosticCounters.get(userId) ?? {
+    revisionConflicts: 0,
+    obsoleteDetectorCancellations: 0,
+    cleanupFailures: [],
+  };
   diagnosticCounters.set(userId, current);
   return current;
+}
+
+class ObsoleteDetectorRun extends Error {
+  constructor() {
+    super("Detector settings changed before this analysis completed.");
+    this.name = "ObsoleteDetectorRun";
+  }
+}
+
+function detectorSettingsEpoch(userId: string): number {
+  return detectorSettingsEpochs.get(userId) ?? 0;
+}
+
+function invalidateDetectorSettings(userId: string): void {
+  detectorSettingsEpochs.set(userId, detectorSettingsEpoch(userId) + 1);
+  for (const key of recentDetectorRuns.keys()) {
+    if (key.startsWith(`${userId}:`)) recentDetectorRuns.delete(key);
+  }
+  for (const flight of detectorFlights.values()) {
+    if (flight.userId !== userId || flight.controller.signal.aborted) continue;
+    countersFor(userId).obsoleteDetectorCancellations += 1;
+    flight.controller.abort(new ObsoleteDetectorRun());
+  }
 }
 
 function trackCleanup(userId: string, label: string, operation: Promise<unknown>): void {
@@ -502,11 +539,10 @@ async function rebuildTimeline(
   return replayTimeline(timeline, catalog, settings, keys);
 }
 
-async function analyzeLatest(
+async function analyzeLatestOnce(
   userId: string,
   chatId: string,
   force = false,
-  detectionOverride?: DetectionSettingsV2,
   expectedMessageId?: string,
   trigger: DetectorTrigger = force ? "manual" : "completion",
 ): Promise<void> {
@@ -515,10 +551,8 @@ async function analyzeLatest(
     await sendState(userId).catch(() => undefined);
     return;
   }
-  const persistedSettings = await repository.getSettings(userId);
-  const settings = detectionOverride
-    ? normalizeSettings({ ...persistedSettings, detection: detectionOverride })
-    : persistedSettings;
+  const settings = await repository.getSettings(userId);
+  const settingsEpoch = detectorSettingsEpoch(userId);
   if (!settings.detection.enabled && !force) return;
   const dispatch = await resolveDetectorDispatch(userId, settings.detection);
   const set = await profilesForChat(userId, chatId);
@@ -549,6 +583,7 @@ async function analyzeLatest(
     overrides: timeline.manualOverrides,
     recentMessages,
     latest: { id: latest.id, swipeId: latest.swipeId, contentHash },
+    settingsRevision: settings.revision,
     dispatch: {
       configuredConnectionId: dispatch.configuredConnectionId,
       resolvedConnectionId: dispatch.resolvedConnectionId,
@@ -601,8 +636,11 @@ async function analyzeLatest(
     if (!flight) {
       const dispatchDiagnostic: DetectorDispatchDiagnostic = {
         ...dispatch,
+        dispatchId: crypto.randomUUID(),
         trigger,
         messageId: latest.id,
+        settingsRevision: settings.revision,
+        settingsEpoch,
         requestFingerprint,
         providerInvoked: false,
         responseProvider: null,
@@ -613,14 +651,17 @@ async function analyzeLatest(
         error: null,
       };
       lastDetectorDispatch.set(queueKey(userId, chatId), dispatchDiagnostic);
+      const controller = new AbortController();
       const started = (async (): Promise<DetectorRunOutcome> => {
         try {
+          if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
           dispatchDiagnostic.providerInvoked = true;
           const response = await generateDetector(
             userId,
             request,
-            AbortSignal.timeout(60_000),
+            AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
           );
+          if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
           dispatchDiagnostic.responseProvider = response.provider ?? null;
           dispatchDiagnostic.responseModel = response.model ?? null;
           const usedInputTokens = response.usage?.prompt_tokens
@@ -650,19 +691,35 @@ async function analyzeLatest(
             completedAt: Date.now(),
           };
         } catch (error) {
-          dispatchDiagnostic.status = "error";
+          const obsolete = error instanceof ObsoleteDetectorRun
+            || settingsEpoch !== detectorSettingsEpoch(userId);
+          dispatchDiagnostic.status = obsolete ? "cancelled" : "error";
           dispatchDiagnostic.completedAt = Date.now();
-          dispatchDiagnostic.error = error instanceof Error ? error.message : "Detector generation failed.";
+          dispatchDiagnostic.error = obsolete
+            ? "Cancelled because detector settings changed."
+            : error instanceof Error ? error.message : "Detector generation failed.";
+          if (obsolete) throw new ObsoleteDetectorRun();
           throw error;
         }
       })();
-      const tracked = started.finally(() => {
-        if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
-      });
+      const tracked: DetectorFlight = {
+        promise: started.finally(() => {
+          if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
+        }),
+        controller,
+        userId,
+        settingsEpoch,
+      };
       detectorFlights.set(flightKey, tracked);
       flight = tracked;
     }
-    const outcome = await flight;
+    const outcome = await flight.promise;
+    if (
+      settingsEpoch !== detectorSettingsEpoch(userId)
+      || flight.settingsEpoch !== detectorSettingsEpoch(userId)
+    ) {
+      throw new ObsoleteDetectorRun();
+    }
     record = outcome.record;
     detectorInputTokens = outcome.detectorInputTokens;
     recentDetectorRuns.set(flightKey, outcome);
@@ -672,10 +729,13 @@ async function analyzeLatest(
     }
   }
 
+  if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   timeline.decisions = upsertDecision(timeline.decisions, record);
   timeline.manualOverrides = consumeOnceOverrides(timeline.manualOverrides);
   timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
+  if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
+  if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   lastDetection.set(queueKey(userId, chatId), {
     status: "success",
     message: `Stage settled for ${record.decision.focusedCharacterIds.length || record.decision.characters.length} character(s).${
@@ -684,6 +744,24 @@ async function analyzeLatest(
     at: Date.now(),
   });
   await sendState(userId).catch(() => undefined);
+}
+
+async function analyzeLatest(
+  userId: string,
+  chatId: string,
+  force = false,
+  expectedMessageId?: string,
+  trigger: DetectorTrigger = force ? "manual" : "completion",
+): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await analyzeLatestOnce(userId, chatId, force, expectedMessageId, trigger);
+      return;
+    } catch (error) {
+      if (!(error instanceof ObsoleteDetectorRun)) throw error;
+    }
+  }
+  throw new Error("Detector settings kept changing while analysis was starting. Try again once saving is complete.");
 }
 
 function scheduleAnalysis(
@@ -704,7 +782,6 @@ function scheduleAnalysis(
       userId,
       chatId,
       force,
-      undefined,
       expectedMessageId,
       trigger,
     ).catch(async (error) => {
@@ -1074,7 +1151,25 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     return;
   }
   if (message.type === "save-settings") {
+    const before = await repository.getSettings(userId);
     const saved = await repository.saveSettings(userId, message.settings, message.expectedRevision);
+    if (JSON.stringify(before.detection) !== JSON.stringify(saved.detection)) {
+      invalidateDetectorSettings(userId);
+    }
+    send({
+      type: "operation-complete",
+      requestId: message.requestId,
+      revision: saved.revision,
+      result: { settings: saved },
+    }, userId);
+    await sendState(userId).catch(() => undefined);
+    return;
+  }
+  if (message.type === "patch-settings") {
+    const saved = await repository.patchSettings(userId, message.patch);
+    if (message.patch.detection && Object.keys(message.patch.detection).length > 0) {
+      invalidateDetectorSettings(userId);
+    }
     send({
       type: "operation-complete",
       requestId: message.requestId,
@@ -1149,7 +1244,7 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     await enqueueAnalysis(
       userId,
       message.chatId,
-      () => analyzeLatest(userId, message.chatId, true, message.detection, undefined, "manual"),
+      () => analyzeLatest(userId, message.chatId, true, undefined, "manual"),
     );
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
@@ -1242,7 +1337,13 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         queueDepth: context?.chatId ? queueDepth.get(queueKey(userId, context.chatId)) ?? 0 : 0,
       },
       persistence: {
+        settingsRevision: settings.revision,
+        settingsUpdatedAt: settings.updatedAt,
+        configuredConnectionId: settings.detection.connectionId,
+        configuredModel: settings.detection.model,
+        detectorSettingsEpoch: detectorSettingsEpoch(userId),
         revisionConflicts: counters.revisionConflicts,
+        obsoleteDetectorCancellations: counters.obsoleteDetectorCancellations,
         cleanupFailures: [...counters.cleanupFailures],
       },
       connection: {
@@ -1254,8 +1355,11 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         modelSource: settings.detection.model ? "configured" : "connection-default",
         latestDecisionModel: latestDecision?.model ?? null,
         lastDispatch: dispatchTrace ? {
+          dispatchId: dispatchTrace.dispatchId,
           trigger: dispatchTrace.trigger,
           messageId: dispatchTrace.messageId,
+          settingsRevision: dispatchTrace.settingsRevision,
+          settingsEpoch: dispatchTrace.settingsEpoch,
           configuredConnectionId: dispatchTrace.configuredConnectionId,
           resolvedConnectionId: dispatchTrace.resolvedConnectionId,
           resolvedConnectionName: dispatchTrace.resolvedConnectionName,
@@ -1417,8 +1521,10 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   for (const detectorKey of recentDetectorRuns.keys()) {
     if (detectorKey.startsWith(`${key}:`)) recentDetectorRuns.delete(detectorKey);
   }
-  for (const detectorKey of detectorFlights.keys()) {
-    if (detectorKey.startsWith(`${key}:`)) detectorFlights.delete(detectorKey);
+  for (const [detectorKey, flight] of detectorFlights) {
+    if (!detectorKey.startsWith(`${key}:`)) continue;
+    if (!flight.controller.signal.aborted) flight.controller.abort(new ObsoleteDetectorRun());
+    detectorFlights.delete(detectorKey);
   }
   queueDepth.delete(key);
   lastDetection.delete(key);

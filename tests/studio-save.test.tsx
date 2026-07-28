@@ -112,18 +112,25 @@ describe("Studio save conflict recovery", () => {
     let receive: (message: BackendToFrontend) => void = () => undefined;
     let modelOnChange: SpindleModelComboboxOptions["onChange"];
     let modelMountOptions: SpindleModelComboboxOptions | null = null;
+    let persistedSettings = defaultSettings(1);
     const sendToBackend = vi.fn((message: FrontendToBackend) => {
-      if (message.type === "save-settings") {
+      if (message.type === "patch-settings") {
+        persistedSettings = {
+          ...persistedSettings,
+          detection: message.patch.detection
+            ? { ...persistedSettings.detection, ...message.patch.detection }
+            : persistedSettings.detection,
+          appearance: message.patch.appearance
+            ? { ...persistedSettings.appearance, ...message.patch.appearance }
+            : persistedSettings.appearance,
+          preloadAdjacent: message.patch.preloadAdjacent ?? persistedSettings.preloadAdjacent,
+          revision: persistedSettings.revision + 1,
+        };
         receive({
           type: "operation-complete",
           requestId: message.requestId,
-          revision: message.expectedRevision + 1,
-          result: {
-            settings: {
-              ...message.settings,
-              revision: message.expectedRevision + 1,
-            },
-          },
+          revision: persistedSettings.revision,
+          result: { settings: persistedSettings },
         });
       }
     });
@@ -163,6 +170,7 @@ describe("Studio save conflict recovery", () => {
     state.settings.revision = 4;
     state.settings.detection.connectionId = null;
     state.settings.detection.model = "model-old";
+    persistedSettings = structuredClone(state.settings);
     state.connections = [{
       id: "connection-a",
       name: "Primary",
@@ -181,25 +189,22 @@ describe("Studio save conflict recovery", () => {
     await act(async () => {
       modelOnChange?.("model-new");
     });
-    const save = screen.getByRole("button", { name: "Save settings" });
-    expect((save as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(save);
 
     await waitFor(() => {
       const request = sendToBackend.mock.calls
         .map(([message]) => message)
-        .find((message) => message.type === "save-settings");
+        .find((message) => message.type === "patch-settings");
       expect(request).toEqual(expect.objectContaining({
-        type: "save-settings",
-        expectedRevision: 4,
-        settings: expect.objectContaining({
-          detection: expect.objectContaining({
-            connectionId: null,
+        type: "patch-settings",
+        patch: expect.objectContaining({
+          detection: {
             model: "model-new",
-          }),
+          },
         }),
       }));
-    });
+    }, { timeout: 1_000 });
+    expect(await screen.findByText("Saved detector model: model-new")).toBeTruthy();
+    expect(persistedSettings.detection.model).toBe("model-new");
 
     view.unmount();
     client.destroy();

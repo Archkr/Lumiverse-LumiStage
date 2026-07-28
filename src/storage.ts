@@ -11,6 +11,7 @@ import {
   type CharacterProfileV2,
   type CharacterStageStateV2,
   type ChatTimelineV2,
+  type LumiStageSettingsPatchV2,
   type LumiStageSettingsV2,
   type ManualOverrideV2,
 } from "./types";
@@ -116,7 +117,6 @@ function migrateTimeline(raw: unknown, chatId: string, now = Date.now()): ChatTi
 }
 
 export class LumiStageRepository {
-  private settingsCache = new Map<string, LumiStageSettingsV2>();
   private profileCache = new Map<string, CharacterProfileV2>();
   private timelineCache = new Map<string, ChatTimelineV2>();
   private writes = new Map<string, Promise<unknown>>();
@@ -149,11 +149,8 @@ export class LumiStageRepository {
     return { raw: old, migrated: !!old };
   }
 
-  async getSettings(userId: string): Promise<LumiStageSettingsV2> {
+  private async readSettings(userId: string): Promise<LumiStageSettingsV2> {
     const path = settingsPath();
-    const key = this.key(userId, path);
-    const cached = this.settingsCache.get(key);
-    if (cached) return structuredClone(cached);
     const { raw, migrated } = await this.readCurrentOrOld<unknown>(
       path,
       oldSettingsPath(),
@@ -161,8 +158,12 @@ export class LumiStageRepository {
     );
     const settings = raw ? normalizeSettings(raw) : defaultSettings();
     if (migrated) await this.storage.setJson(path, settings, { indent: 2, userId });
-    this.settingsCache.set(key, settings);
     return structuredClone(settings);
+  }
+
+  async getSettings(userId: string): Promise<LumiStageSettingsV2> {
+    const key = this.key(userId, settingsPath());
+    return this.enqueue(key, () => this.readSettings(userId));
   }
 
   async saveSettings(
@@ -173,7 +174,7 @@ export class LumiStageRepository {
     const path = settingsPath();
     const key = this.key(userId, path);
     return this.enqueue(key, async () => {
-      const current = await this.getSettings(userId);
+      const current = await this.readSettings(userId);
       if (current.revision !== expectedRevision) throw new RevisionConflict(current.revision);
       const settings = normalizeSettings({
         ...value,
@@ -181,7 +182,31 @@ export class LumiStageRepository {
         updatedAt: Date.now(),
       });
       await this.storage.setJson(path, settings, { indent: 2, userId });
-      this.settingsCache.set(key, settings);
+      return structuredClone(settings);
+    });
+  }
+
+  async patchSettings(
+    userId: string,
+    patch: LumiStageSettingsPatchV2,
+  ): Promise<LumiStageSettingsV2> {
+    const path = settingsPath();
+    const key = this.key(userId, path);
+    return this.enqueue(key, async () => {
+      const current = await this.readSettings(userId);
+      const settings = normalizeSettings({
+        ...current,
+        detection: patch.detection
+          ? { ...current.detection, ...patch.detection }
+          : current.detection,
+        appearance: patch.appearance
+          ? { ...current.appearance, ...patch.appearance }
+          : current.appearance,
+        preloadAdjacent: patch.preloadAdjacent ?? current.preloadAdjacent,
+        revision: current.revision + 1,
+        updatedAt: Date.now(),
+      });
+      await this.storage.setJson(path, settings, { indent: 2, userId });
       return structuredClone(settings);
     });
   }
@@ -301,7 +326,7 @@ export class LumiStageRepository {
   }
 
   clearUser(userId: string): void {
-    for (const cache of [this.settingsCache, this.profileCache, this.timelineCache]) {
+    for (const cache of [this.profileCache, this.timelineCache]) {
       for (const key of cache.keys()) {
         if (key.startsWith(`${userId}:`)) cache.delete(key);
       }

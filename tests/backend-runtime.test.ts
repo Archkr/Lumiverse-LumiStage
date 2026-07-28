@@ -39,13 +39,28 @@ describe("operator-scoped backend runtime", () => {
     const chatGetMessages = vi.fn(async (): Promise<Array<Record<string, unknown>>> => []);
     const generateQuiet = vi.fn();
     const generateRaw = vi.fn();
+    const userStorageValues = new Map<string, unknown>();
+    const storageKey = (path: string, userId?: string) => `${userId ?? ""}:${path}`;
+    let settingsWriteBarrier: Promise<void> | null = null;
+    let settingsWriteStarted: (() => void) | null = null;
     const uploadMany = vi.fn(async (items: unknown[]): Promise<Array<{ id?: string; error?: string }>> =>
       items.map((_item, index) => ({ id: `stored-image-${uploadMany.mock.calls.length}-${index}` })),
     );
     const spindle = {
       userStorage: {
-        getJson: vi.fn(async (_path: string, options?: { fallback?: unknown }) => options?.fallback ?? null),
-        setJson: vi.fn(async () => undefined),
+        getJson: vi.fn(async (path: string, options?: { fallback?: unknown; userId?: string }) =>
+          structuredClone(
+            userStorageValues.has(storageKey(path, options?.userId))
+              ? userStorageValues.get(storageKey(path, options?.userId))
+              : options?.fallback ?? null,
+          )),
+        setJson: vi.fn(async (path: string, value: unknown, options?: { userId?: string }) => {
+          if (path === "settings.v2.json" && settingsWriteBarrier) {
+            settingsWriteStarted?.();
+            await settingsWriteBarrier;
+          }
+          userStorageValues.set(storageKey(path, options?.userId), structuredClone(value));
+        }),
         list: vi.fn(async () => []),
         delete: vi.fn(async () => undefined),
       },
@@ -514,6 +529,19 @@ describe("operator-scoped backend runtime", () => {
       }));
     }, { timeout: 2_000 });
 
+    await expectCompletion({
+      type: "patch-settings",
+      requestId: "persist-selected-detector",
+      patch: {
+        detection: {
+          connectionId: "connection-manual",
+          model: "manual-model",
+          contextMessages: 3,
+          temperature: 0.2,
+          confidence: 0.7,
+        },
+      },
+    }, "persist-selected-detector");
     generateQuiet.mockClear();
     sendToFrontend.mockClear();
     await Promise.all([
@@ -521,27 +549,11 @@ describe("operator-scoped backend runtime", () => {
         type: "analyze-now",
         requestId: "analyze-selected-model-one",
         chatId: "chat-a",
-        detection: {
-          enabled: true,
-          connectionId: "connection-manual",
-          model: "manual-model",
-          contextMessages: 3,
-          temperature: 0.2,
-          confidence: 0.7,
-        },
       }, "user-a"),
       handleFrontend({
         type: "analyze-now",
         requestId: "analyze-selected-model-two",
         chatId: "chat-a",
-        detection: {
-          enabled: true,
-          connectionId: "connection-manual",
-          model: "manual-model",
-          contextMessages: 3,
-          temperature: 0.2,
-          confidence: 0.7,
-        },
       }, "user-a"),
     ]);
     for (const requestId of ["analyze-selected-model-one", "analyze-selected-model-two"]) {
@@ -574,14 +586,6 @@ describe("operator-scoped backend runtime", () => {
       type: "analyze-now",
       requestId: "analyze-selected-model-after-duplicate-event",
       chatId: "chat-a",
-      detection: {
-        enabled: true,
-        connectionId: "connection-manual",
-        model: "manual-model",
-        contextMessages: 3,
-        temperature: 0.2,
-        confidence: 0.7,
-      },
     }, "user-a");
     expect(sendToFrontend).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -603,19 +607,21 @@ describe("operator-scoped backend runtime", () => {
     await new Promise((resolve) => setTimeout(resolve, 360));
     expect(generateQuiet).toHaveBeenCalledTimes(1);
 
+    await expectCompletion({
+      type: "patch-settings",
+      requestId: "persist-default-connection-override",
+      patch: {
+        detection: {
+          connectionId: null,
+          model: "default-connection-override",
+        },
+      },
+    }, "persist-default-connection-override");
     generateQuiet.mockClear();
     await handleFrontend({
       type: "analyze-now",
       requestId: "analyze-default-connection-model",
       chatId: "chat-a",
-      detection: {
-        enabled: true,
-        connectionId: null,
-        model: "default-connection-override",
-        contextMessages: 3,
-        temperature: 0.2,
-        confidence: 0.7,
-      },
     }, "user-a");
     expect(generateQuiet).toHaveBeenCalledWith(expect.objectContaining({
       connection_id: undefined,
@@ -626,19 +632,18 @@ describe("operator-scoped backend runtime", () => {
     expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
     expect(generateRaw).not.toHaveBeenCalled();
 
+    await expectCompletion({
+      type: "patch-settings",
+      requestId: "persist-connection-default",
+      patch: {
+        detection: { model: null },
+      },
+    }, "persist-connection-default");
     generateQuiet.mockClear();
     await handleFrontend({
       type: "analyze-now",
       requestId: "analyze-default-connection-default-model",
       chatId: "chat-a",
-      detection: {
-        enabled: true,
-        connectionId: null,
-        model: null,
-        contextMessages: 3,
-        temperature: 0.2,
-        confidence: 0.7,
-      },
     }, "user-a");
     expect(generateQuiet).toHaveBeenCalledTimes(1);
     expect(generateQuiet).toHaveBeenCalledWith(expect.objectContaining({
@@ -660,14 +665,17 @@ describe("operator-scoped backend runtime", () => {
         && message.requestId === "dispatch-diagnostics"
       )?.result;
     expect(diagnostics.connection).toEqual(expect.objectContaining({
-      selection: "configured",
+      selection: "default-host-connection",
       requestedConnectionId: "connection-a",
       requestedConnectionName: "Primary",
-      requestedModel: "saved-model",
-      modelSource: "configured",
+      requestedModel: defaultConnectionModel,
+      modelSource: "connection-default",
       latestDecisionModel: defaultConnectionModel,
       lastDispatch: expect.objectContaining({
+        dispatchId: expect.any(String),
         trigger: "manual",
+        settingsRevision: expect.any(Number),
+        settingsEpoch: expect.any(Number),
         configuredConnectionId: null,
         resolvedConnectionId: "connection-a",
         connectionPresetId: "preset-with-legacy-model",
@@ -679,6 +687,13 @@ describe("operator-scoped backend runtime", () => {
         providerInvoked: true,
         status: "success",
       }),
+    }));
+    expect(diagnostics.persistence).toEqual(expect.objectContaining({
+      settingsRevision: expect.any(Number),
+      configuredConnectionId: null,
+      configuredModel: null,
+      detectorSettingsEpoch: expect.any(Number),
+      obsoleteDetectorCancellations: expect.any(Number),
     }));
 
     generateQuiet.mockClear();
@@ -694,7 +709,93 @@ describe("operator-scoped backend runtime", () => {
     await new Promise((resolve) => setTimeout(resolve, 360));
     expect(generateQuiet).toHaveBeenCalledTimes(1);
     expect(generateQuiet.mock.calls[0][0].parameters).toEqual(expect.objectContaining({
-      model: "saved-model",
+      model: "",
+    }));
+
+    await handleFrontend({
+      type: "patch-settings",
+      requestId: "prepare-obsolete-detector-analysis",
+      patch: { detection: { temperature: 0.25 } },
+    }, "user-a");
+    generateQuiet.mockClear();
+    let releaseObsoleteStart: () => void = () => {};
+    const obsoleteStarted = new Promise<void>((resolve) => {
+      releaseObsoleteStart = resolve;
+    });
+    let obsoleteAborted = false;
+    generateQuiet.mockImplementationOnce(async (request: Record<string, unknown>) =>
+      new Promise((_resolve, reject) => {
+        const signal = request.signal as AbortSignal;
+        releaseObsoleteStart();
+        signal.addEventListener("abort", () => {
+          obsoleteAborted = true;
+          reject(signal.reason);
+        }, { once: true });
+      }));
+    const staleAnalysis = handleFrontend({
+      type: "analyze-now",
+      requestId: "obsolete-detector-analysis",
+      chatId: "chat-a",
+    }, "user-a");
+    await obsoleteStarted;
+    await handleFrontend({
+      type: "patch-settings",
+      requestId: "replace-obsolete-detector-model",
+      patch: {
+        detection: {
+          connectionId: "connection-manual",
+          model: "replacement-model",
+        },
+      },
+    }, "user-a");
+    await staleAnalysis;
+    expect(obsoleteAborted).toBe(true);
+    expect(generateQuiet).toHaveBeenCalledTimes(2);
+    expect(generateQuiet.mock.calls.map(([request]) =>
+      (request.parameters as Record<string, unknown>).model
+    )).toEqual(["", "replacement-model"]);
+
+    generateQuiet.mockClear();
+    let releaseSettingsWrite: () => void = () => {};
+    settingsWriteBarrier = new Promise<void>((resolve) => {
+      releaseSettingsWrite = resolve;
+    });
+    const writeStarted = new Promise<void>((resolve) => {
+      settingsWriteStarted = resolve;
+    });
+    const saveForAutomaticTrigger = handleFrontend({
+      type: "patch-settings",
+      requestId: "persist-model-before-automatic-trigger",
+      patch: {
+        detection: { model: "automatic-race-model" },
+      },
+    }, "user-a");
+    await writeStarted;
+    completedMessages.splice(0, completedMessages.length, {
+      id: "assistant-race",
+      role: "assistant",
+      content: "Aster settles into a confident smile.",
+      swipe_id: 0,
+    });
+    eventHandlers.get("GENERATION_STARTED")?.({
+      generationId: "generation-race",
+      chatId: "chat-a",
+    }, "user-a");
+    eventHandlers.get("GENERATION_ENDED")?.({
+      generationId: "generation-race",
+      chatId: "chat-a",
+      messageId: "assistant-race",
+    }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    expect(generateQuiet).not.toHaveBeenCalled();
+
+    releaseSettingsWrite();
+    settingsWriteBarrier = null;
+    settingsWriteStarted = null;
+    await saveForAutomaticTrigger;
+    await vi.waitFor(() => expect(generateQuiet).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    expect(generateQuiet.mock.calls[0][0].parameters).toEqual(expect.objectContaining({
+      model: "automatic-race-model",
     }));
 
     await handleFrontend({ type: "open-connections" }, "user-a");

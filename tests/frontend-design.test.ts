@@ -98,8 +98,10 @@ describe("replacement frontend design contract", () => {
     expect(styles).toContain("@container lumi-stage (max-height: 180px)");
   });
 
-  it("uses the visible detector draft for manual analysis", () => {
-    expect(studio).toContain("client.analyzeNow(draft.detection)");
+  it("flushes detector settings before manual analysis instead of dispatching an unsaved draft", () => {
+    expect(studio).toContain("await flushSettings()");
+    expect(studio).toContain("await client.analyzeNow()");
+    expect(studio).not.toContain("client.analyzeNow(draft.detection)");
     expect(studio).not.toContain('title="Reasoning/output budget"');
     expect(studio).not.toContain("maxOutputTokens");
   });

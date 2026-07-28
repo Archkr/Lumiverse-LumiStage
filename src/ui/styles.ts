@@ -518,6 +518,11 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-settings-card-head h3 { margin: 5px 0 3px; font-size: 17px; }
 .ls-settings-card-head p { max-width: 600px; margin: 0; color: var(--ls-muted); font-size: 10px; }
 .ls-settings-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.ls-detector-save-state { display: flex; align-items: center; gap: 6px; min-height: 22px; margin: -5px 0 10px; color: var(--ls-dim); font-size: 9px; }
+.ls-detector-save-state[data-state="saving"] { color: var(--ls-accent); }
+.ls-detector-save-state[data-state="error"] { color: var(--ls-danger); }
+.ls-detector-save-state[data-state="saved"] svg { color: var(--ls-success); }
+.ls-detector-save-state[data-state="saving"] svg { animation: ls-spin .8s linear infinite; }
 .ls-setting-row { min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 220px); align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid var(--ls-line); }
 .ls-setting-row > div:first-child strong, .ls-setting-row > div:first-child span { display: block; }
 .ls-setting-row > div:first-child strong { font-size: 10px; }

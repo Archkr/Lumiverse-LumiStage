@@ -40,17 +40,41 @@ describe("correlated client request lifecycle", () => {
       if (!("requestId" in message)) return;
       queueMicrotask(() => {
         if (message.type === "save-settings") {
+          const saved = {
+            ...message.settings,
+            revision: message.expectedRevision + 1,
+            updatedAt: 10,
+          };
+          backend.settings = saved;
           receive({
             type: "operation-complete",
             requestId: message.requestId,
             revision: message.expectedRevision + 1,
             result: {
-              settings: {
-                ...message.settings,
-                revision: message.expectedRevision + 1,
-                updatedAt: 10,
-              },
+              settings: saved,
             },
+          });
+          return;
+        }
+        if (message.type === "patch-settings") {
+          const saved = {
+            ...backend.settings,
+            detection: message.patch.detection
+              ? { ...backend.settings.detection, ...message.patch.detection }
+              : backend.settings.detection,
+            appearance: message.patch.appearance
+              ? { ...backend.settings.appearance, ...message.patch.appearance }
+              : backend.settings.appearance,
+            preloadAdjacent: message.patch.preloadAdjacent ?? backend.settings.preloadAdjacent,
+            revision: backend.settings.revision + 1,
+            updatedAt: 11,
+          };
+          backend.settings = saved;
+          receive({
+            type: "operation-complete",
+            requestId: message.requestId,
+            revision: saved.revision,
+            result: { settings: saved },
           });
           return;
         }
@@ -72,8 +96,9 @@ describe("correlated client request lifecycle", () => {
     client.start();
     receive({ type: "state", state: backend });
 
+    const initialSettingsRevision = backend.settings.revision;
     const settings = await client.saveSettings(backend.settings);
-    expect(settings.revision).toBe(backend.settings.revision + 1);
+    expect(settings.revision).toBe(initialSettingsRevision + 1);
     await client.saveProfile(backend.profile!);
     await client.saveChatLayout({ width: 500 });
     await client.applyManual({
@@ -84,16 +109,19 @@ describe("correlated client request lifecycle", () => {
       createdAt: 1,
     });
     await client.clearManual("character-a");
-    await client.analyzeNow({
-      ...backend.settings.detection,
-      connectionId: "connection-manual",
-      model: "model-manual",
+    await client.patchSettings({
+      detection: {
+        connectionId: "connection-manual",
+        model: "model-manual",
+      },
     });
+    await client.analyzeNow();
     await client.deleteVariants(["variant-neutral-a"]);
     await expect(client.diagnostics()).resolves.toEqual({ ok: true });
 
     expect(sendToBackend.mock.calls.map(([message]) => message.type)).toEqual(expect.arrayContaining([
       "save-settings",
+      "patch-settings",
       "save-profile",
       "save-chat-layout",
       "apply-manual",
@@ -104,12 +132,7 @@ describe("correlated client request lifecycle", () => {
     ]));
     expect(sendToBackend.mock.calls.map(([message]) => message).find(
       (message) => message.type === "analyze-now",
-    )).toEqual(expect.objectContaining({
-      detection: expect.objectContaining({
-        connectionId: "connection-manual",
-        model: "model-manual",
-      }),
-    }));
+    )).toEqual(expect.not.objectContaining({ detection: expect.anything() }));
     expect(client.getSnapshot().busy).toBe(false);
     expect(client.getSnapshot().progress).toBeNull();
     client.destroy();

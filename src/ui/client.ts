@@ -7,10 +7,10 @@ import { createProfile, createTimeline, defaultSettings } from "../model";
 import type {
   BackendToFrontend,
   CharacterProfileV2,
-  DetectionSettingsV2,
   FrontendState,
   FrontendToBackend,
   ImportLayoutV2,
+  LumiStageSettingsPatchV2,
   LumiStageSettingsV2,
   ManualOverrideV2,
 } from "../types";
@@ -146,6 +146,16 @@ export class LumiStageClient {
     this.emit({ busy: this.pending.size > 0, progress: null });
     if (error) pending.reject(error);
     else pending.resolve(value);
+  }
+
+  private acceptSettings(settings: LumiStageSettingsV2): void {
+    if (settings.revision < this.ui.backend.settings.revision) return;
+    this.emit({
+      backend: {
+        ...this.ui.backend,
+        settings,
+      },
+    });
   }
 
   private receive(message: BackendToFrontend): void {
@@ -310,8 +320,20 @@ export class LumiStageClient {
       settings,
       expectedRevision,
     });
+    if (result.settings) this.acceptSettings(result.settings);
     this.refresh(this.ui.backend.activeChatId, this.ui.backend.activeCharacterId);
     return result.settings ?? { ...settings, revision: expectedRevision + 1 };
+  }
+
+  async patchSettings(patch: LumiStageSettingsPatchV2): Promise<LumiStageSettingsV2> {
+    const result = await this.request<{ settings?: LumiStageSettingsV2 }>({
+      type: "patch-settings",
+      requestId: createId("settings-patch"),
+      patch,
+    });
+    if (!result.settings) throw new Error("LumiStage did not acknowledge the settings patch.");
+    this.acceptSettings(result.settings);
+    return result.settings;
   }
 
   async saveProfile(
@@ -356,8 +378,7 @@ export class LumiStageClient {
       await this.saveChatLayout({ ...this.effectiveAppearance(), ...patch });
       return;
     }
-    const settings = this.ui.backend.settings;
-    await this.saveSettings({ ...settings, appearance: { ...settings.appearance, ...patch } });
+    await this.patchSettings({ appearance: patch });
   }
 
   async applyManual(override: ManualOverrideV2): Promise<void> {
@@ -374,7 +395,7 @@ export class LumiStageClient {
     await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
 
-  async analyzeNow(detection?: DetectionSettingsV2): Promise<void> {
+  async analyzeNow(): Promise<void> {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) {
       this.notify("warning", "Open a chat before running detection.");
@@ -384,7 +405,6 @@ export class LumiStageClient {
       type: "analyze-now",
       requestId: createId("analyze"),
       chatId,
-      detection,
     });
   }
 

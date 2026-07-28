@@ -4953,6 +4953,15 @@ var LumiStageClient = class {
     if (error) pending.reject(error);
     else pending.resolve(value);
   }
+  acceptSettings(settings) {
+    if (settings.revision < this.ui.backend.settings.revision) return;
+    this.emit({
+      backend: {
+        ...this.ui.backend,
+        settings
+      }
+    });
+  }
   receive(message) {
     if (message.type === "state") {
       const desired = this.desiredContext;
@@ -5079,8 +5088,19 @@ var LumiStageClient = class {
       settings,
       expectedRevision
     });
+    if (result.settings) this.acceptSettings(result.settings);
     this.refresh(this.ui.backend.activeChatId, this.ui.backend.activeCharacterId);
     return result.settings ?? { ...settings, revision: expectedRevision + 1 };
+  }
+  async patchSettings(patch) {
+    const result = await this.request({
+      type: "patch-settings",
+      requestId: createId("settings-patch"),
+      patch
+    });
+    if (!result.settings) throw new Error("LumiStage did not acknowledge the settings patch.");
+    this.acceptSettings(result.settings);
+    return result.settings;
   }
   async saveProfile(profile, expectedRevision = profile.revision) {
     const requestId = createId("save");
@@ -5118,8 +5138,7 @@ var LumiStageClient = class {
       await this.saveChatLayout({ ...this.effectiveAppearance(), ...patch });
       return;
     }
-    const settings = this.ui.backend.settings;
-    await this.saveSettings({ ...settings, appearance: { ...settings.appearance, ...patch } });
+    await this.patchSettings({ appearance: patch });
   }
   async applyManual(override) {
     const chatId = this.ui.backend.activeChatId;
@@ -5133,7 +5152,7 @@ var LumiStageClient = class {
     const requestId = createId("manual");
     await this.request({ type: "clear-manual", requestId, chatId, characterId });
   }
-  async analyzeNow(detection) {
+  async analyzeNow() {
     const chatId = this.ui.backend.activeChatId;
     if (!chatId) {
       this.notify("warning", "Open a chat before running detection.");
@@ -5142,8 +5161,7 @@ var LumiStageClient = class {
     await this.request({
       type: "analyze-now",
       requestId: createId("analyze"),
-      chatId,
-      detection
+      chatId
     });
   }
   uploadFile(file, onProgress, timeoutMs = 10 * 6e4) {
@@ -5728,14 +5746,18 @@ function HostModelPicker(props) {
     if (!root.current) return;
     const target = root.current;
     let syncTimer = null;
-    const syncFromHandle = () => {
+    const syncFromHandle = (commit = false) => {
       if (syncTimer !== null) window.clearTimeout(syncTimer);
       syncTimer = window.setTimeout(() => {
         syncTimer = null;
         const value = handle.current?.getValue();
-        if (typeof value === "string") forwardValue(value);
+        if (typeof value !== "string") return;
+        forwardValue(value);
+        if (commit) latest.current.onCommit?.(value);
       }, 0);
     };
+    const syncInput = () => syncFromHandle(false);
+    const syncCommit = () => syncFromHandle(true);
     handle.current = props.client.ctx.components.mountModelCombobox(root.current, {
       value: props.value,
       connection: props.connectionId ? { kind: "llm", id: props.connectionId } : { kind: "llm" },
@@ -5746,14 +5768,16 @@ function HostModelPicker(props) {
       disabled: props.disabled,
       onChange: forwardValue
     });
-    target.addEventListener("input", syncFromHandle);
-    target.addEventListener("change", syncFromHandle);
-    target.addEventListener("click", syncFromHandle);
+    target.addEventListener("input", syncInput);
+    target.addEventListener("change", syncCommit);
+    target.addEventListener("click", syncCommit);
+    target.addEventListener("focusout", syncCommit);
     return () => {
       if (syncTimer !== null) window.clearTimeout(syncTimer);
-      target.removeEventListener("input", syncFromHandle);
-      target.removeEventListener("change", syncFromHandle);
-      target.removeEventListener("click", syncFromHandle);
+      target.removeEventListener("input", syncInput);
+      target.removeEventListener("change", syncCommit);
+      target.removeEventListener("click", syncCommit);
+      target.removeEventListener("focusout", syncCommit);
       handle.current?.destroy();
       handle.current = null;
     };
@@ -7550,25 +7574,120 @@ function DiagnosticsPanel({ client }) {
     report && /* @__PURE__ */ u2("pre", { children: JSON.stringify(report, null, 2) })
   ] });
 }
+function mergeSettingsPatches(first, second) {
+  return {
+    ...first.detection || second.detection ? { detection: { ...first.detection, ...second.detection } } : {},
+    ...first.appearance || second.appearance ? { appearance: { ...first.appearance, ...second.appearance } } : {},
+    ..."preloadAdjacent" in second ? { preloadAdjacent: second.preloadAdjacent } : "preloadAdjacent" in first ? { preloadAdjacent: first.preloadAdjacent } : {}
+  };
+}
+function applySettingsPatch(settings, patch) {
+  return {
+    ...structuredClone(settings),
+    detection: patch.detection ? { ...settings.detection, ...patch.detection } : settings.detection,
+    appearance: patch.appearance ? { ...settings.appearance, ...patch.appearance } : settings.appearance,
+    preloadAdjacent: patch.preloadAdjacent ?? settings.preloadAdjacent
+  };
+}
+function hasSettingsPatch(patch) {
+  return !!(patch.detection && Object.keys(patch.detection).length || patch.appearance && Object.keys(patch.appearance).length || "preloadAdjacent" in patch);
+}
 function SettingsView({ client }) {
   const { backend } = useClientState(client);
   const [draft, setDraft] = d2(() => structuredClone(backend.settings));
   const [section, setSection] = d2("detection");
   const [dirty, setDirty] = d2(false);
-  const [conflict, setConflict] = d2(false);
-  h2(() => {
-    if (backend.settings.revision === draft.revision) return;
-    if (dirty) {
-      setConflict(true);
+  const [saveState, setSaveState] = d2("saved");
+  const draftRef = A2(draft);
+  const pendingPatch = A2({});
+  const queuedPatches = A2([]);
+  const inFlightPatch = A2({});
+  const saveTail = A2(Promise.resolve());
+  const saveTimer = A2(null);
+  const mounted = A2(true);
+  draftRef.current = draft;
+  const combinedPendingPatch = () => {
+    const queued = queuedPatches.current.reduce(
+      (combined, patch) => mergeSettingsPatches(combined, patch),
+      inFlightPatch.current
+    );
+    return mergeSettingsPatches(queued, pendingPatch.current);
+  };
+  const reconcileDraft = (settings) => {
+    const next = applySettingsPatch(settings, combinedPendingPatch());
+    draftRef.current = next;
+    if (mounted.current) setDraft(next);
+  };
+  const flushSettings = async () => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const patch = pendingPatch.current;
+    if (!hasSettingsPatch(patch)) {
+      await saveTail.current;
       return;
     }
-    setDraft(structuredClone(backend.settings));
-    setDirty(false);
-    setConflict(false);
-  }, [backend.settings.revision, draft.revision, dirty]);
-  const edit = (settings) => {
-    setDraft(settings);
+    pendingPatch.current = {};
+    queuedPatches.current.push(patch);
+    const run = async () => {
+      const queuedIndex = queuedPatches.current.indexOf(patch);
+      if (queuedIndex >= 0) queuedPatches.current.splice(queuedIndex, 1);
+      inFlightPatch.current = patch;
+      if (mounted.current) setSaveState("saving");
+      try {
+        const saved = await client.patchSettings(patch);
+        inFlightPatch.current = {};
+        reconcileDraft(saved);
+        const stillPending = hasSettingsPatch(pendingPatch.current) || queuedPatches.current.length > 0;
+        if (mounted.current) {
+          setDirty(stillPending);
+          setSaveState(stillPending ? "saving" : "saved");
+        }
+      } catch (error) {
+        inFlightPatch.current = {};
+        pendingPatch.current = mergeSettingsPatches(patch, pendingPatch.current);
+        if (mounted.current) {
+          setDirty(true);
+          setSaveState("error");
+          client.notify("error", error instanceof Error ? error.message : "Could not save LumiStage settings.");
+        }
+        throw error;
+      }
+    };
+    const queued = saveTail.current.catch(() => void 0).then(run);
+    saveTail.current = queued;
+    await queued;
+  };
+  const scheduleSave = (immediate = false) => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     setDirty(true);
+    setSaveState("saving");
+    if (immediate) {
+      void flushSettings().catch(() => void 0);
+      return;
+    }
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      void flushSettings().catch(() => void 0);
+    }, 220);
+  };
+  h2(() => {
+    if (backend.settings.revision <= draftRef.current.revision) return;
+    reconcileDraft(backend.settings);
+  }, [backend.settings.revision]);
+  h2(() => () => {
+    mounted.current = false;
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    void flushSettings().catch(() => void 0);
+  }, []);
+  const edit = (patch, immediate = false) => {
+    if (!hasSettingsPatch(patch)) return;
+    pendingPatch.current = mergeSettingsPatches(pendingPatch.current, patch);
+    const settings = applySettingsPatch(draftRef.current, patch);
+    draftRef.current = settings;
+    setDraft(settings);
+    scheduleSave(immediate);
   };
   const connections = [
     { value: "", label: "Use default Lumiverse connection", sublabel: "Follows the host backend default" },
@@ -7582,12 +7701,7 @@ function SettingsView({ client }) {
   const modelConnectionId = draft.detection.connectionId ?? defaultConnectionId;
   async function save() {
     try {
-      const expectedRevision = Math.max(draft.revision, backend.settings.revision);
-      const candidate = { ...structuredClone(draft), revision: expectedRevision };
-      const saved = await client.saveSettings(candidate, expectedRevision);
-      setDraft(structuredClone(saved));
-      setDirty(false);
-      setConflict(false);
+      await flushSettings();
       client.notify("success", "LumiStage settings saved.");
     } catch (error) {
       client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
@@ -7603,15 +7717,6 @@ function SettingsView({ client }) {
         actions: /* @__PURE__ */ u2(Button, { variant: "primary", icon: "check", disabled: !dirty, onClick: () => void save(), children: "Save settings" })
       }
     ),
-    conflict && /* @__PURE__ */ u2("div", { class: "ls-validation-note", "data-tone": "warning", children: [
-      /* @__PURE__ */ u2(Icon, { name: "warning", size: 16 }),
-      /* @__PURE__ */ u2("span", { children: "Settings changed elsewhere. Save applies your preserved draft to the latest revision, or reload to discard it." }),
-      /* @__PURE__ */ u2(Button, { size: "small", onClick: () => {
-        setDraft(structuredClone(backend.settings));
-        setDirty(false);
-        setConflict(false);
-      }, children: "Reload settings" })
-    ] }),
     /* @__PURE__ */ u2("div", { class: "ls-settings-layout", children: [
       /* @__PURE__ */ u2("nav", { class: "ls-settings-nav", "aria-label": "Settings sections", children: [
         /* @__PURE__ */ u2("button", { type: "button", "data-active": section === "detection", onClick: () => setSection("detection"), children: [
@@ -7650,7 +7755,7 @@ function SettingsView({ client }) {
                 client,
                 label: "Automatic detection",
                 checked: draft.detection.enabled,
-                onChange: (enabled) => edit({ ...draft, detection: { ...draft.detection, enabled } })
+                onChange: (enabled) => edit({ detection: { enabled } })
               }
             )
           ] }),
@@ -7663,9 +7768,8 @@ function SettingsView({ client }) {
                 value: draft.detection.connectionId ?? "",
                 options: connections,
                 onChange: (connectionId) => edit({
-                  ...draft,
-                  detection: { ...draft.detection, connectionId: connectionId || null, model: null }
-                })
+                  detection: { connectionId: connectionId || null, model: null }
+                }, true)
               }
             ) }),
             /* @__PURE__ */ u2(Field, { label: "Model", hint: "The native picker reads the selected connection\u2019s catalog.", children: /* @__PURE__ */ u2(
@@ -7675,9 +7779,20 @@ function SettingsView({ client }) {
                 value: draft.detection.model ?? "",
                 connectionId: modelConnectionId,
                 disabled: !modelConnectionId,
-                onChange: (model) => edit({ ...draft, detection: { ...draft.detection, model: model || null } })
+                onChange: (model) => edit({ detection: { model: model || null } }),
+                onCommit: () => void flushSettings().catch(() => void 0)
               }
             ) })
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "ls-detector-save-state", "data-state": saveState, children: [
+            /* @__PURE__ */ u2(
+              Icon,
+              {
+                name: saveState === "error" ? "warning" : saveState === "saving" ? "refresh" : "success",
+                size: 14
+              }
+            ),
+            /* @__PURE__ */ u2("span", { children: saveState === "error" ? "Detector settings were not saved. Use Save settings to retry." : saveState === "saving" ? "Saving detector settings\u2026" : `Saved detector model: ${backend.settings.detection.model || "connection default"}` })
           ] }),
           /* @__PURE__ */ u2(SettingRow, { title: "Context window", description: "Recent chat messages supplied to the detector.", children: /* @__PURE__ */ u2(
             HostNumber,
@@ -7686,7 +7801,7 @@ function SettingsView({ client }) {
               value: draft.detection.contextMessages,
               min: 1,
               max: 20,
-              onChange: (contextMessages) => edit({ ...draft, detection: { ...draft.detection, contextMessages } })
+              onChange: (contextMessages) => edit({ detection: { contextMessages } })
             }
           ) }),
           /* @__PURE__ */ u2(
@@ -7700,12 +7815,23 @@ function SettingsView({ client }) {
               suffix: "%",
               label: "Confidence threshold",
               hint: "Below this threshold the complete prior stage state is preserved.",
-              onChange: (confidence) => edit({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })
+              onChange: (confidence) => edit({ detection: { confidence: confidence / 100 } })
             }
           ),
           /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: [
             /* @__PURE__ */ u2(Button, { icon: "settings", onClick: () => client.send({ type: "open-connections" }), children: "Manage connections" }),
-            /* @__PURE__ */ u2(Button, { icon: "refresh", disabled: !backend.activeChatId, onClick: () => void client.analyzeNow(draft.detection).catch(() => void 0), children: "Analyze current reply" })
+            /* @__PURE__ */ u2(
+              Button,
+              {
+                icon: "refresh",
+                disabled: !backend.activeChatId,
+                onClick: () => void (async () => {
+                  await flushSettings();
+                  await client.analyzeNow();
+                })().catch(() => void 0),
+                children: "Analyze current reply"
+              }
+            )
           ] })
         ] }) }),
         section === "stage" && /* @__PURE__ */ u2("section", { class: "ls-settings-card", children: [
@@ -7722,8 +7848,7 @@ function SettingsView({ client }) {
                 label: "Transition",
                 value: draft.appearance.transition,
                 onChange: (transition) => edit({
-                  ...draft,
-                  appearance: { ...draft.appearance, transition }
+                  appearance: { transition }
                 }),
                 options: [
                   { value: "crossfade", label: "Crossfade" },
@@ -7740,19 +7865,18 @@ function SettingsView({ client }) {
                 min: 0,
                 max: 2e3,
                 step: 20,
-                onChange: (transitionMs) => edit({ ...draft, appearance: { ...draft.appearance, transitionMs } })
+                onChange: (transitionMs) => edit({ appearance: { transitionMs } })
               }
             ) })
           ] }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.opacity * 100), min: 10, max: 100, step: 5, suffix: "%", label: "Stage opacity", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } }) }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.idleOpacity * 100), min: 5, max: 100, step: 5, suffix: "%", label: "Unfocused character opacity", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } }) }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.focusedScale * 100), min: 80, max: 130, step: 1, suffix: "%", label: "Focused character scale", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } }) }),
-          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.ensembleOverlap * 100), min: 0, max: 80, step: 5, suffix: "%", label: "Ensemble overlap", onChange: (value) => edit({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } }) }),
-          /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show resolved names beneath stage sprites.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Captions", checked: draft.appearance.showCaptions, onChange: (showCaptions) => edit({ ...draft, appearance: { ...draft.appearance, showCaptions } }) }) }),
-          /* @__PURE__ */ u2(SettingRow, { title: "Stage chrome", description: "Show the compact live header and controls.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage chrome", checked: draft.appearance.showChrome, onChange: (showChrome) => edit({ ...draft, appearance: { ...draft.appearance, showChrome } }) }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.opacity * 100), min: 10, max: 100, step: 5, suffix: "%", label: "Stage opacity", onChange: (value) => edit({ appearance: { opacity: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.idleOpacity * 100), min: 5, max: 100, step: 5, suffix: "%", label: "Unfocused character opacity", onChange: (value) => edit({ appearance: { idleOpacity: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.focusedScale * 100), min: 80, max: 130, step: 1, suffix: "%", label: "Focused character scale", onChange: (value) => edit({ appearance: { focusedScale: value / 100 } }) }),
+          /* @__PURE__ */ u2(HostRange, { client, value: Math.round(draft.appearance.ensembleOverlap * 100), min: 0, max: 80, step: 5, suffix: "%", label: "Ensemble overlap", onChange: (value) => edit({ appearance: { ensembleOverlap: value / 100 } }) }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Captions", description: "Show resolved names beneath stage sprites.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Captions", checked: draft.appearance.showCaptions, onChange: (showCaptions) => edit({ appearance: { showCaptions } }) }) }),
+          /* @__PURE__ */ u2(SettingRow, { title: "Stage chrome", description: "Show the compact live header and controls.", children: /* @__PURE__ */ u2(HostSwitch, { client, label: "Stage chrome", checked: draft.appearance.showChrome, onChange: (showChrome) => edit({ appearance: { showChrome } }) }) }),
           /* @__PURE__ */ u2("div", { class: "ls-settings-inline-actions", children: /* @__PURE__ */ u2(Button, { onClick: () => edit({
-            ...draft,
-            appearance: { ...draft.appearance, width: 320, height: 420, x: -1, y: -1, fullscreen: false }
+            appearance: { width: 320, height: 420, x: -1, y: -1, fullscreen: false }
           }), children: "Reset size and position" }) })
         ] }),
         section === "data" && /* @__PURE__ */ u2(S, { children: [
@@ -8677,6 +8801,11 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-settings-card-head h3 { margin: 5px 0 3px; font-size: 17px; }
 .ls-settings-card-head p { max-width: 600px; margin: 0; color: var(--ls-muted); font-size: 10px; }
 .ls-settings-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.ls-detector-save-state { display: flex; align-items: center; gap: 6px; min-height: 22px; margin: -5px 0 10px; color: var(--ls-dim); font-size: 9px; }
+.ls-detector-save-state[data-state="saving"] { color: var(--ls-accent); }
+.ls-detector-save-state[data-state="error"] { color: var(--ls-danger); }
+.ls-detector-save-state[data-state="saved"] svg { color: var(--ls-success); }
+.ls-detector-save-state[data-state="saving"] svg { animation: ls-spin .8s linear infinite; }
 .ls-setting-row { min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 220px); align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid var(--ls-line); }
 .ls-setting-row > div:first-child strong, .ls-setting-row > div:first-child span { display: block; }
 .ls-setting-row > div:first-child strong { font-size: 10px; }

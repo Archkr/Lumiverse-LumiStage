@@ -13,6 +13,7 @@ import { createTimeline } from "../src/model";
 class MemoryStorage implements UserStorageApi {
   values = new Map<string, unknown>();
   writes: string[] = [];
+  writeBarrier: Promise<void> | null = null;
 
   private key(path: string, userId?: string) {
     return `${userId ?? ""}:${path}`;
@@ -27,6 +28,7 @@ class MemoryStorage implements UserStorageApi {
   }
 
   async setJson(path: string, value: unknown, options?: { userId?: string }): Promise<void> {
+    if (this.writeBarrier) await this.writeBarrier;
     this.writes.push(path);
     this.values.set(this.key(path, options?.userId), structuredClone(value));
   }
@@ -65,6 +67,80 @@ describe("V2 user storage", () => {
     await expect(first).resolves.toEqual(expect.objectContaining({ revision: 1 }));
     await expect(second).rejects.toBeInstanceOf(RevisionConflict);
     expect(settingsPath()).toBe("settings.v2.json");
+  });
+
+  it("reads settings from canonical storage instead of retaining a stale memory copy", async () => {
+    const storage = new MemoryStorage();
+    const repository = new LumiStageRepository(storage);
+    const initial = await repository.getSettings("user");
+    storage.values.set("user:settings.v2.json", {
+      ...initial,
+      revision: 7,
+      detection: {
+        ...initial.detection,
+        connectionId: "connection-new",
+        model: "model-new",
+      },
+    });
+
+    await expect(repository.getSettings("user")).resolves.toEqual(expect.objectContaining({
+      revision: 7,
+      detection: expect.objectContaining({
+        connectionId: "connection-new",
+        model: "model-new",
+      }),
+    }));
+  });
+
+  it("merges settings patches into the latest persisted revision without stale-field overwrite", async () => {
+    const storage = new MemoryStorage();
+    const repository = new LumiStageRepository(storage);
+    const initial = await repository.getSettings("user");
+    const selected = await repository.patchSettings("user", {
+      detection: {
+        connectionId: "detector-connection",
+        model: "detector-model",
+      },
+    });
+    expect(selected.revision).toBe(1);
+
+    const appearance = await repository.patchSettings("user", {
+      appearance: { opacity: 0.55 },
+    });
+    expect(appearance).toEqual(expect.objectContaining({
+      revision: 2,
+      detection: expect.objectContaining({
+        connectionId: "detector-connection",
+        model: "detector-model",
+      }),
+      appearance: expect.objectContaining({ opacity: 0.55 }),
+    }));
+    expect(appearance.detection).not.toEqual(initial.detection);
+  });
+
+  it("queues canonical settings reads behind an in-progress patch write", async () => {
+    const storage = new MemoryStorage();
+    const repository = new LumiStageRepository(storage);
+    let releaseWrite: () => void = () => {};
+    storage.writeBarrier = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    const patch = repository.patchSettings("user", {
+      detection: { model: "serialized-model" },
+    });
+    const read = repository.getSettings("user");
+    let readSettled = false;
+    void read.finally(() => { readSettled = true; });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(readSettled).toBe(false);
+
+    releaseWrite();
+    await expect(patch).resolves.toEqual(expect.objectContaining({ revision: 1 }));
+    await expect(read).resolves.toEqual(expect.objectContaining({
+      revision: 1,
+      detection: expect.objectContaining({ model: "serialized-model" }),
+    }));
   });
 
   it("owns timeline revision increments instead of trusting caller values", async () => {

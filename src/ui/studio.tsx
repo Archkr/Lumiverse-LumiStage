@@ -1,5 +1,5 @@
 import type { ComponentChildren, JSX } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   allVariants,
   applyBatchMutation,
@@ -13,6 +13,7 @@ import type {
   BatchMutationV2,
   CharacterProfileV2,
   ExpressionSlotV2,
+  LumiStageSettingsPatchV2,
   LumiStageSettingsV2,
   OutfitFolderV2,
   StageVariantV2,
@@ -993,25 +994,153 @@ function DiagnosticsPanel({ client }: { client: LumiStageClient }) {
   );
 }
 
+function mergeSettingsPatches(
+  first: LumiStageSettingsPatchV2,
+  second: LumiStageSettingsPatchV2,
+): LumiStageSettingsPatchV2 {
+  return {
+    ...(first.detection || second.detection
+      ? { detection: { ...first.detection, ...second.detection } }
+      : {}),
+    ...(first.appearance || second.appearance
+      ? { appearance: { ...first.appearance, ...second.appearance } }
+      : {}),
+    ...("preloadAdjacent" in second
+      ? { preloadAdjacent: second.preloadAdjacent }
+      : "preloadAdjacent" in first
+        ? { preloadAdjacent: first.preloadAdjacent }
+        : {}),
+  };
+}
+
+function applySettingsPatch(
+  settings: LumiStageSettingsV2,
+  patch: LumiStageSettingsPatchV2,
+): LumiStageSettingsV2 {
+  return {
+    ...structuredClone(settings),
+    detection: patch.detection
+      ? { ...settings.detection, ...patch.detection }
+      : settings.detection,
+    appearance: patch.appearance
+      ? { ...settings.appearance, ...patch.appearance }
+      : settings.appearance,
+    preloadAdjacent: patch.preloadAdjacent ?? settings.preloadAdjacent,
+  };
+}
+
+function hasSettingsPatch(patch: LumiStageSettingsPatchV2): boolean {
+  return !!(
+    (patch.detection && Object.keys(patch.detection).length)
+    || (patch.appearance && Object.keys(patch.appearance).length)
+    || "preloadAdjacent" in patch
+  );
+}
+
 function SettingsView({ client }: { client: LumiStageClient }) {
   const { backend } = useClientState(client);
   const [draft, setDraft] = useState<LumiStageSettingsV2>(() => structuredClone(backend.settings));
   const [section, setSection] = useState<"detection" | "stage" | "data">("detection");
   const [dirty, setDirty] = useState(false);
-  const [conflict, setConflict] = useState(false);
-  useEffect(() => {
-    if (backend.settings.revision === draft.revision) return;
-    if (dirty) {
-      setConflict(true);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const draftRef = useRef(draft);
+  const pendingPatch = useRef<LumiStageSettingsPatchV2>({});
+  const queuedPatches = useRef<LumiStageSettingsPatchV2[]>([]);
+  const inFlightPatch = useRef<LumiStageSettingsPatchV2>({});
+  const saveTail = useRef<Promise<void>>(Promise.resolve());
+  const saveTimer = useRef<number | null>(null);
+  const mounted = useRef(true);
+  draftRef.current = draft;
+
+  const combinedPendingPatch = () => {
+    const queued = queuedPatches.current.reduce(
+      (combined, patch) => mergeSettingsPatches(combined, patch),
+      inFlightPatch.current,
+    );
+    return mergeSettingsPatches(queued, pendingPatch.current);
+  };
+
+  const reconcileDraft = (settings: LumiStageSettingsV2) => {
+    const next = applySettingsPatch(settings, combinedPendingPatch());
+    draftRef.current = next;
+    if (mounted.current) setDraft(next);
+  };
+
+  const flushSettings = async (): Promise<void> => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const patch = pendingPatch.current;
+    if (!hasSettingsPatch(patch)) {
+      await saveTail.current;
       return;
     }
-    setDraft(structuredClone(backend.settings));
-    setDirty(false);
-    setConflict(false);
-  }, [backend.settings.revision, draft.revision, dirty]);
-  const edit = (settings: LumiStageSettingsV2) => {
-    setDraft(settings);
+    pendingPatch.current = {};
+    queuedPatches.current.push(patch);
+    const run = async () => {
+      const queuedIndex = queuedPatches.current.indexOf(patch);
+      if (queuedIndex >= 0) queuedPatches.current.splice(queuedIndex, 1);
+      inFlightPatch.current = patch;
+      if (mounted.current) setSaveState("saving");
+      try {
+        const saved = await client.patchSettings(patch);
+        inFlightPatch.current = {};
+        reconcileDraft(saved);
+        const stillPending = hasSettingsPatch(pendingPatch.current)
+          || queuedPatches.current.length > 0;
+        if (mounted.current) {
+          setDirty(stillPending);
+          setSaveState(stillPending ? "saving" : "saved");
+        }
+      } catch (error) {
+        inFlightPatch.current = {};
+        pendingPatch.current = mergeSettingsPatches(patch, pendingPatch.current);
+        if (mounted.current) {
+          setDirty(true);
+          setSaveState("error");
+          client.notify("error", error instanceof Error ? error.message : "Could not save LumiStage settings.");
+        }
+        throw error;
+      }
+    };
+    const queued = saveTail.current.catch(() => undefined).then(run);
+    saveTail.current = queued;
+    await queued;
+  };
+
+  const scheduleSave = (immediate = false) => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     setDirty(true);
+    setSaveState("saving");
+    if (immediate) {
+      void flushSettings().catch(() => undefined);
+      return;
+    }
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      void flushSettings().catch(() => undefined);
+    }, 220);
+  };
+
+  useEffect(() => {
+    if (backend.settings.revision <= draftRef.current.revision) return;
+    reconcileDraft(backend.settings);
+  }, [backend.settings.revision]);
+
+  useEffect(() => () => {
+    mounted.current = false;
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    void flushSettings().catch(() => undefined);
+  }, []);
+
+  const edit = (patch: LumiStageSettingsPatchV2, immediate = false) => {
+    if (!hasSettingsPatch(patch)) return;
+    pendingPatch.current = mergeSettingsPatches(pendingPatch.current, patch);
+    const settings = applySettingsPatch(draftRef.current, patch);
+    draftRef.current = settings;
+    setDraft(settings);
+    scheduleSave(immediate);
   };
   const connections = [
     { value: "", label: "Use default Lumiverse connection", sublabel: "Follows the host backend default" },
@@ -1025,12 +1154,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
   const modelConnectionId = draft.detection.connectionId ?? defaultConnectionId;
   async function save() {
     try {
-      const expectedRevision = Math.max(draft.revision, backend.settings.revision);
-      const candidate = { ...structuredClone(draft), revision: expectedRevision };
-      const saved = await client.saveSettings(candidate, expectedRevision);
-      setDraft(structuredClone(saved));
-      setDirty(false);
-      setConflict(false);
+      await flushSettings();
       client.notify("success", "LumiStage settings saved.");
     } catch (error) {
       client.notify("error", error instanceof Error ? error.message : "Could not save settings.");
@@ -1044,17 +1168,6 @@ function SettingsView({ client }: { client: LumiStageClient }) {
         description="Connection, detection, stage presentation, archives, and health in one focused workspace."
         actions={<Button variant="primary" icon="check" disabled={!dirty} onClick={() => void save()}>Save settings</Button>}
       />
-      {conflict && (
-        <div class="ls-validation-note" data-tone="warning">
-          <Icon name="warning" size={16} />
-          <span>Settings changed elsewhere. Save applies your preserved draft to the latest revision, or reload to discard it.</span>
-          <Button size="small" onClick={() => {
-            setDraft(structuredClone(backend.settings));
-            setDirty(false);
-            setConflict(false);
-          }}>Reload settings</Button>
-        </div>
-      )}
       <div class="ls-settings-layout">
         <nav class="ls-settings-nav" aria-label="Settings sections">
           <button type="button" data-active={section === "detection"} onClick={() => setSection("detection")}><Icon name="automation" size={17} /><span><strong>Detection</strong><small>Connection and confidence</small></span></button>
@@ -1071,7 +1184,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     client={client}
                     label="Automatic detection"
                     checked={draft.detection.enabled}
-                    onChange={(enabled) => edit({ ...draft, detection: { ...draft.detection, enabled } })}
+                    onChange={(enabled) => edit({ detection: { enabled } })}
                   />
                 </div>
                 <div class="ls-settings-form-grid">
@@ -1082,9 +1195,8 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                       value={draft.detection.connectionId ?? ""}
                       options={connections}
                       onChange={(connectionId) => edit({
-                        ...draft,
-                        detection: { ...draft.detection, connectionId: connectionId || null, model: null },
-                      })}
+                        detection: { connectionId: connectionId || null, model: null },
+                      }, true)}
                     />
                   </Field>
                   <Field label="Model" hint="The native picker reads the selected connection’s catalog.">
@@ -1093,9 +1205,23 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                       value={draft.detection.model ?? ""}
                       connectionId={modelConnectionId}
                       disabled={!modelConnectionId}
-                      onChange={(model) => edit({ ...draft, detection: { ...draft.detection, model: model || null } })}
+                      onChange={(model) => edit({ detection: { model: model || null } })}
+                      onCommit={() => void flushSettings().catch(() => undefined)}
                     />
                   </Field>
+                </div>
+                <div class="ls-detector-save-state" data-state={saveState}>
+                  <Icon
+                    name={saveState === "error" ? "warning" : saveState === "saving" ? "refresh" : "success"}
+                    size={14}
+                  />
+                  <span>
+                    {saveState === "error"
+                      ? "Detector settings were not saved. Use Save settings to retry."
+                      : saveState === "saving"
+                        ? "Saving detector settings…"
+                        : `Saved detector model: ${backend.settings.detection.model || "connection default"}`}
+                  </span>
                 </div>
                 <SettingRow title="Context window" description="Recent chat messages supplied to the detector.">
                   <HostNumber
@@ -1103,7 +1229,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     value={draft.detection.contextMessages}
                     min={1}
                     max={20}
-                    onChange={(contextMessages) => edit({ ...draft, detection: { ...draft.detection, contextMessages } })}
+                    onChange={(contextMessages) => edit({ detection: { contextMessages } })}
                   />
                 </SettingRow>
                 <HostRange
@@ -1115,11 +1241,20 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                   suffix="%"
                   label="Confidence threshold"
                   hint="Below this threshold the complete prior stage state is preserved."
-                  onChange={(confidence) => edit({ ...draft, detection: { ...draft.detection, confidence: confidence / 100 } })}
+                  onChange={(confidence) => edit({ detection: { confidence: confidence / 100 } })}
                 />
                 <div class="ls-settings-inline-actions">
                   <Button icon="settings" onClick={() => client.send({ type: "open-connections" })}>Manage connections</Button>
-                  <Button icon="refresh" disabled={!backend.activeChatId} onClick={() => void client.analyzeNow(draft.detection).catch(() => undefined)}>Analyze current reply</Button>
+                  <Button
+                    icon="refresh"
+                    disabled={!backend.activeChatId}
+                    onClick={() => void (async () => {
+                      await flushSettings();
+                      await client.analyzeNow();
+                    })().catch(() => undefined)}
+                  >
+                    Analyze current reply
+                  </Button>
                 </div>
               </section>
             </>
@@ -1136,8 +1271,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     label="Transition"
                     value={draft.appearance.transition}
                     onChange={(transition) => edit({
-                      ...draft,
-                      appearance: { ...draft.appearance, transition: transition as LumiStageSettingsV2["appearance"]["transition"] },
+                      appearance: { transition: transition as LumiStageSettingsV2["appearance"]["transition"] },
                     })}
                     options={[
                       { value: "crossfade", label: "Crossfade" },
@@ -1153,24 +1287,23 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     min={0}
                     max={2000}
                     step={20}
-                    onChange={(transitionMs) => edit({ ...draft, appearance: { ...draft.appearance, transitionMs } })}
+                    onChange={(transitionMs) => edit({ appearance: { transitionMs } })}
                   />
                 </Field>
               </div>
-              <HostRange client={client} value={Math.round(draft.appearance.opacity * 100)} min={10} max={100} step={5} suffix="%" label="Stage opacity" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, opacity: value / 100 } })} />
-              <HostRange client={client} value={Math.round(draft.appearance.idleOpacity * 100)} min={5} max={100} step={5} suffix="%" label="Unfocused character opacity" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, idleOpacity: value / 100 } })} />
-              <HostRange client={client} value={Math.round(draft.appearance.focusedScale * 100)} min={80} max={130} step={1} suffix="%" label="Focused character scale" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, focusedScale: value / 100 } })} />
-              <HostRange client={client} value={Math.round(draft.appearance.ensembleOverlap * 100)} min={0} max={80} step={5} suffix="%" label="Ensemble overlap" onChange={(value) => edit({ ...draft, appearance: { ...draft.appearance, ensembleOverlap: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.opacity * 100)} min={10} max={100} step={5} suffix="%" label="Stage opacity" onChange={(value) => edit({ appearance: { opacity: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.idleOpacity * 100)} min={5} max={100} step={5} suffix="%" label="Unfocused character opacity" onChange={(value) => edit({ appearance: { idleOpacity: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.focusedScale * 100)} min={80} max={130} step={1} suffix="%" label="Focused character scale" onChange={(value) => edit({ appearance: { focusedScale: value / 100 } })} />
+              <HostRange client={client} value={Math.round(draft.appearance.ensembleOverlap * 100)} min={0} max={80} step={5} suffix="%" label="Ensemble overlap" onChange={(value) => edit({ appearance: { ensembleOverlap: value / 100 } })} />
               <SettingRow title="Captions" description="Show resolved names beneath stage sprites.">
-                <HostSwitch client={client} label="Captions" checked={draft.appearance.showCaptions} onChange={(showCaptions) => edit({ ...draft, appearance: { ...draft.appearance, showCaptions } })} />
+                <HostSwitch client={client} label="Captions" checked={draft.appearance.showCaptions} onChange={(showCaptions) => edit({ appearance: { showCaptions } })} />
               </SettingRow>
               <SettingRow title="Stage chrome" description="Show the compact live header and controls.">
-                <HostSwitch client={client} label="Stage chrome" checked={draft.appearance.showChrome} onChange={(showChrome) => edit({ ...draft, appearance: { ...draft.appearance, showChrome } })} />
+                <HostSwitch client={client} label="Stage chrome" checked={draft.appearance.showChrome} onChange={(showChrome) => edit({ appearance: { showChrome } })} />
               </SettingRow>
               <div class="ls-settings-inline-actions">
                 <Button onClick={() => edit({
-                  ...draft,
-                  appearance: { ...draft.appearance, width: 320, height: 420, x: -1, y: -1, fullscreen: false },
+                  appearance: { width: 320, height: 420, x: -1, y: -1, fullscreen: false },
                 })}>Reset size and position</Button>
               </div>
             </section>

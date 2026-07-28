@@ -35,12 +35,14 @@ describe("native host controls", () => {
       ctx: { components: { mountModelCombobox } },
     } as never;
     const onChange = vi.fn();
+    const onCommit = vi.fn();
     const view = render(
       <HostModelPicker
         client={client}
         value="model-old"
         connectionId="connection-a"
         onChange={onChange}
+        onCommit={onCommit}
       />,
     );
 
@@ -48,6 +50,8 @@ describe("native host controls", () => {
     handleValue = "model-new";
     fireEvent.input(view.getByTestId("native-model-input"));
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("model-new"));
+    fireEvent.focusOut(view.getByTestId("native-model-input"));
+    await waitFor(() => expect(onCommit).toHaveBeenCalledWith("model-new"));
 
     view.rerender(
       <HostModelPicker
@@ -55,6 +59,7 @@ describe("native host controls", () => {
         value="model-new"
         connectionId="connection-a"
         onChange={onChange}
+        onCommit={onCommit}
       />,
     );
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ value: "model-new" }));

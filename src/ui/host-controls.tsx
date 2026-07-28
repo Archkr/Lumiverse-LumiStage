@@ -122,6 +122,7 @@ export function HostModelPicker(props: {
   value: string;
   connectionId: string | null;
   onChange: (value: string) => void;
+  onCommit?: (value: string) => void;
   disabled?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -138,14 +139,18 @@ export function HostModelPicker(props: {
     if (!root.current) return;
     const target = root.current;
     let syncTimer: number | null = null;
-    const syncFromHandle = () => {
+    const syncFromHandle = (commit = false) => {
       if (syncTimer !== null) window.clearTimeout(syncTimer);
       syncTimer = window.setTimeout(() => {
         syncTimer = null;
         const value = handle.current?.getValue();
-        if (typeof value === "string") forwardValue(value);
+        if (typeof value !== "string") return;
+        forwardValue(value);
+        if (commit) latest.current.onCommit?.(value);
       }, 0);
     };
+    const syncInput = () => syncFromHandle(false);
+    const syncCommit = () => syncFromHandle(true);
     handle.current = props.client.ctx.components.mountModelCombobox(root.current, {
       value: props.value,
       connection: props.connectionId
@@ -158,14 +163,16 @@ export function HostModelPicker(props: {
       disabled: props.disabled,
       onChange: forwardValue,
     });
-    target.addEventListener("input", syncFromHandle);
-    target.addEventListener("change", syncFromHandle);
-    target.addEventListener("click", syncFromHandle);
+    target.addEventListener("input", syncInput);
+    target.addEventListener("change", syncCommit);
+    target.addEventListener("click", syncCommit);
+    target.addEventListener("focusout", syncCommit);
     return () => {
       if (syncTimer !== null) window.clearTimeout(syncTimer);
-      target.removeEventListener("input", syncFromHandle);
-      target.removeEventListener("change", syncFromHandle);
-      target.removeEventListener("click", syncFromHandle);
+      target.removeEventListener("input", syncInput);
+      target.removeEventListener("change", syncCommit);
+      target.removeEventListener("click", syncCommit);
+      target.removeEventListener("focusout", syncCommit);
       handle.current?.destroy();
       handle.current = null;
     };

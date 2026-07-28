@@ -57,6 +57,7 @@ if (manifest.minimum_lumiverse_version !== "1.1.0") violations.push("spindle.jso
 const backend = await readFile(resolve(root, "src/backend.ts"), "utf8");
 const detector = await readFile(resolve(root, "src/detector.ts"), "utf8");
 const frontend = await readFile(resolve(root, "src/frontend.tsx"), "utf8");
+const storage = await readFile(resolve(root, "src/storage.ts"), "utf8");
 const backendBundle = await readFile(resolve(root, "dist/backend.js"), "utf8");
 const frontendBundle = await readFile(resolve(root, "dist/frontend.js"), "utf8");
 const studio = await readFile(resolve(root, "src/ui/studio.tsx"), "utf8");
@@ -83,6 +84,15 @@ for (const [label, text] of [["src/detector.ts", detector], ["dist/backend.js", 
 }
 if (!backend.includes("spindle.generate.quiet") || backend.includes("spindle.generate.raw")) {
   violations.push("backend: every detector request must use the connection-aware quiet dispatch");
+}
+if (!backend.includes('message.type === "patch-settings"') || !backend.includes("invalidateDetectorSettings(userId)")) {
+  violations.push("backend: detector settings patches must invalidate obsolete automatic work");
+}
+if (storage.includes("settingsCache")) {
+  violations.push("storage: detector settings must be read from serialized canonical user storage");
+}
+if (!studio.includes("await flushSettings()") || studio.includes("client.analyzeNow(draft.detection)")) {
+  violations.push("frontend: manual analysis must flush and use persisted detector settings");
 }
 if (/connection_id:[^\n]*\n\s*model:\s*settings\.detection\.model[^\n]*\n\s*parameters:/m.test(detector)) {
   violations.push("src/detector.ts: selected model must not use the ignored top-level quiet-call field");

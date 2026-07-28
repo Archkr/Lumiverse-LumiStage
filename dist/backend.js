@@ -1850,7 +1850,6 @@ var LumiStageRepository = class {
     this.storage = storage;
   }
   storage;
-  settingsCache = /* @__PURE__ */ new Map();
   profileCache = /* @__PURE__ */ new Map();
   timelineCache = /* @__PURE__ */ new Map();
   writes = /* @__PURE__ */ new Map();
@@ -1873,11 +1872,8 @@ var LumiStageRepository = class {
     const old = await this.storage.getJson(oldPath, { fallback: null, userId });
     return { raw: old, migrated: !!old };
   }
-  async getSettings(userId) {
+  async readSettings(userId) {
     const path = settingsPath();
-    const key = this.key(userId, path);
-    const cached = this.settingsCache.get(key);
-    if (cached) return structuredClone(cached);
     const { raw, migrated } = await this.readCurrentOrOld(
       path,
       oldSettingsPath(),
@@ -1885,14 +1881,17 @@ var LumiStageRepository = class {
     );
     const settings = raw ? normalizeSettings(raw) : defaultSettings();
     if (migrated) await this.storage.setJson(path, settings, { indent: 2, userId });
-    this.settingsCache.set(key, settings);
     return structuredClone(settings);
+  }
+  async getSettings(userId) {
+    const key = this.key(userId, settingsPath());
+    return this.enqueue(key, () => this.readSettings(userId));
   }
   async saveSettings(userId, value, expectedRevision) {
     const path = settingsPath();
     const key = this.key(userId, path);
     return this.enqueue(key, async () => {
-      const current = await this.getSettings(userId);
+      const current = await this.readSettings(userId);
       if (current.revision !== expectedRevision) throw new RevisionConflict(current.revision);
       const settings = normalizeSettings({
         ...value,
@@ -1900,7 +1899,23 @@ var LumiStageRepository = class {
         updatedAt: Date.now()
       });
       await this.storage.setJson(path, settings, { indent: 2, userId });
-      this.settingsCache.set(key, settings);
+      return structuredClone(settings);
+    });
+  }
+  async patchSettings(userId, patch) {
+    const path = settingsPath();
+    const key = this.key(userId, path);
+    return this.enqueue(key, async () => {
+      const current = await this.readSettings(userId);
+      const settings = normalizeSettings({
+        ...current,
+        detection: patch.detection ? { ...current.detection, ...patch.detection } : current.detection,
+        appearance: patch.appearance ? { ...current.appearance, ...patch.appearance } : current.appearance,
+        preloadAdjacent: patch.preloadAdjacent ?? current.preloadAdjacent,
+        revision: current.revision + 1,
+        updatedAt: Date.now()
+      });
+      await this.storage.setJson(path, settings, { indent: 2, userId });
       return structuredClone(settings);
     });
   }
@@ -1998,7 +2013,7 @@ var LumiStageRepository = class {
     return profiles;
   }
   clearUser(userId) {
-    for (const cache of [this.settingsCache, this.profileCache, this.timelineCache]) {
+    for (const cache of [this.profileCache, this.timelineCache]) {
       for (const key of cache.keys()) {
         if (key.startsWith(`${userId}:`)) cache.delete(key);
       }
@@ -2169,6 +2184,7 @@ var lastDetection = /* @__PURE__ */ new Map();
 var detectorFlights = /* @__PURE__ */ new Map();
 var recentDetectorRuns = /* @__PURE__ */ new Map();
 var lastDetectorDispatch = /* @__PURE__ */ new Map();
+var detectorSettingsEpochs = /* @__PURE__ */ new Map();
 var mediaViewCache = /* @__PURE__ */ new Map();
 var diagnosticCounters = /* @__PURE__ */ new Map();
 var onEvent = spindle.on;
@@ -2193,9 +2209,33 @@ function settleBackground(operation) {
   void operation.catch(() => void 0);
 }
 function countersFor(userId) {
-  const current = diagnosticCounters.get(userId) ?? { revisionConflicts: 0, cleanupFailures: [] };
+  const current = diagnosticCounters.get(userId) ?? {
+    revisionConflicts: 0,
+    obsoleteDetectorCancellations: 0,
+    cleanupFailures: []
+  };
   diagnosticCounters.set(userId, current);
   return current;
+}
+var ObsoleteDetectorRun = class extends Error {
+  constructor() {
+    super("Detector settings changed before this analysis completed.");
+    this.name = "ObsoleteDetectorRun";
+  }
+};
+function detectorSettingsEpoch(userId) {
+  return detectorSettingsEpochs.get(userId) ?? 0;
+}
+function invalidateDetectorSettings(userId) {
+  detectorSettingsEpochs.set(userId, detectorSettingsEpoch(userId) + 1);
+  for (const key of recentDetectorRuns.keys()) {
+    if (key.startsWith(`${userId}:`)) recentDetectorRuns.delete(key);
+  }
+  for (const flight of detectorFlights.values()) {
+    if (flight.userId !== userId || flight.controller.signal.aborted) continue;
+    countersFor(userId).obsoleteDetectorCancellations += 1;
+    flight.controller.abort(new ObsoleteDetectorRun());
+  }
 }
 function trackCleanup(userId, label, operation) {
   void operation.catch((error) => {
@@ -2476,14 +2516,14 @@ async function rebuildTimeline(timeline, catalog, settings, messages) {
   })));
   return replayTimeline(timeline, catalog, settings, keys);
 }
-async function analyzeLatest(userId, chatId, force = false, detectionOverride, expectedMessageId, trigger = force ? "manual" : "completion") {
+async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageId, trigger = force ? "manual" : "completion") {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
     await sendState(userId).catch(() => void 0);
     return;
   }
-  const persistedSettings = await repository.getSettings(userId);
-  const settings = detectionOverride ? normalizeSettings({ ...persistedSettings, detection: detectionOverride }) : persistedSettings;
+  const settings = await repository.getSettings(userId);
+  const settingsEpoch = detectorSettingsEpoch(userId);
   if (!settings.detection.enabled && !force) return;
   const dispatch = await resolveDetectorDispatch(userId, settings.detection);
   const set = await profilesForChat(userId, chatId);
@@ -2511,6 +2551,7 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
     overrides: timeline.manualOverrides,
     recentMessages,
     latest: { id: latest.id, swipeId: latest.swipeId, contentHash },
+    settingsRevision: settings.revision,
     dispatch: {
       configuredConnectionId: dispatch.configuredConnectionId,
       resolvedConnectionId: dispatch.resolvedConnectionId,
@@ -2555,8 +2596,11 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
     if (!flight) {
       const dispatchDiagnostic = {
         ...dispatch,
+        dispatchId: crypto.randomUUID(),
         trigger,
         messageId: latest.id,
+        settingsRevision: settings.revision,
+        settingsEpoch,
         requestFingerprint,
         providerInvoked: false,
         responseProvider: null,
@@ -2567,14 +2611,17 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
         error: null
       };
       lastDetectorDispatch.set(queueKey(userId, chatId), dispatchDiagnostic);
+      const controller = new AbortController();
       const started = (async () => {
         try {
+          if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
           dispatchDiagnostic.providerInvoked = true;
           const response = await generateDetector(
             userId,
             request,
-            AbortSignal.timeout(6e4)
+            AbortSignal.any([controller.signal, AbortSignal.timeout(6e4)])
           );
+          if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
           dispatchDiagnostic.responseProvider = response.provider ?? null;
           dispatchDiagnostic.responseModel = response.model ?? null;
           const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
@@ -2602,19 +2649,29 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
             completedAt: Date.now()
           };
         } catch (error) {
-          dispatchDiagnostic.status = "error";
+          const obsolete = error instanceof ObsoleteDetectorRun || settingsEpoch !== detectorSettingsEpoch(userId);
+          dispatchDiagnostic.status = obsolete ? "cancelled" : "error";
           dispatchDiagnostic.completedAt = Date.now();
-          dispatchDiagnostic.error = error instanceof Error ? error.message : "Detector generation failed.";
+          dispatchDiagnostic.error = obsolete ? "Cancelled because detector settings changed." : error instanceof Error ? error.message : "Detector generation failed.";
+          if (obsolete) throw new ObsoleteDetectorRun();
           throw error;
         }
       })();
-      const tracked = started.finally(() => {
-        if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
-      });
+      const tracked = {
+        promise: started.finally(() => {
+          if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
+        }),
+        controller,
+        userId,
+        settingsEpoch
+      };
       detectorFlights.set(flightKey, tracked);
       flight = tracked;
     }
-    const outcome = await flight;
+    const outcome = await flight.promise;
+    if (settingsEpoch !== detectorSettingsEpoch(userId) || flight.settingsEpoch !== detectorSettingsEpoch(userId)) {
+      throw new ObsoleteDetectorRun();
+    }
     record2 = outcome.record;
     detectorInputTokens = outcome.detectorInputTokens;
     recentDetectorRuns.set(flightKey, outcome);
@@ -2623,16 +2680,30 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
       if (recent.completedAt < cutoff) recentDetectorRuns.delete(key);
     }
   }
+  if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   timeline.decisions = upsertDecision(timeline.decisions, record2);
   timeline.manualOverrides = consumeOnceOverrides(timeline.manualOverrides);
   timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
+  if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
+  if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   lastDetection.set(queueKey(userId, chatId), {
     status: "success",
     message: `Stage settled for ${record2.decision.focusedCharacterIds.length || record2.decision.characters.length} character(s).${detectorInputTokens ? ` Detector input: ${detectorInputTokens.toLocaleString()} tokens.` : ""}`,
     at: Date.now()
   });
   await sendState(userId).catch(() => void 0);
+}
+async function analyzeLatest(userId, chatId, force = false, expectedMessageId, trigger = force ? "manual" : "completion") {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await analyzeLatestOnce(userId, chatId, force, expectedMessageId, trigger);
+      return;
+    } catch (error) {
+      if (!(error instanceof ObsoleteDetectorRun)) throw error;
+    }
+  }
+  throw new Error("Detector settings kept changing while analysis was starting. Try again once saving is complete.");
 }
 function scheduleAnalysis(userId, chatId, delay = 120, force = false, expectedMessageId, trigger = force ? "manual" : "completion") {
   const key = queueKey(userId, chatId);
@@ -2645,7 +2716,6 @@ function scheduleAnalysis(userId, chatId, delay = 120, force = false, expectedMe
       userId,
       chatId,
       force,
-      void 0,
       expectedMessageId,
       trigger
     ).catch(async (error) => {
@@ -2973,7 +3043,25 @@ async function handleMessage(message, userId) {
     return;
   }
   if (message.type === "save-settings") {
+    const before = await repository.getSettings(userId);
     const saved = await repository.saveSettings(userId, message.settings, message.expectedRevision);
+    if (JSON.stringify(before.detection) !== JSON.stringify(saved.detection)) {
+      invalidateDetectorSettings(userId);
+    }
+    send({
+      type: "operation-complete",
+      requestId: message.requestId,
+      revision: saved.revision,
+      result: { settings: saved }
+    }, userId);
+    await sendState(userId).catch(() => void 0);
+    return;
+  }
+  if (message.type === "patch-settings") {
+    const saved = await repository.patchSettings(userId, message.patch);
+    if (message.patch.detection && Object.keys(message.patch.detection).length > 0) {
+      invalidateDetectorSettings(userId);
+    }
     send({
       type: "operation-complete",
       requestId: message.requestId,
@@ -3046,7 +3134,7 @@ async function handleMessage(message, userId) {
     await enqueueAnalysis(
       userId,
       message.chatId,
-      () => analyzeLatest(userId, message.chatId, true, message.detection, void 0, "manual")
+      () => analyzeLatest(userId, message.chatId, true, void 0, "manual")
     );
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
@@ -3125,7 +3213,13 @@ async function handleMessage(message, userId) {
         queueDepth: context?.chatId ? queueDepth.get(queueKey(userId, context.chatId)) ?? 0 : 0
       },
       persistence: {
+        settingsRevision: settings.revision,
+        settingsUpdatedAt: settings.updatedAt,
+        configuredConnectionId: settings.detection.connectionId,
+        configuredModel: settings.detection.model,
+        detectorSettingsEpoch: detectorSettingsEpoch(userId),
         revisionConflicts: counters.revisionConflicts,
+        obsoleteDetectorCancellations: counters.obsoleteDetectorCancellations,
         cleanupFailures: [...counters.cleanupFailures]
       },
       connection: {
@@ -3137,8 +3231,11 @@ async function handleMessage(message, userId) {
         modelSource: settings.detection.model ? "configured" : "connection-default",
         latestDecisionModel: latestDecision?.model ?? null,
         lastDispatch: dispatchTrace ? {
+          dispatchId: dispatchTrace.dispatchId,
           trigger: dispatchTrace.trigger,
           messageId: dispatchTrace.messageId,
+          settingsRevision: dispatchTrace.settingsRevision,
+          settingsEpoch: dispatchTrace.settingsEpoch,
           configuredConnectionId: dispatchTrace.configuredConnectionId,
           resolvedConnectionId: dispatchTrace.resolvedConnectionId,
           resolvedConnectionName: dispatchTrace.resolvedConnectionName,
@@ -3286,8 +3383,10 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   for (const detectorKey of recentDetectorRuns.keys()) {
     if (detectorKey.startsWith(`${key}:`)) recentDetectorRuns.delete(detectorKey);
   }
-  for (const detectorKey of detectorFlights.keys()) {
-    if (detectorKey.startsWith(`${key}:`)) detectorFlights.delete(detectorKey);
+  for (const [detectorKey, flight] of detectorFlights) {
+    if (!detectorKey.startsWith(`${key}:`)) continue;
+    if (!flight.controller.signal.aborted) flight.controller.abort(new ObsoleteDetectorRun());
+    detectorFlights.delete(detectorKey);
   }
   queueDepth.delete(key);
   lastDetection.delete(key);

@@ -77,6 +77,12 @@ export interface LumiStageSettingsV2 {
   updatedAt: number;
 }
 
+export interface LumiStageSettingsPatchV2 {
+  detection?: Partial<DetectionSettingsV2>;
+  appearance?: Partial<StageAppearanceSettingsV2>;
+  preloadAdjacent?: number;
+}
+
 export interface CharacterStageStateV2 {
   characterId: string;
   outfitId: string | null;
@@ -233,11 +239,12 @@ export type FrontendToBackend =
   | { type: "ready"; chatId: string | null; characterId: string | null }
   | { type: "refresh"; chatId: string | null; characterId: string | null }
   | { type: "save-settings"; requestId: string; settings: LumiStageSettingsV2; expectedRevision: number }
+  | { type: "patch-settings"; requestId: string; patch: LumiStageSettingsPatchV2 }
   | { type: "save-profile"; requestId: string; profile: CharacterProfileV2; expectedRevision: number }
   | { type: "save-chat-layout"; requestId: string; chatId: string; layoutOverride: Partial<StageAppearanceSettingsV2> | null; expectedRevision: number }
   | { type: "apply-manual"; requestId: string; chatId: string; override: ManualOverrideV2 }
   | { type: "clear-manual"; requestId: string; chatId: string; characterId: string }
-  | { type: "analyze-now"; requestId: string; chatId: string; detection?: DetectionSettingsV2 }
+  | { type: "analyze-now"; requestId: string; chatId: string }
   | ({ type: "import-assets" } & ImportRequestV2)
   | { type: "restore-archive"; requestId: string; characterId: string; upload: ImportUploadV2; expectedRevision: number; confirmed: true }
   | { type: "discard-uploads"; requestId: string; uploadIds: string[] }
