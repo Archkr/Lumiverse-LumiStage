@@ -233,18 +233,20 @@ function stateSummary(
     expressionId: string | null;
     variantId: string | null;
   }>,
+  overrides: Record<string, ManualOverrideV2>,
 ): Array<Record<string, unknown>> {
   return Object.entries(states).flatMap(([characterId, state]) => {
     const profile = catalog.find((entry) => entry.characterId === characterId)?.profile;
     const outfit = profile?.outfits.find((item) => item.id === state.outfitId);
     const expression = outfit?.expressions.find((item) => item.id === state.expressionId);
-    return profile && outfit && expression
-      ? [{
-          characterId,
-          outfitName: outfit.name,
-          expressionName: expression.name,
-        }]
-      : [];
+    if (!profile || !outfit || !expression) return [];
+    const current = {
+      characterId,
+      outfitName: outfit.name,
+    };
+    return overrides[characterId]?.lock === "outfit"
+      ? [current]
+      : [{ ...current, expressionName: expression.name }];
   });
 }
 
@@ -297,12 +299,13 @@ export function buildDetectorRequest(
     "Outfits are selectable visual states. You may switch away from the current outfit whenever the completed scene supports another outfit.",
     "Current states are context, not locks. Only entries under Manual locks constrain outfit or sprite selection.",
     "An outfit lock fixes only outfitName. Within that outfit, choose any listed expressionName that matches the completed scene.",
+    "For an outfit-locked character, the prior expression is intentionally omitted. Re-evaluate expressionName from the completed scene instead of preserving the prior expression.",
     "A state lock fixes the exact outfitName and expressionName until it is cleared; LumiStage separately preserves its exact locked variant.",
     "Classify all relevant group-chat characters in this one call and identify the visual focus.",
     "Use the exact characterId from the catalog for each character and focusedCharacterIds entry.",
     "Confidence is 0..1 for the complete visible-state match.",
     `Catalog: ${JSON.stringify(detectorCatalog.map(characterSummary))}`,
-    `Current states: ${JSON.stringify(stateSummary(detectorCatalog, currentStates))}`,
+    `Current states: ${JSON.stringify(stateSummary(detectorCatalog, currentStates, overrides))}`,
     `Manual locks: ${JSON.stringify(overrideSummary(detectorCatalog, overrides))}`,
   ].join("\n");
   const messages = [

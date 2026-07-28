@@ -179,14 +179,33 @@ describe("detector contract", () => {
         createdAt: 1,
       },
     };
-    const outfitRequest = buildDetectorRequest(catalog, [], {}, settings, outfitLock);
+    const currentStates = {
+      "character-a": {
+        outfitId: "outfit-casual",
+        expressionId: "expression-neutral",
+        variantId: "variant-neutral-a",
+      },
+    };
+    const outfitRequest = buildDetectorRequest(
+      catalog,
+      [],
+      currentStates,
+      settings,
+      outfitLock,
+    );
     const outfitSystem = String(
       (outfitRequest.messages as Array<{ content: string }>)[0].content,
     );
+    const outfitCurrentStateLine = outfitSystem
+      .split("\n")
+      .find((line) => line.startsWith("Current states: "));
     const outfitLockLine = outfitSystem
       .split("\n")
       .find((line) => line.startsWith("Manual locks: "));
     expect(outfitSystem).toContain("An outfit lock fixes only outfitName");
+    expect(outfitSystem).toContain("the prior expression is intentionally omitted");
+    expect(outfitCurrentStateLine).toContain('"outfitName":"Casual"');
+    expect(outfitCurrentStateLine).not.toContain('"expressionName"');
     expect(outfitLockLine).toContain('"lock":"outfit"');
     expect(outfitLockLine).toContain('"outfitName":"Casual"');
     expect(outfitLockLine).not.toContain("Neutral");
@@ -238,17 +257,29 @@ describe("detector contract", () => {
       expressionId: "expression-happy",
     }));
 
-    const stateRequest = buildDetectorRequest(catalog, [], {}, settings, {
-      "character-a": {
-        ...outfitLock["character-a"],
-        lock: "state",
+    const stateRequest = buildDetectorRequest(
+      catalog,
+      [],
+      currentStates,
+      settings,
+      {
+        "character-a": {
+          ...outfitLock["character-a"],
+          lock: "state",
+        },
       },
-    });
+    );
+    const stateCurrentStateLine = String(
+      (stateRequest.messages as Array<{ content: string }>)[0].content,
+    )
+      .split("\n")
+      .find((line) => line.startsWith("Current states: "));
     const stateLockLine = String(
       (stateRequest.messages as Array<{ content: string }>)[0].content,
     )
       .split("\n")
       .find((line) => line.startsWith("Manual locks: "));
+    expect(stateCurrentStateLine).toContain('"expressionName":"Neutral"');
     expect(stateLockLine).toContain('"lock":"state"');
     expect(stateLockLine).toContain('"expressionName":"Neutral"');
     expect(stateLockLine).not.toContain("neutral-soft.png");
