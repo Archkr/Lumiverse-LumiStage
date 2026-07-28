@@ -22,6 +22,7 @@ describe("operator-scoped backend runtime", () => {
     const deleteMany = vi.fn(async () => undefined);
     const chatGetMessages = vi.fn(async (): Promise<Array<Record<string, unknown>>> => []);
     const generateQuiet = vi.fn();
+    const generateRaw = vi.fn();
     const uploadMany = vi.fn(async (items: unknown[]): Promise<Array<{ id?: string; error?: string }>> =>
       items.map((_item, index) => ({ id: `stored-image-${uploadMany.mock.calls.length}-${index}` })),
     );
@@ -46,7 +47,7 @@ describe("operator-scoped backend runtime", () => {
       chats: { get: chatsGet },
       chat: { getMessages: chatGetMessages },
       connections: { list: connectionsList },
-      generate: { quiet: generateQuiet },
+      generate: { quiet: generateQuiet, raw: generateRaw },
       uploads: {
         get: vi.fn(async (id: string) => staged.get(id) ?? null),
         delete: vi.fn(async (id: string) => { staged.delete(id); }),
@@ -399,7 +400,7 @@ describe("operator-scoped backend runtime", () => {
       }
       return completedMessages;
     });
-    generateQuiet.mockResolvedValue({
+    generateRaw.mockResolvedValue({
       tool_calls: [{
         name: "set_stage_state",
         args: {
@@ -434,9 +435,9 @@ describe("operator-scoped backend runtime", () => {
       messageId: "assistant-final",
     }, "user-a");
     await vi.waitFor(() => {
-      expect(generateQuiet).toHaveBeenCalledTimes(1);
+      expect(generateRaw).toHaveBeenCalledTimes(1);
     }, { timeout: 2_000 });
-    const detectorRequest = generateQuiet.mock.calls[0][0];
+    const detectorRequest = generateRaw.mock.calls[0][0];
     expect(detectorRequest.messages.map((message: { role: string }) => message.role)).toEqual([
       "system",
       "assistant",
@@ -449,9 +450,9 @@ describe("operator-scoped backend runtime", () => {
     expect(JSON.stringify(detectorRequest)).not.toContain('"files":');
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("This stale reply");
     expect(detectorRequest.connection_id).toBe("connection-a");
-    expect(detectorRequest.parameters).toEqual(expect.objectContaining({
-      model: "saved-model",
-    }));
+    expect(detectorRequest.model).toBe("saved-model");
+    expect(detectorRequest.parameters).not.toHaveProperty("model");
+    expect(generateQuiet).not.toHaveBeenCalled();
     const detectorSystem = String(detectorRequest.messages[0].content);
     const detectorCatalog = JSON.parse(
       detectorSystem
@@ -483,7 +484,7 @@ describe("operator-scoped backend runtime", () => {
       }));
     }, { timeout: 2_000 });
 
-    generateQuiet.mockClear();
+    generateRaw.mockClear();
     sendToFrontend.mockClear();
     await Promise.all([
       handleFrontend({
@@ -519,16 +520,17 @@ describe("operator-scoped backend runtime", () => {
         "user-a",
       );
     }
-    expect(generateQuiet).toHaveBeenCalledTimes(1);
-    expect(generateQuiet.mock.calls[0][0]).toEqual(expect.objectContaining({
+    expect(generateRaw).toHaveBeenCalledTimes(1);
+    expect(generateRaw.mock.calls[0][0]).toEqual(expect.objectContaining({
       connection_id: "connection-manual",
+      model: "manual-model",
       parameters: expect.objectContaining({
-        model: "manual-model",
         temperature: 0.2,
       }),
     }));
-    expect(generateQuiet.mock.calls[0][0].parameters).not.toHaveProperty("max_tokens");
-    expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
+    expect(generateRaw.mock.calls[0][0].parameters).not.toHaveProperty("max_tokens");
+    expect(generateRaw.mock.calls[0][0].parameters).not.toHaveProperty("model");
+    expect(generateQuiet).not.toHaveBeenCalled();
 
     eventHandlers.get("GENERATION_ENDED")?.({
       generationId: "generation-one",
@@ -536,7 +538,7 @@ describe("operator-scoped backend runtime", () => {
       messageId: "assistant-final",
     }, "user-a");
     await new Promise((resolve) => setTimeout(resolve, 240));
-    expect(generateQuiet).toHaveBeenCalledTimes(1);
+    expect(generateRaw).toHaveBeenCalledTimes(1);
 
     await handleFrontend({
       type: "analyze-now",
@@ -558,7 +560,26 @@ describe("operator-scoped backend runtime", () => {
       }),
       "user-a",
     );
-    expect(generateQuiet).toHaveBeenCalledTimes(1);
+    expect(generateRaw).toHaveBeenCalledTimes(1);
+
+    generateRaw.mockClear();
+    await handleFrontend({
+      type: "analyze-now",
+      requestId: "analyze-default-connection-model",
+      chatId: "chat-a",
+      detection: {
+        enabled: true,
+        connectionId: null,
+        model: "default-connection-override",
+        contextMessages: 3,
+        temperature: 0.2,
+        confidence: 0.7,
+      },
+    }, "user-a");
+    expect(generateRaw).toHaveBeenCalledWith(expect.objectContaining({
+      connection_id: "connection-a",
+      model: "default-connection-override",
+    }));
 
     await handleFrontend({ type: "open-connections" }, "user-a");
     expect(openDrawerTab).toHaveBeenCalledWith("connections", { userId: "user-a" });

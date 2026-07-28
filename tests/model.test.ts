@@ -219,6 +219,24 @@ describe("state resolution", () => {
       expressionId: "expression-happy",
       variantId: "variant-expression-happy",
     }));
+
+    const manuallyShifted = applyManualOverride(locked, catalog, {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
+      scope: "once",
+      lock: "state",
+      createdAt: 4,
+    }, settings, 4);
+    expect(manuallyShifted.manualOverrides["character-a"]).toEqual(
+      locked.manualOverrides["character-a"],
+    );
+    expect(manuallyShifted.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
+    }));
   });
 
   it("composes group-chat character states by real character ID", () => {

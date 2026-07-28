@@ -520,15 +520,24 @@ export function applyManualOverride(
   settings: LumiStageSettingsV2,
   now = Date.now(),
 ): ChatTimelineV2 {
-  const storedOverride: ManualOverrideV2 = override.lock === "outfit"
+  const existing = timeline.manualOverrides[override.characterId];
+  const retainExistingOutfitLock = (
+    existing?.scope === "locked"
+    && existing.lock === "outfit"
+    && existing.outfitId === override.outfitId
+    && override.scope === "once"
+    && override.lock === "state"
+  );
+  const persistentOverride = retainExistingOutfitLock ? existing : override;
+  const storedOverride: ManualOverrideV2 = persistentOverride.lock === "outfit"
     ? {
-        characterId: override.characterId,
-        outfitId: override.outfitId,
-        scope: override.scope,
-        lock: override.lock,
-        createdAt: override.createdAt,
+        characterId: persistentOverride.characterId,
+        outfitId: persistentOverride.outfitId,
+        scope: persistentOverride.scope,
+        lock: persistentOverride.lock,
+        createdAt: persistentOverride.createdAt,
       }
-    : override;
+    : persistentOverride;
   const manualOverrides = {
     ...timeline.manualOverrides,
     [override.characterId]: storedOverride,
@@ -536,15 +545,20 @@ export function applyManualOverride(
   const focusIds = timeline.snapshot.focusedCharacterIds.length
     ? timeline.snapshot.focusedCharacterIds
     : [override.characterId];
-  const selectedState = override.lock === "outfit"
-    && override.outfitId
-    && override.expressionId
-    && override.variantId
+  const profile = findCharacter(catalog, override.characterId)?.profile;
+  const selectedOutfit = profile?.outfits.find((item) => item.id === override.outfitId);
+  const selectedExpression = selectedOutfit?.expressions.find(
+    (item) => item.id === override.expressionId,
+  );
+  const selectedVariant = selectedExpression
+    ? orderedVariant(selectedExpression, override.variantId)
+    : null;
+  const selectedState = selectedOutfit && selectedExpression && selectedVariant
     ? [{
         characterId: override.characterId,
-        outfitId: override.outfitId,
-        expressionId: override.expressionId,
-        variantId: override.variantId,
+        outfitId: selectedOutfit.id,
+        expressionId: selectedExpression.id,
+        variantId: selectedVariant.id,
         confidence: 1,
       }]
     : [];

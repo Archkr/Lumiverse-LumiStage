@@ -158,6 +158,40 @@ async function connectionViews(userId: string): Promise<LlmConnectionView[]> {
   }));
 }
 
+async function generateDetector(
+  userId: string,
+  request: Record<string, unknown>,
+  settings: DetectionSettingsV2,
+  signal: AbortSignal,
+): Promise<DetectorResponse> {
+  const selectedModel = settings.model?.trim() || null;
+  if (!selectedModel) {
+    return (spindle.generate.quiet as unknown as (
+      input: Record<string, unknown>,
+    ) => Promise<DetectorResponse>)({ ...request, userId, signal });
+  }
+
+  let connectionId = settings.connectionId;
+  if (!connectionId) {
+    const connections = await spindle.connections.list(userId).catch(() => []);
+    connectionId = connections.find((connection) => connection.is_default)?.id ?? null;
+  }
+  if (!connectionId) {
+    throw new Error("Select a LumiStage detection connection before overriding its model.");
+  }
+
+  return (spindle.generate.raw as unknown as (
+    input: Record<string, unknown>,
+  ) => Promise<DetectorResponse>)({
+    ...request,
+    connection_id: connectionId,
+    provider: "",
+    model: selectedModel,
+    userId,
+    signal,
+  });
+}
+
 function queueKey(userId: string, chatId: string): string {
   return `${userId}:${chatId}`;
 }
@@ -500,15 +534,16 @@ async function analyzeLatest(
     detectorInputTokens = typeof estimatedInputTokens === "number"
       ? estimatedInputTokens
       : null;
-    const generationInput = { ...request, userId };
-    Object.assign(generationInput, { signal: AbortSignal.timeout(60_000) });
     const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
     let flight = detectorFlights.get(flightKey);
     if (!flight) {
       const started = (async (): Promise<DetectorRunOutcome> => {
-        const response = await (spindle.generate.quiet as unknown as (
-          input: Record<string, unknown>,
-        ) => Promise<DetectorResponse>)(generationInput);
+        const response = await generateDetector(
+          userId,
+          request,
+          settings.detection,
+          AbortSignal.timeout(60_000),
+        );
         const usedInputTokens = response.usage?.prompt_tokens
           ?? response.usage?.input_tokens
           ?? detectorInputTokens;

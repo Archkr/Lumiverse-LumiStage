@@ -70,17 +70,22 @@ if (!backend.includes('onEvent("GENERATION_STOPPED"')) violations.push("backend:
 if (!backend.includes("spindle.characters.get(characterId, userId)")) violations.push("backend: character reads must carry operator userId");
 if (!backend.includes("spindle.chats.get(chatId, userId)")) violations.push("backend: chat reads must carry operator userId");
 if (!backend.includes("spindle.connections.list(userId)")) violations.push("backend: connection reads must carry operator userId");
-if (!backend.includes("{ ...request, userId }")) violations.push("backend: detector generation must carry operator userId");
+if (!backend.includes("generateDetector(") || !backend.includes("userId, signal")) {
+  violations.push("backend: detector generation must carry operator userId and cancellation signal");
+}
 for (const [label, text] of [["src/detector.ts", detector], ["dist/backend.js", backendBundle]]) {
   if (text.includes("max_tokens")) {
     violations.push(`${label}: detector requests must not impose a max_tokens output cap`);
   }
-  if (!text.includes("{ model: settings.detection.model }")) {
-    violations.push(`${label}: selected detector model is not dispatched through quiet-call parameters`);
+  if (!text.includes("model: settings.detection.model")) {
+    violations.push(`${label}: selected detector model is missing from the authoritative dispatch request`);
   }
 }
-if (/^\s*model:\s*settings\.detection\.model\s*\?\?/m.test(detector)) {
-  violations.push("src/detector.ts: selected model is using the ignored top-level quiet-call field");
+if (!backend.includes("spindle.generate.raw") || !backend.includes("spindle.generate.quiet")) {
+  violations.push("backend: detector must use raw dispatch for model overrides and quiet dispatch for connection defaults");
+}
+if (/\.\.\.\(settings\.detection\.model\s*\?\s*\{\s*model:/m.test(detector)) {
+  violations.push("src/detector.ts: selected model must not be sent as a provider parameter");
 }
 if (!frontend.includes("width: 1440") || !frontend.includes("maxHeight: 980")) {
   violations.push("frontend: full Studio must use the large host modal");

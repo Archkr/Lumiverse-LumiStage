@@ -394,23 +394,32 @@ function isValidManualOverride(catalog, override) {
   return !!expression && (override.variantId == null || expression.variants.some((variant) => variant.id === override.variantId));
 }
 function applyManualOverride(timeline, catalog, override, settings, now = Date.now()) {
-  const storedOverride = override.lock === "outfit" ? {
-    characterId: override.characterId,
-    outfitId: override.outfitId,
-    scope: override.scope,
-    lock: override.lock,
-    createdAt: override.createdAt
-  } : override;
+  const existing = timeline.manualOverrides[override.characterId];
+  const retainExistingOutfitLock = existing?.scope === "locked" && existing.lock === "outfit" && existing.outfitId === override.outfitId && override.scope === "once" && override.lock === "state";
+  const persistentOverride = retainExistingOutfitLock ? existing : override;
+  const storedOverride = persistentOverride.lock === "outfit" ? {
+    characterId: persistentOverride.characterId,
+    outfitId: persistentOverride.outfitId,
+    scope: persistentOverride.scope,
+    lock: persistentOverride.lock,
+    createdAt: persistentOverride.createdAt
+  } : persistentOverride;
   const manualOverrides = {
     ...timeline.manualOverrides,
     [override.characterId]: storedOverride
   };
   const focusIds = timeline.snapshot.focusedCharacterIds.length ? timeline.snapshot.focusedCharacterIds : [override.characterId];
-  const selectedState = override.lock === "outfit" && override.outfitId && override.expressionId && override.variantId ? [{
+  const profile = findCharacter(catalog, override.characterId)?.profile;
+  const selectedOutfit = profile?.outfits.find((item) => item.id === override.outfitId);
+  const selectedExpression = selectedOutfit?.expressions.find(
+    (item) => item.id === override.expressionId
+  );
+  const selectedVariant = selectedExpression ? orderedVariant(selectedExpression, override.variantId) : null;
+  const selectedState = selectedOutfit && selectedExpression && selectedVariant ? [{
     characterId: override.characterId,
-    outfitId: override.outfitId,
-    expressionId: override.expressionId,
-    variantId: override.variantId,
+    outfitId: selectedOutfit.id,
+    expressionId: selectedExpression.id,
+    variantId: selectedVariant.id,
     confidence: 1
   }] : [];
   const decision = {
@@ -1717,9 +1726,9 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
     estimatedInputTokens,
     messages,
     connection_id: settings.detection.connectionId ?? void 0,
+    model: settings.detection.model ?? void 0,
     parameters: {
-      temperature: settings.detection.temperature,
-      ...settings.detection.model ? { model: settings.detection.model } : {}
+      temperature: settings.detection.temperature
     },
     reasoning: { source: "off" },
     tools
@@ -2180,6 +2189,28 @@ async function connectionViews(userId) {
     hasApiKey: connection.has_api_key
   }));
 }
+async function generateDetector(userId, request, settings, signal) {
+  const selectedModel = settings.model?.trim() || null;
+  if (!selectedModel) {
+    return spindle.generate.quiet({ ...request, userId, signal });
+  }
+  let connectionId = settings.connectionId;
+  if (!connectionId) {
+    const connections = await spindle.connections.list(userId).catch(() => []);
+    connectionId = connections.find((connection) => connection.is_default)?.id ?? null;
+  }
+  if (!connectionId) {
+    throw new Error("Select a LumiStage detection connection before overriding its model.");
+  }
+  return spindle.generate.raw({
+    ...request,
+    connection_id: connectionId,
+    provider: "",
+    model: selectedModel,
+    userId,
+    signal
+  });
+}
 function queueKey(userId, chatId) {
   return `${userId}:${chatId}`;
 }
@@ -2451,13 +2482,16 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
       ...request
     } = builtRequest;
     detectorInputTokens = typeof estimatedInputTokens === "number" ? estimatedInputTokens : null;
-    const generationInput = { ...request, userId };
-    Object.assign(generationInput, { signal: AbortSignal.timeout(6e4) });
     const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
     let flight = detectorFlights.get(flightKey);
     if (!flight) {
       const started = (async () => {
-        const response = await spindle.generate.quiet(generationInput);
+        const response = await generateDetector(
+          userId,
+          request,
+          settings.detection,
+          AbortSignal.timeout(6e4)
+        );
         const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
         const parsed = parseDetectorResponse(response, detectorCatalog);
         if (!parsed) throw new Error("The detector did not return a valid stage decision.");
