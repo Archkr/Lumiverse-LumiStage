@@ -221,8 +221,8 @@ describe("operator-scoped backend runtime", () => {
         revision: 0,
         detection: {
           enabled: true,
-          connectionId: null,
-          model: null,
+          connectionId: "connection-a",
+          model: "saved-model",
           contextMessages: 5,
           temperature: 0.1,
           confidence: 0.6,
@@ -364,6 +364,22 @@ describe("operator-scoped backend runtime", () => {
         createdAt: 2,
       },
     }, "lock-outfit-for-analysis");
+    const lockedState = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state");
+    expect(lockedState.state.timeline.manualOverrides["character-a"]).toEqual({
+      characterId: "character-a",
+      outfitId: automaticOutfit.id,
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 2,
+    });
+    expect(lockedState.state.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: automaticOutfit.id,
+      expressionId: lockedStartingExpression.id,
+      variantId: lockedStartingExpression.variants[0].id,
+    }));
     const completedMessages = [{
       id: "assistant-final",
       role: "assistant",
@@ -432,6 +448,10 @@ describe("operator-scoped backend runtime", () => {
     expect(JSON.stringify(detectorRequest)).not.toContain('"fileName":');
     expect(JSON.stringify(detectorRequest)).not.toContain('"files":');
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("This stale reply");
+    expect(detectorRequest.connection_id).toBe("connection-a");
+    expect(detectorRequest.parameters).toEqual(expect.objectContaining({
+      model: "saved-model",
+    }));
     const detectorSystem = String(detectorRequest.messages[0].content);
     const detectorCatalog = JSON.parse(
       detectorSystem

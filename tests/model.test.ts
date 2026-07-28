@@ -3,6 +3,7 @@ import {
   allVariants,
   applyBatchMutation,
   applyDecision,
+  applyManualOverride,
   buildCatalog,
   createProfile,
   createTimeline,
@@ -142,14 +143,14 @@ describe("state resolution", () => {
     const entry = buildCatalog([profile])[0];
     const settings = defaultSettings(1);
     const previous = resolveCharacterState(entry, null, null, null, settings, true);
-    const decision = {
+    const outfitDecision = {
       characterId: "character-a",
-      outfitId: "outfit-formal",
-      expressionId: "expression-formal",
-      variantId: "variant-expression-formal",
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
       confidence: 1,
     };
-    const outfitLocked = resolveCharacterState(entry, previous, decision, {
+    const outfitLocked = resolveCharacterState(entry, previous, outfitDecision, {
       characterId: "character-a",
       outfitId: "outfit-casual",
       expressionId: "expression-angry",
@@ -160,9 +161,10 @@ describe("state resolution", () => {
     }, settings, true);
     expect(outfitLocked).toEqual(expect.objectContaining({
       outfitId: "outfit-casual",
-      expressionId: "expression-angry",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
     }));
-    const stateLocked = resolveCharacterState(entry, previous, decision, {
+    const stateLocked = resolveCharacterState(entry, previous, outfitDecision, {
       characterId: "character-a",
       outfitId: "outfit-casual",
       expressionId: "expression-neutral",
@@ -172,6 +174,51 @@ describe("state resolution", () => {
       createdAt: 1,
     }, settings, true);
     expect(stateLocked?.variantId).toBe("variant-neutral-b");
+  });
+
+  it("stores an outfit-only lock without reasserting its starting expression", () => {
+    const profile = profileA();
+    const catalog = buildCatalog([profile]);
+    const settings = defaultSettings(1);
+    const timeline = createTimeline("chat", 1);
+    const locked = applyManualOverride(timeline, catalog, {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 2,
+    }, settings, 2);
+    expect(locked.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+    }));
+    expect(locked.manualOverrides["character-a"]).toEqual({
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 2,
+    });
+
+    const switched = applyDecision(locked.snapshot, catalog, {
+      schemaVersion: 2,
+      focusedCharacterIds: ["character-a"],
+      characters: [{
+        characterId: "character-a",
+        outfitId: "outfit-casual",
+        expressionId: "expression-happy",
+        variantId: "variant-expression-happy",
+        confidence: 1,
+      }],
+    }, locked.manualOverrides, settings, 3);
+    expect(switched.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
+    }));
   });
 
   it("composes group-chat character states by real character ID", () => {

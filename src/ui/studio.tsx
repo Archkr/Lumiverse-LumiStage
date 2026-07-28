@@ -1064,7 +1064,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
             <>
               <section class="ls-settings-card">
                 <div class="ls-settings-card-head">
-                  <div><span class="ls-kicker">Automatic direction</span><h3>Detection</h3><p>One call receives every outfit, expression, and sprite filename after a successful reply.</p></div>
+                  <div><span class="ls-kicker">Automatic direction</span><h3>Detection</h3><p>One call receives every outfit and expression after a successful reply; LumiStage selects the variant locally.</p></div>
                   <HostSwitch
                     client={client}
                     label="Automatic detection"

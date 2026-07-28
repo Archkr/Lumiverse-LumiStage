@@ -378,11 +378,19 @@ export function resolveCharacterState(
   let decisionApplied = false;
 
   let outfit = orderedOutfit(profile, override?.outfitId ?? prior?.outfit.id ?? profile.defaultOutfitId);
+  const priorInOutfit = prior?.outfit.id === outfit?.id ? prior : null;
   let expression = outfit
-    ? orderedExpression(outfit, override?.expressionId ?? prior?.expression.id)
+    ? orderedExpression(outfit, fullLock ? override?.expressionId : priorInOutfit?.expression.id)
     : null;
   let variant = expression
-    ? orderedVariant(expression, override?.variantId ?? prior?.variant?.id)
+    ? orderedVariant(
+        expression,
+        fullLock
+          ? override?.variantId
+          : priorInOutfit?.expression.id === expression.id
+            ? priorInOutfit.variant?.id
+            : null,
+      )
     : null;
 
   if (confident && !fullLock) {
@@ -512,14 +520,38 @@ export function applyManualOverride(
   settings: LumiStageSettingsV2,
   now = Date.now(),
 ): ChatTimelineV2 {
-  const manualOverrides = { ...timeline.manualOverrides, [override.characterId]: override };
+  const storedOverride: ManualOverrideV2 = override.lock === "outfit"
+    ? {
+        characterId: override.characterId,
+        outfitId: override.outfitId,
+        scope: override.scope,
+        lock: override.lock,
+        createdAt: override.createdAt,
+      }
+    : override;
+  const manualOverrides = {
+    ...timeline.manualOverrides,
+    [override.characterId]: storedOverride,
+  };
   const focusIds = timeline.snapshot.focusedCharacterIds.length
     ? timeline.snapshot.focusedCharacterIds
     : [override.characterId];
+  const selectedState = override.lock === "outfit"
+    && override.outfitId
+    && override.expressionId
+    && override.variantId
+    ? [{
+        characterId: override.characterId,
+        outfitId: override.outfitId,
+        expressionId: override.expressionId,
+        variantId: override.variantId,
+        confidence: 1,
+      }]
+    : [];
   const decision: DetectionDecisionV2 = {
     schemaVersion: SCHEMA_VERSION,
     focusedCharacterIds: focusIds,
-    characters: [],
+    characters: selectedState,
   };
   return {
     ...timeline,

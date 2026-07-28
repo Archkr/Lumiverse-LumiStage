@@ -127,9 +127,25 @@ export function HostModelPicker(props: {
   const root = useRef<HTMLDivElement>(null);
   const handle = useRef<SpindleModelComboboxHandle | null>(null);
   const latest = useRef(props);
+  const lastForwarded = useRef(props.value);
   latest.current = props;
+  const forwardValue = (value: string) => {
+    if (value === lastForwarded.current) return;
+    lastForwarded.current = value;
+    latest.current.onChange(value);
+  };
   useEffect(() => {
     if (!root.current) return;
+    const target = root.current;
+    let syncTimer: number | null = null;
+    const syncFromHandle = () => {
+      if (syncTimer !== null) window.clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(() => {
+        syncTimer = null;
+        const value = handle.current?.getValue();
+        if (typeof value === "string") forwardValue(value);
+      }, 0);
+    };
     handle.current = props.client.ctx.components.mountModelCombobox(root.current, {
       value: props.value,
       connection: props.connectionId
@@ -140,14 +156,22 @@ export function HostModelPicker(props: {
       emptyMessage: "No models returned by this connection.",
       browseHint: "Search the selected connection's model catalog",
       disabled: props.disabled,
-      onChange: (value) => latest.current.onChange(value),
+      onChange: forwardValue,
     });
+    target.addEventListener("input", syncFromHandle);
+    target.addEventListener("change", syncFromHandle);
+    target.addEventListener("click", syncFromHandle);
     return () => {
+      if (syncTimer !== null) window.clearTimeout(syncTimer);
+      target.removeEventListener("input", syncFromHandle);
+      target.removeEventListener("change", syncFromHandle);
+      target.removeEventListener("click", syncFromHandle);
       handle.current?.destroy();
       handle.current = null;
     };
   }, [props.client, props.connectionId]);
   useEffect(() => {
+    lastForwarded.current = props.value;
     handle.current?.update({ value: props.value, disabled: props.disabled });
   }, [props.value, props.disabled]);
   return <div class="ls-native-control" ref={root} />;

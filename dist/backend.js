@@ -297,8 +297,12 @@ function resolveCharacterState(entry, previous, decision, override, settings, fo
   const outfitLock = override?.lock === "outfit";
   let decisionApplied = false;
   let outfit = orderedOutfit(profile, override?.outfitId ?? prior?.outfit.id ?? profile.defaultOutfitId);
-  let expression = outfit ? orderedExpression(outfit, override?.expressionId ?? prior?.expression.id) : null;
-  let variant = expression ? orderedVariant(expression, override?.variantId ?? prior?.variant?.id) : null;
+  const priorInOutfit = prior?.outfit.id === outfit?.id ? prior : null;
+  let expression = outfit ? orderedExpression(outfit, fullLock ? override?.expressionId : priorInOutfit?.expression.id) : null;
+  let variant = expression ? orderedVariant(
+    expression,
+    fullLock ? override?.variantId : priorInOutfit?.expression.id === expression.id ? priorInOutfit.variant?.id : null
+  ) : null;
   if (confident && !fullLock) {
     const detectedOutfit = profile.outfits.find((item) => item.id === decision.outfitId);
     const permittedOutfit = outfitLock ? profile.outfits.find((item) => item.id === override.outfitId) : detectedOutfit;
@@ -390,12 +394,29 @@ function isValidManualOverride(catalog, override) {
   return !!expression && (override.variantId == null || expression.variants.some((variant) => variant.id === override.variantId));
 }
 function applyManualOverride(timeline, catalog, override, settings, now = Date.now()) {
-  const manualOverrides = { ...timeline.manualOverrides, [override.characterId]: override };
+  const storedOverride = override.lock === "outfit" ? {
+    characterId: override.characterId,
+    outfitId: override.outfitId,
+    scope: override.scope,
+    lock: override.lock,
+    createdAt: override.createdAt
+  } : override;
+  const manualOverrides = {
+    ...timeline.manualOverrides,
+    [override.characterId]: storedOverride
+  };
   const focusIds = timeline.snapshot.focusedCharacterIds.length ? timeline.snapshot.focusedCharacterIds : [override.characterId];
+  const selectedState = override.lock === "outfit" && override.outfitId && override.expressionId && override.variantId ? [{
+    characterId: override.characterId,
+    outfitId: override.outfitId,
+    expressionId: override.expressionId,
+    variantId: override.variantId,
+    confidence: 1
+  }] : [];
   const decision = {
     schemaVersion: SCHEMA_VERSION,
     focusedCharacterIds: focusIds,
-    characters: []
+    characters: selectedState
   };
   return {
     ...timeline,

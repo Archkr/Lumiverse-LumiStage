@@ -5717,9 +5717,25 @@ function HostModelPicker(props) {
   const root = A2(null);
   const handle = A2(null);
   const latest = A2(props);
+  const lastForwarded = A2(props.value);
   latest.current = props;
+  const forwardValue = (value) => {
+    if (value === lastForwarded.current) return;
+    lastForwarded.current = value;
+    latest.current.onChange(value);
+  };
   h2(() => {
     if (!root.current) return;
+    const target = root.current;
+    let syncTimer = null;
+    const syncFromHandle = () => {
+      if (syncTimer !== null) window.clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(() => {
+        syncTimer = null;
+        const value = handle.current?.getValue();
+        if (typeof value === "string") forwardValue(value);
+      }, 0);
+    };
     handle.current = props.client.ctx.components.mountModelCombobox(root.current, {
       value: props.value,
       connection: props.connectionId ? { kind: "llm", id: props.connectionId } : { kind: "llm" },
@@ -5728,14 +5744,22 @@ function HostModelPicker(props) {
       emptyMessage: "No models returned by this connection.",
       browseHint: "Search the selected connection's model catalog",
       disabled: props.disabled,
-      onChange: (value) => latest.current.onChange(value)
+      onChange: forwardValue
     });
+    target.addEventListener("input", syncFromHandle);
+    target.addEventListener("change", syncFromHandle);
+    target.addEventListener("click", syncFromHandle);
     return () => {
+      if (syncTimer !== null) window.clearTimeout(syncTimer);
+      target.removeEventListener("input", syncFromHandle);
+      target.removeEventListener("change", syncFromHandle);
+      target.removeEventListener("click", syncFromHandle);
       handle.current?.destroy();
       handle.current = null;
     };
   }, [props.client, props.connectionId]);
   h2(() => {
+    lastForwarded.current = props.value;
     handle.current?.update({ value: props.value, disabled: props.disabled });
   }, [props.value, props.disabled]);
   return /* @__PURE__ */ u2("div", { class: "ls-native-control", ref: root });
@@ -7616,7 +7640,7 @@ function SettingsView({ client }) {
             /* @__PURE__ */ u2("div", { children: [
               /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Automatic direction" }),
               /* @__PURE__ */ u2("h3", { children: "Detection" }),
-              /* @__PURE__ */ u2("p", { children: "One call receives every outfit, expression, and sprite filename after a successful reply." })
+              /* @__PURE__ */ u2("p", { children: "One call receives every outfit and expression after a successful reply; LumiStage selects the variant locally." })
             ] }),
             /* @__PURE__ */ u2(
               HostSwitch,
