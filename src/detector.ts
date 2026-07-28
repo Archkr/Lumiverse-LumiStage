@@ -184,6 +184,52 @@ function characterSummary(entry: CatalogEntry): Record<string, unknown> {
   };
 }
 
+export function constrainCatalogToManualOverrides(
+  catalog: CatalogEntry[],
+  overrides: Record<string, ManualOverrideV2>,
+): CatalogEntry[] {
+  return catalog.map((entry) => {
+    const override = overrides[entry.characterId];
+    if (!override?.outfitId) return entry;
+    const outfit = entry.profile.outfits.find((candidate) => candidate.id === override.outfitId);
+    if (!outfit) return entry;
+
+    if (override.lock === "outfit") {
+      return {
+        ...entry,
+        profile: {
+          ...entry.profile,
+          defaultOutfitId: outfit.id,
+          outfits: [outfit],
+        },
+      };
+    }
+
+    const expression = outfit.expressions.find(
+      (candidate) => candidate.id === override.expressionId,
+    );
+    const variant = expression?.variants.find(
+      (candidate) => candidate.id === override.variantId,
+    );
+    if (!expression || !variant) return entry;
+    return {
+      ...entry,
+      profile: {
+        ...entry.profile,
+        defaultOutfitId: outfit.id,
+        outfits: [{
+          ...outfit,
+          defaultExpressionId: expression.id,
+          expressions: [{
+            ...expression,
+            variants: [variant],
+          }],
+        }],
+      },
+    };
+  });
+}
+
 function stateSummary(
   catalog: CatalogEntry[],
   states: Record<string, {
@@ -246,6 +292,7 @@ export function buildDetectorRequest(
   overrides: Record<string, ManualOverrideV2> = {},
   enforceBudget = true,
 ): Record<string, unknown> {
+  const detectorCatalog = constrainCatalogToManualOverrides(catalog, overrides);
   const system = [
     "You direct the visible character sprite stage after a completed roleplay reply.",
     "For each updated character, copy one exact fileName (including its extension) from the chosen catalog expression.",
@@ -258,9 +305,9 @@ export function buildDetectorRequest(
     "Classify all relevant group-chat characters in this one call and identify the visual focus.",
     "Use the exact characterId from the catalog for each character and focusedCharacterIds entry.",
     "Confidence is 0..1 for the complete visible-state match.",
-    `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
-    `Current states: ${JSON.stringify(stateSummary(catalog, currentStates))}`,
-    `Manual locks: ${JSON.stringify(overrideSummary(catalog, overrides))}`,
+    `Catalog: ${JSON.stringify(detectorCatalog.map(characterSummary))}`,
+    `Current states: ${JSON.stringify(stateSummary(detectorCatalog, currentStates))}`,
+    `Manual locks: ${JSON.stringify(overrideSummary(detectorCatalog, overrides))}`,
   ].join("\n");
   const messages = [
     { role: "system", content: system },

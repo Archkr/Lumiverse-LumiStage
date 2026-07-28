@@ -1566,6 +1566,46 @@ function characterSummary(entry) {
     }))
   };
 }
+function constrainCatalogToManualOverrides(catalog, overrides) {
+  return catalog.map((entry) => {
+    const override = overrides[entry.characterId];
+    if (!override?.outfitId) return entry;
+    const outfit = entry.profile.outfits.find((candidate) => candidate.id === override.outfitId);
+    if (!outfit) return entry;
+    if (override.lock === "outfit") {
+      return {
+        ...entry,
+        profile: {
+          ...entry.profile,
+          defaultOutfitId: outfit.id,
+          outfits: [outfit]
+        }
+      };
+    }
+    const expression = outfit.expressions.find(
+      (candidate) => candidate.id === override.expressionId
+    );
+    const variant = expression?.variants.find(
+      (candidate) => candidate.id === override.variantId
+    );
+    if (!expression || !variant) return entry;
+    return {
+      ...entry,
+      profile: {
+        ...entry.profile,
+        defaultOutfitId: outfit.id,
+        outfits: [{
+          ...outfit,
+          defaultExpressionId: expression.id,
+          expressions: [{
+            ...expression,
+            variants: [variant]
+          }]
+        }]
+      }
+    };
+  });
+}
 function stateSummary(catalog, states) {
   return Object.entries(states).flatMap(([characterId, state]) => {
     const profile = catalog.find((entry) => entry.characterId === characterId)?.profile;
@@ -1601,6 +1641,7 @@ function overrideSummary(catalog, overrides) {
   });
 }
 function buildDetectorRequest(catalog, recentMessages, currentStates, settings, overrides = {}, enforceBudget = true) {
+  const detectorCatalog = constrainCatalogToManualOverrides(catalog, overrides);
   const system = [
     "You direct the visible character sprite stage after a completed roleplay reply.",
     "For each updated character, copy one exact fileName (including its extension) from the chosen catalog expression.",
@@ -1613,9 +1654,9 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
     "Classify all relevant group-chat characters in this one call and identify the visual focus.",
     "Use the exact characterId from the catalog for each character and focusedCharacterIds entry.",
     "Confidence is 0..1 for the complete visible-state match.",
-    `Catalog: ${JSON.stringify(catalog.map(characterSummary))}`,
-    `Current states: ${JSON.stringify(stateSummary(catalog, currentStates))}`,
-    `Manual locks: ${JSON.stringify(overrideSummary(catalog, overrides))}`
+    `Catalog: ${JSON.stringify(detectorCatalog.map(characterSummary))}`,
+    `Current states: ${JSON.stringify(stateSummary(detectorCatalog, currentStates))}`,
+    `Manual locks: ${JSON.stringify(overrideSummary(detectorCatalog, overrides))}`
   ].join("\n");
   const messages = [
     { role: "system", content: system },
@@ -2368,8 +2409,9 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
     characterId,
     { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId }
   ]));
+  const detectorCatalog = constrainCatalogToManualOverrides(set.catalog, timeline.manualOverrides);
   const requestFingerprint = await sha256(JSON.stringify({
-    catalog: set.profiles,
+    catalog: detectorCatalog.map((entry) => entry.profile),
     detection: settings.detection,
     overrides: timeline.manualOverrides,
     recentMessages,
@@ -2394,7 +2436,7 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
   await sendState(userId).catch(() => void 0);
   if (!record2) {
     const builtRequest = buildDetectorRequest(
-      set.catalog,
+      detectorCatalog,
       recentMessages,
       currentStates,
       settings,
@@ -2413,9 +2455,9 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
       const started = (async () => {
         const response = await spindle.generate.quiet(generationInput);
         const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
-        const parsed = parseDetectorResponse(response, set.catalog);
+        const parsed = parseDetectorResponse(response, detectorCatalog);
         if (!parsed) throw new Error("The detector did not return a valid stage decision.");
-        const decision = validateDecision(parsed, set.catalog);
+        const decision = validateDecision(parsed, detectorCatalog);
         if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
           throw new Error("The detector returned no valid characters.");
         }

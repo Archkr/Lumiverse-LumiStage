@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDetectorRequest,
+  constrainCatalogToManualOverrides,
   parseDetectorResponse,
   validateDecision,
 } from "../src/detector";
@@ -154,6 +155,54 @@ describe("detector contract", () => {
     expect(outfitLockLine).toContain('"outfitName":"Casual"');
     expect(outfitLockLine).not.toContain("Neutral");
     expect(outfitLockLine).not.toContain("neutral-soft.png");
+    const outfitCatalog = JSON.parse(
+      outfitSystem
+        .split("\n")
+        .find((line) => line.startsWith("Catalog: "))
+        ?.slice("Catalog: ".length) ?? "[]",
+    );
+    expect(outfitCatalog[0].outfits.map((outfit: { outfitName: string }) => outfit.outfitName))
+      .toEqual(["Casual"]);
+    expect(outfitCatalog[0].outfits[0].expressions.map(
+      (expression: { expressionName: string }) => expression.expressionName,
+    )).toEqual(["Neutral", "Happy", "Angry"]);
+    expect(outfitSystem).not.toContain("Formal");
+    expect(outfitSystem).not.toContain("composed.png");
+
+    const constrainedCatalog = constrainCatalogToManualOverrides(catalog, outfitLock);
+    expect(parseDetectorResponse({
+      tool_calls: [{
+        name: "set_stage_state",
+        args: {
+          focusedCharacterIds: ["character-a"],
+          characters: [{
+            characterId: "character-a",
+            outfitName: "Formal",
+            expressionName: "Composed",
+            fileName: "composed.png",
+            confidence: 1,
+          }],
+        },
+      }],
+    }, constrainedCatalog)).toBeNull();
+    expect(parseDetectorResponse({
+      tool_calls: [{
+        name: "set_stage_state",
+        args: {
+          focusedCharacterIds: ["character-a"],
+          characters: [{
+            characterId: "character-a",
+            outfitName: "Casual",
+            expressionName: "Happy",
+            fileName: "happy.png",
+            confidence: 1,
+          }],
+        },
+      }],
+    }, constrainedCatalog)?.characters[0]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+    }));
 
     const stateRequest = buildDetectorRequest(catalog, [], {}, settings, {
       "character-a": {
@@ -169,6 +218,22 @@ describe("detector contract", () => {
     expect(stateLockLine).toContain('"lock":"state"');
     expect(stateLockLine).toContain('"expressionName":"Neutral"');
     expect(stateLockLine).toContain('"fileName":"neutral-soft.png"');
+    const stateSystem = String(
+      (stateRequest.messages as Array<{ content: string }>)[0].content,
+    );
+    const stateCatalog = JSON.parse(
+      stateSystem
+        .split("\n")
+        .find((line) => line.startsWith("Catalog: "))
+        ?.slice("Catalog: ".length) ?? "[]",
+    );
+    expect(stateCatalog[0].outfits).toEqual([expect.objectContaining({
+      outfitName: "Casual",
+      expressions: [expect.objectContaining({
+        expressionName: "Neutral",
+        files: ["neutral-soft.png"],
+      })],
+    })]);
   });
 
   it("rejects duplicate character decisions and forwards model/output overrides through supported parameters", () => {

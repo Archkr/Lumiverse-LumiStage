@@ -158,6 +158,20 @@ describe("operator-scoped backend runtime", () => {
     );
     expect(referencedImageIds.filter((id: string) => id === firstExpression.variants[0].imageId)).toHaveLength(2);
     expect(uploadMany).toHaveBeenCalledTimes(1);
+    const secondOutfitDraft = secondImport.profile.outfits.find(
+      (outfit: { id: string }) => outfit.id === "outfit-second",
+    );
+    secondOutfitDraft.expressions.push({
+      id: "expression-second-alt",
+      name: "Bright",
+      order: 1,
+      variants: [{
+        ...firstExpression.variants[0],
+        id: "variant-second-alt",
+        fileName: "bright.png",
+        order: 0,
+      }],
+    });
 
     staged.set("upload-three", { fileName: "tree.png", data: new Uint8Array([4, 5, 6]) });
     sendToFrontend.mockClear();
@@ -331,9 +345,26 @@ describe("operator-scoped backend runtime", () => {
       (outfit: { id: string }) => outfit.id === "outfit-second",
     );
     const automaticExpression = automaticOutfit.expressions.find(
-      (expression: { id: string }) => expression.id === "expression-second",
+      (expression: { id: string }) => expression.id === "expression-second-alt",
     );
     const automaticVariant = automaticExpression.variants[0];
+    const lockedStartingExpression = automaticOutfit.expressions.find(
+      (expression: { id: string }) => expression.id === "expression-second",
+    );
+    await expectCompletion({
+      type: "apply-manual",
+      requestId: "lock-outfit-for-analysis",
+      chatId: "chat-a",
+      override: {
+        characterId: "character-a",
+        outfitId: automaticOutfit.id,
+        expressionId: lockedStartingExpression.id,
+        variantId: lockedStartingExpression.variants[0].id,
+        scope: "locked",
+        lock: "outfit",
+        createdAt: 2,
+      },
+    }, "lock-outfit-for-analysis");
     const completedMessages = [{
       id: "assistant-final",
       role: "assistant",
@@ -400,6 +431,21 @@ describe("operator-scoped backend runtime", () => {
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("__isChatHistory");
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("variant-");
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("This stale reply");
+    const detectorSystem = String(detectorRequest.messages[0].content);
+    const detectorCatalog = JSON.parse(
+      detectorSystem
+        .split("\n")
+        .find((line: string) => line.startsWith("Catalog: "))
+        ?.slice("Catalog: ".length) ?? "[]",
+    );
+    expect(detectorCatalog[0].outfits.map(
+      (outfit: { outfitName: string }) => outfit.outfitName,
+    )).toEqual(["Evening"]);
+    expect(detectorCatalog[0].outfits[0].expressions.map(
+      (expression: { expressionName: string }) => expression.expressionName,
+    )).toEqual(["Composed", "Bright"]);
+    expect(detectorSystem).not.toContain("Rain Coat");
+    expect(detectorSystem).not.toContain("Tree Outfit");
     await vi.waitFor(() => {
       const settledState = [...sendToFrontend.mock.calls]
         .reverse()

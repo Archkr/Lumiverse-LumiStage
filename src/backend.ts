@@ -23,7 +23,13 @@ import {
   unreferencedImageIds,
   type ImportCandidate,
 } from "./importer";
-import { buildDetectorRequest, parseDetectorResponse, validateDecision, type DetectorResponse } from "./detector";
+import {
+  buildDetectorRequest,
+  constrainCatalogToManualOverrides,
+  parseDetectorResponse,
+  validateDecision,
+  type DetectorResponse,
+} from "./detector";
 import { LumiStageRepository, RevisionConflict } from "./storage";
 import { confirmExtensionOwnedImageIds } from "./ownership";
 import {
@@ -448,8 +454,9 @@ async function analyzeLatest(
     characterId,
     { outfitId: state.outfitId, expressionId: state.expressionId, variantId: state.variantId },
   ]));
+  const detectorCatalog = constrainCatalogToManualOverrides(set.catalog, timeline.manualOverrides);
   const requestFingerprint = await sha256(JSON.stringify({
-    catalog: set.profiles,
+    catalog: detectorCatalog.map((entry) => entry.profile),
     detection: settings.detection,
     overrides: timeline.manualOverrides,
     recentMessages,
@@ -480,7 +487,7 @@ async function analyzeLatest(
 
   if (!record) {
     const builtRequest = buildDetectorRequest(
-      set.catalog,
+      detectorCatalog,
       recentMessages,
       currentStates,
       settings,
@@ -505,9 +512,9 @@ async function analyzeLatest(
         const usedInputTokens = response.usage?.prompt_tokens
           ?? response.usage?.input_tokens
           ?? detectorInputTokens;
-        const parsed = parseDetectorResponse(response, set.catalog);
+        const parsed = parseDetectorResponse(response, detectorCatalog);
         if (!parsed) throw new Error("The detector did not return a valid stage decision.");
-        const decision = validateDecision(parsed, set.catalog);
+        const decision = validateDecision(parsed, detectorCatalog);
         if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
           throw new Error("The detector returned no valid characters.");
         }
