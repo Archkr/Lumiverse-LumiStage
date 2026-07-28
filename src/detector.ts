@@ -295,6 +295,11 @@ export function buildDetectorRequest(
   const detectorCatalog = constrainCatalogToManualOverrides(catalog, overrides);
   const system = [
     "You direct the visible character sprite stage after a completed roleplay reply.",
+    "Catalog expressionName values are general visible sprite states, not an emotion-only taxonomy.",
+    "A state may describe facial emotion, full-body pose or posture, an activity or prop use, interaction or relative positioning with another character, physical condition, transformation, or narrative sequence/context.",
+    "Examples include states such as \"drinking coffee\", \"after the fight\", or \"straddling another character\"; interpret every label from the perspective of the character who owns that catalog.",
+    "Use expressionName and fileName together as semantic clues. Select the most specific state directly supported by the completed scene, preferring a matching pose, action, interaction, condition, or contextual state over a generic mood such as happy or sad.",
+    "For compound, relational, and sequence states, require every material part of the label to be supported: the action or pose, the other participant when named or implied, and ordering such as before/after. Do not select one merely because its emotional tone fits.",
     "For each updated character, copy one exact fileName (including its extension) from the chosen catalog expression.",
     "The fileName is authoritative. Never invent a filename and never substitute a label such as Character / Outfit / Emotion.",
     "Return outfitName and expressionName exactly as listed so duplicate filenames can be resolved inside the right folder.",
@@ -314,12 +319,12 @@ export function buildDetectorRequest(
     ...recentMessages.slice(-settings.detection.contextMessages),
     {
       role: "user",
-      content: "Resolve the sprite stage for the latest assistant reply. Call set_stage_state exactly once.",
+      content: "Resolve the sprite stage for the latest assistant reply using the most specific scene-supported visible state for each character. Call set_stage_state exactly once.",
     },
   ];
   const tools = [{
     name: "set_stage_state",
-    description: "Select the exact sprite filename and its outfit/expression folder for each visible character.",
+    description: "Select each visible character's exact sprite file and catalog state, including poses, actions, interactions, conditions, and contextual states as well as emotions.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -341,10 +346,13 @@ export function buildDetectorRequest(
             properties: {
               characterId: { type: "string" },
               outfitName: { type: "string" },
-              expressionName: { type: "string" },
+              expressionName: {
+                type: "string",
+                description: "Exact catalog state label. It may represent an emotion, pose, action, interaction, condition, transformation, or sequence/context.",
+              },
               fileName: {
                 type: "string",
-                description: "Exact filename copied from the selected catalog expression, including extension.",
+                description: "Exact filename copied from the selected catalog state, including extension. Use it with expressionName to distinguish specific visible states.",
               },
               confidence: { type: "number", minimum: 0, maximum: 1 },
             },

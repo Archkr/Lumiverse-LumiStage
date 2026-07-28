@@ -129,6 +129,37 @@ describe("detector contract", () => {
     ]);
   });
 
+  it("instructs the model to match general visible states instead of only emotions", () => {
+    const request = buildDetectorRequest(
+      buildCatalog([profileA()]),
+      [{
+        role: "assistant",
+        content: "After the sparring match, Aster sits at the counter drinking coffee.",
+      }],
+      {},
+      defaultSettings(1),
+    );
+    const messages = request.messages as Array<{ role: string; content: string }>;
+    const system = messages[0].content;
+    const finalInstruction = messages.at(-1)?.content;
+    expect(system).toContain("general visible sprite states, not an emotion-only taxonomy");
+    expect(system).toContain("full-body pose or posture");
+    expect(system).toContain("interaction or relative positioning with another character");
+    expect(system).toContain("\"drinking coffee\"");
+    expect(system).toContain("\"after the fight\"");
+    expect(system).toContain("\"straddling another character\"");
+    expect(system).toContain("preferring a matching pose, action, interaction, condition, or contextual state");
+    expect(system).toContain("require every material part of the label to be supported");
+    expect(finalInstruction).toContain("most specific scene-supported visible state");
+
+    const tool = (request.tools as Array<Record<string, any>>)[0];
+    expect(tool.description).toContain("poses, actions, interactions, conditions, and contextual states");
+    expect(tool.parameters.properties.characters.items.properties.expressionName.description)
+      .toContain("pose, action, interaction, condition, transformation, or sequence/context");
+    expect(tool.parameters.properties.characters.items.properties.fileName.description)
+      .toContain("distinguish specific visible states");
+  });
+
   it("lets the detector change expressions inside an outfit lock", () => {
     const catalog = buildCatalog([profileA()]);
     const settings = defaultSettings(1);

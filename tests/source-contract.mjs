@@ -12,11 +12,11 @@ const rejectedModelTokens = [
   "aliases",
   "cues",
   "tags",
-  "poses",
   "priority",
   "allowAutoSwitch",
   "outfitConfidence",
 ];
+const rejectedPoseModel = /\bposeIds?\b|["']?poses?["']?\s*\??\s*[:=]/;
 
 async function filesUnder(path) {
   const info = await stat(path);
@@ -39,6 +39,9 @@ for (const file of targets) {
   if (file.includes(`${resolve(root, "src")}`) || file.includes(`${resolve(root, "dist")}`)) {
     for (const token of rejectedModelTokens) {
       if (text.includes(token)) violations.push(`${file}: rejected LumiStage model concept ${JSON.stringify(token)}`);
+    }
+    if (rejectedPoseModel.test(text)) {
+      violations.push(`${file}: pose semantics must remain expression labels, not a separate pose model`);
     }
   }
 }
