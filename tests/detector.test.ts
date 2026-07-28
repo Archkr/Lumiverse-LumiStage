@@ -128,6 +128,49 @@ describe("detector contract", () => {
     ]);
   });
 
+  it("lets the detector change expressions inside an outfit lock", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const outfitLock = {
+      "character-a": {
+        characterId: "character-a",
+        outfitId: "outfit-casual",
+        expressionId: "expression-neutral",
+        variantId: "variant-neutral-a",
+        scope: "locked" as const,
+        lock: "outfit" as const,
+        createdAt: 1,
+      },
+    };
+    const outfitRequest = buildDetectorRequest(catalog, [], {}, settings, outfitLock);
+    const outfitSystem = String(
+      (outfitRequest.messages as Array<{ content: string }>)[0].content,
+    );
+    const outfitLockLine = outfitSystem
+      .split("\n")
+      .find((line) => line.startsWith("Manual locks: "));
+    expect(outfitSystem).toContain("An outfit lock fixes only outfitName");
+    expect(outfitLockLine).toContain('"lock":"outfit"');
+    expect(outfitLockLine).toContain('"outfitName":"Casual"');
+    expect(outfitLockLine).not.toContain("Neutral");
+    expect(outfitLockLine).not.toContain("neutral-soft.png");
+
+    const stateRequest = buildDetectorRequest(catalog, [], {}, settings, {
+      "character-a": {
+        ...outfitLock["character-a"],
+        lock: "state",
+      },
+    });
+    const stateLockLine = String(
+      (stateRequest.messages as Array<{ content: string }>)[0].content,
+    )
+      .split("\n")
+      .find((line) => line.startsWith("Manual locks: "));
+    expect(stateLockLine).toContain('"lock":"state"');
+    expect(stateLockLine).toContain('"expressionName":"Neutral"');
+    expect(stateLockLine).toContain('"fileName":"neutral-soft.png"');
+  });
+
   it("rejects duplicate character decisions and scales one-call output for ensembles", () => {
     const profile = profileA();
     const catalog = buildCatalog([profile]);

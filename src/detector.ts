@@ -217,16 +217,20 @@ function overrideSummary(
     const outfit = profile?.outfits.find((item) => item.id === override.outfitId);
     const expression = outfit?.expressions.find((item) => item.id === override.expressionId);
     const variant = expression?.variants.find((item) => item.id === override.variantId);
-    return profile && outfit
-      ? [{
-          characterId: override.characterId,
-          scope: override.scope,
-          lock: override.lock,
-          outfitName: outfit.name,
+    if (!profile || !outfit) return [];
+    const lockedOutfit = {
+      characterId: override.characterId,
+      scope: override.scope,
+      lock: override.lock,
+      outfitName: outfit.name,
+    };
+    return override.lock === "outfit"
+      ? [lockedOutfit]
+      : [{
+          ...lockedOutfit,
           expressionName: expression?.name ?? null,
           fileName: variant?.fileName ?? null,
-        }]
-      : [];
+        }];
   });
 }
 
@@ -249,6 +253,8 @@ export function buildDetectorRequest(
     "Return outfitName and expressionName exactly as listed so duplicate filenames can be resolved inside the right folder.",
     "Outfits are selectable visual states. You may switch away from the current outfit whenever the completed scene supports another outfit.",
     "Current states are context, not locks. Only entries under Manual locks constrain outfit or sprite selection.",
+    "An outfit lock fixes only outfitName. Within that outfit, choose any listed expressionName and exact fileName that matches the completed scene.",
+    "A state lock fixes the exact outfitName, expressionName, and fileName until it is cleared.",
     "Classify all relevant group-chat characters in this one call and identify the visual focus.",
     "Use the exact characterId from the catalog for each character and focusedCharacterIds entry.",
     "Confidence is 0..1 for the complete visible-state match.",
