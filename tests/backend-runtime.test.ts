@@ -334,12 +334,25 @@ describe("operator-scoped backend runtime", () => {
       (expression: { id: string }) => expression.id === "expression-second",
     );
     const automaticVariant = automaticExpression.variants[0];
-    chatGetMessages.mockResolvedValue([{
+    const completedMessages = [{
       id: "assistant-final",
       role: "assistant",
       content: "Aster smiles after the reply is complete.",
       swipe_id: 0,
-    }]);
+    }];
+    let delayedCompletionReads = 0;
+    chatGetMessages.mockImplementation(async () => {
+      if (delayedCompletionReads < 2) {
+        delayedCompletionReads += 1;
+        return [{
+          id: "assistant-stale",
+          role: "assistant",
+          content: "This stale reply must never be analyzed.",
+          swipe_id: 0,
+        }];
+      }
+      return completedMessages;
+    });
     generateQuiet.mockResolvedValue({
       tool_calls: [{
         name: "set_stage_state",
@@ -386,6 +399,7 @@ describe("operator-scoped backend runtime", () => {
     ]);
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("__isChatHistory");
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("variant-");
+    expect(JSON.stringify(detectorRequest.messages)).not.toContain("This stale reply");
     await vi.waitFor(() => {
       const settledState = [...sendToFrontend.mock.calls]
         .reverse()
@@ -403,20 +417,43 @@ describe("operator-scoped backend runtime", () => {
     }, { timeout: 2_000 });
 
     generateQuiet.mockClear();
-    await expectCompletion({
-      type: "analyze-now",
-      requestId: "analyze-selected-model",
-      chatId: "chat-a",
-      detection: {
-        enabled: true,
-        connectionId: "connection-manual",
-        model: "manual-model",
-        contextMessages: 3,
-        temperature: 0.2,
-        maxOutputTokens: 65_536,
-        confidence: 0.7,
-      },
-    }, "analyze-selected-model");
+    sendToFrontend.mockClear();
+    await Promise.all([
+      handleFrontend({
+        type: "analyze-now",
+        requestId: "analyze-selected-model-one",
+        chatId: "chat-a",
+        detection: {
+          enabled: true,
+          connectionId: "connection-manual",
+          model: "manual-model",
+          contextMessages: 3,
+          temperature: 0.2,
+          maxOutputTokens: 65_536,
+          confidence: 0.7,
+        },
+      }, "user-a"),
+      handleFrontend({
+        type: "analyze-now",
+        requestId: "analyze-selected-model-two",
+        chatId: "chat-a",
+        detection: {
+          enabled: true,
+          connectionId: "connection-manual",
+          model: "manual-model",
+          contextMessages: 3,
+          temperature: 0.2,
+          maxOutputTokens: 65_536,
+          confidence: 0.7,
+        },
+      }, "user-a"),
+    ]);
+    for (const requestId of ["analyze-selected-model-one", "analyze-selected-model-two"]) {
+      expect(sendToFrontend).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "operation-complete", requestId }),
+        "user-a",
+      );
+    }
     expect(generateQuiet).toHaveBeenCalledTimes(1);
     expect(generateQuiet.mock.calls[0][0]).toEqual(expect.objectContaining({
       connection_id: "connection-manual",
@@ -427,6 +464,37 @@ describe("operator-scoped backend runtime", () => {
       }),
     }));
     expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
+
+    eventHandlers.get("GENERATION_ENDED")?.({
+      generationId: "generation-one",
+      chatId: "chat-a",
+      messageId: "assistant-final",
+    }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
+
+    await handleFrontend({
+      type: "analyze-now",
+      requestId: "analyze-selected-model-after-duplicate-event",
+      chatId: "chat-a",
+      detection: {
+        enabled: true,
+        connectionId: "connection-manual",
+        model: "manual-model",
+        contextMessages: 3,
+        temperature: 0.2,
+        maxOutputTokens: 65_536,
+        confidence: 0.7,
+      },
+    }, "user-a");
+    expect(sendToFrontend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "operation-complete",
+        requestId: "analyze-selected-model-after-duplicate-event",
+      }),
+      "user-a",
+    );
+    expect(generateQuiet).toHaveBeenCalledTimes(1);
 
     await handleFrontend({ type: "open-connections" }, "user-a");
     expect(openDrawerTab).toHaveBeenCalledWith("connections", { userId: "user-a" });

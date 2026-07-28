@@ -325,7 +325,7 @@ The detector:
 
 - receives every active character, outfit, expression, and exact filename without sending verbose internal outfit/expression/variant UUIDs;
 - receives current stage state and active manual locks;
-- makes one structured generation call;
+- waits for the exact completed assistant message and coalesces duplicate host/manual triggers into one structured generation call;
 - must copy the exact selected filename, including its extension, rather than inventing a `Character / Outfit / Emotion` label;
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
 - asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;

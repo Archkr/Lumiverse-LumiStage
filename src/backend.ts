@@ -39,6 +39,7 @@ import {
   type BackendToFrontend,
   type CharacterProfileV2,
   type ChatTimelineV2,
+  type DecisionRecordV2,
   type DetectionSettingsV2,
   type FrontendState,
   type FrontendToBackend,
@@ -59,6 +60,14 @@ const scheduled = new Map<string, ReturnType<typeof setTimeout>>();
 const analysisQueues = new Map<string, Promise<void>>();
 const queueDepth = new Map<string, number>();
 const lastDetection = new Map<string, FrontendState["lastDetection"]>();
+interface DetectorRunOutcome {
+  record: DecisionRecordV2;
+  detectorInputTokens: number | null;
+  requestFingerprint: string;
+  completedAt: number;
+}
+const detectorFlights = new Map<string, Promise<DetectorRunOutcome>>();
+const recentDetectorRuns = new Map<string, DetectorRunOutcome>();
 const mediaViewCache = new Map<string, Record<string, VariantView>>();
 const diagnosticCounters = new Map<string, {
   revisionConflicts: number;
@@ -368,6 +377,24 @@ async function normalizedMessages(chatId: string): Promise<NormalizedChatMessage
   }));
 }
 
+async function messagesForAnalysis(
+  chatId: string,
+  expectedMessageId?: string,
+): Promise<NormalizedChatMessage[] | null> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const messages = await normalizedMessages(chatId);
+    if (!expectedMessageId) return messages;
+    const latestAssistant = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant" && !!message.content);
+    if (latestAssistant?.id === expectedMessageId) return messages;
+    if (attempt < 7) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  return null;
+}
+
 async function rebuildTimeline(
   timeline: ChatTimelineV2,
   catalog: CatalogEntry[],
@@ -388,6 +415,7 @@ async function analyzeLatest(
   chatId: string,
   force = false,
   detectionOverride?: DetectionSettingsV2,
+  expectedMessageId?: string,
 ): Promise<void> {
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
     lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
@@ -405,7 +433,8 @@ async function analyzeLatest(
     await sendState(userId).catch(() => undefined);
     return;
   }
-  const messages = await normalizedMessages(chatId);
+  const messages = await messagesForAnalysis(chatId, expectedMessageId);
+  if (!messages) return;
   const latest = [...messages].reverse().find((message) => message.role === "assistant" && !!message.content);
   if (!latest) return;
   let timeline = await repository.getTimeline(userId, chatId);
@@ -431,11 +460,24 @@ async function analyzeLatest(
     swipeId: latest.swipeId,
     contentHash,
   }, requestFingerprint);
+  const detectorMessageKey = `${queueKey(userId, chatId)}:${latest.id}:${latest.swipeId}:${contentHash}`;
+  let detectorInputTokens: number | null = null;
+  if (!record) {
+    const recent = recentDetectorRuns.get(detectorMessageKey);
+    const recentWindow = force ? 5_000 : 30_000;
+    if (
+      recent
+      && Date.now() - recent.completedAt <= recentWindow
+      && (!force || recent.requestFingerprint === requestFingerprint)
+    ) {
+      record = recent.record;
+      detectorInputTokens = recent.detectorInputTokens;
+    }
+  }
 
   lastDetection.set(queueKey(userId, chatId), { status: "running", message: record ? "Restoring cached stage decision…" : "Analyzing the latest reply…", at: Date.now() });
   await sendState(userId).catch(() => undefined);
 
-  let detectorInputTokens: number | null = null;
   if (!record) {
     const builtRequest = buildDetectorRequest(
       set.catalog,
@@ -453,31 +495,55 @@ async function analyzeLatest(
       : null;
     const generationInput = { ...request, userId };
     Object.assign(generationInput, { signal: AbortSignal.timeout(60_000) });
-    const response = await (spindle.generate.quiet as unknown as (
-      input: Record<string, unknown>,
-    ) => Promise<DetectorResponse>)(generationInput);
-    detectorInputTokens = response.usage?.prompt_tokens
-      ?? response.usage?.input_tokens
-      ?? detectorInputTokens;
-    const parsed = parseDetectorResponse(response, set.catalog);
-    if (!parsed) throw new Error("The detector did not return a valid stage decision.");
-    const decision = validateDecision(parsed, set.catalog);
-    if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
-      throw new Error("The detector returned no valid characters.");
+    const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
+    let flight = detectorFlights.get(flightKey);
+    if (!flight) {
+      const started = (async (): Promise<DetectorRunOutcome> => {
+        const response = await (spindle.generate.quiet as unknown as (
+          input: Record<string, unknown>,
+        ) => Promise<DetectorResponse>)(generationInput);
+        const usedInputTokens = response.usage?.prompt_tokens
+          ?? response.usage?.input_tokens
+          ?? detectorInputTokens;
+        const parsed = parseDetectorResponse(response, set.catalog);
+        if (!parsed) throw new Error("The detector did not return a valid stage decision.");
+        const decision = validateDecision(parsed, set.catalog);
+        if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
+          throw new Error("The detector returned no valid characters.");
+        }
+        return {
+          record: {
+            messageId: latest.id,
+            swipeId: latest.swipeId,
+            contentHash,
+            requestFingerprint,
+            decision,
+            provider: response.provider ?? null,
+            model: response.model ?? settings.detection.model,
+            createdAt: Date.now(),
+          },
+          detectorInputTokens: usedInputTokens,
+          requestFingerprint,
+          completedAt: Date.now(),
+        };
+      })();
+      const tracked = started.finally(() => {
+        if (detectorFlights.get(flightKey) === tracked) detectorFlights.delete(flightKey);
+      });
+      detectorFlights.set(flightKey, tracked);
+      flight = tracked;
     }
-    record = {
-      messageId: latest.id,
-      swipeId: latest.swipeId,
-      contentHash,
-      requestFingerprint,
-      decision,
-      provider: response.provider ?? null,
-      model: response.model ?? settings.detection.model,
-      createdAt: Date.now(),
-    };
-    timeline.decisions = upsertDecision(timeline.decisions, record);
+    const outcome = await flight;
+    record = outcome.record;
+    detectorInputTokens = outcome.detectorInputTokens;
+    recentDetectorRuns.set(detectorMessageKey, outcome);
+    const cutoff = Date.now() - 60_000;
+    for (const [key, recent] of recentDetectorRuns) {
+      if (recent.completedAt < cutoff) recentDetectorRuns.delete(key);
+    }
   }
 
+  timeline.decisions = upsertDecision(timeline.decisions, record);
   timeline.manualOverrides = consumeOnceOverrides(timeline.manualOverrides);
   timeline = await rebuildTimeline(timeline, set.catalog, settings, messages);
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
@@ -491,14 +557,26 @@ async function analyzeLatest(
   await sendState(userId).catch(() => undefined);
 }
 
-function scheduleAnalysis(userId: string, chatId: string, delay = 120, force = false): void {
+function scheduleAnalysis(
+  userId: string,
+  chatId: string,
+  delay = 120,
+  force = false,
+  expectedMessageId?: string,
+): void {
   const key = queueKey(userId, chatId);
   if (!force && generationInProgress(userId, chatId)) return;
   const old = scheduled.get(key);
   if (old) clearTimeout(old);
   scheduled.set(key, setTimeout(() => {
     scheduled.delete(key);
-    void enqueueAnalysis(userId, chatId, () => analyzeLatest(userId, chatId, force).catch(async (error) => {
+    void enqueueAnalysis(userId, chatId, () => analyzeLatest(
+      userId,
+      chatId,
+      force,
+      undefined,
+      expectedMessageId,
+    ).catch(async (error) => {
        lastDetection.set(queueKey(userId, chatId), {
         status: "error",
         message: error instanceof Error ? error.message : "Stage detection failed.",
@@ -1091,13 +1169,14 @@ onEvent("GENERATION_STARTED", (payload, eventUserId) => {
 
 onEvent("GENERATION_ENDED", (payload, eventUserId) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
+  const messageId = readString(payload, ["messageId", "message_id"]);
   const remembered = generationId ? generationUsers.get(generationId) : null;
   const chatId = extractChatId(payload) ?? remembered?.chatId ?? null;
   const userId = resolveUserId(chatId, eventUserId ?? remembered?.userId);
   markGenerationFinished(generationId);
-  if (!chatId || !userId || readString(payload, ["error"]) || !readString(payload, ["messageId", "message_id"])) return;
+  if (!chatId || !userId || readString(payload, ["error"]) || !messageId) return;
   if (generationInProgress(userId, chatId)) return;
-  scheduleAnalysis(userId, chatId);
+  scheduleAnalysis(userId, chatId, 120, false, messageId);
 });
 
 onEvent("GENERATION_STOPPED", (payload) => {
@@ -1108,9 +1187,18 @@ onEvent("GENERATION_STOPPED", (payload) => {
 for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"] as const) {
   onEvent(event, (payload, eventUserId) => {
     const raw = asRecord(payload);
+    const changedMessage = asRecord(raw.message);
     const chatId = extractChatId(payload) ?? extractChatId(raw.message);
     const userId = resolveUserId(chatId, eventUserId);
-    if (chatId && userId) scheduleAnalysis(userId, chatId, 280);
+    const role = readString(changedMessage, ["role"]) ?? readString(payload, ["role"]);
+    const messageId = role === "assistant"
+      ? (
+          readString(changedMessage, ["id", "messageId", "message_id"])
+          ?? readString(payload, ["messageId", "message_id"])
+          ?? undefined
+        )
+      : undefined;
+    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId);
   });
 }
 
@@ -1157,6 +1245,12 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   activeGenerations.delete(key);
   for (const [generationId, context] of generationUsers) {
     if (context.userId === userId && context.chatId === chatId) generationUsers.delete(generationId);
+  }
+  for (const detectorKey of recentDetectorRuns.keys()) {
+    if (detectorKey.startsWith(`${key}:`)) recentDetectorRuns.delete(detectorKey);
+  }
+  for (const detectorKey of detectorFlights.keys()) {
+    if (detectorKey.startsWith(`${key}:`)) detectorFlights.delete(detectorKey);
   }
   queueDepth.delete(key);
   lastDetection.delete(key);
