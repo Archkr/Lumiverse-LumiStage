@@ -6020,7 +6020,7 @@ function showTextPrompt(client, options, onSubmit) {
       }
     }
     return /* @__PURE__ */ u2("form", { class: "ls-modal-form", onSubmit: submit, children: [
-      /* @__PURE__ */ u2(Field, { label: options.label, children: /* @__PURE__ */ u2(
+      /* @__PURE__ */ u2(Field, { label: options.label, hint: options.hint, children: /* @__PURE__ */ u2(
         "input",
         {
           class: "ls-input",
@@ -6959,16 +6959,22 @@ function BatchBar(props) {
       (expression) => props.selected.has(expression.id)
     );
     if (expressions.length < 2) return;
+    const variantCount = new Set(
+      expressions.flatMap(
+        (expression) => expression.variants.map((variant) => variant.contentHash)
+      )
+    ).size;
     showTextPrompt(
       props.client,
       {
         title: `Merge ${expressions.length} expressions`,
         label: "Merged expression name",
+        hint: `This will combine ${variantCount} unique sprite variant${variantCount === 1 ? "" : "s"} into one expression. You can undo the merge until the Studio is closed.`,
         placeholder: "Happy",
         initial: suggestMergedExpressionName(expressions),
-        submitLabel: "Continue"
+        submitLabel: "Merge expressions"
       },
-      async (value) => {
+      (value) => {
         const name = cleanName(value, suggestMergedExpressionName(expressions));
         const conflict = props.outfit.expressions.find(
           (expression) => !props.selected.has(expression.id) && normalizedKey(expression.name) === normalizedKey(name)
@@ -6978,24 +6984,12 @@ function BatchBar(props) {
             `"${conflict.name}" already exists in this outfit. Include it in the selection or choose another name.`
           );
         }
-        const variantCount = new Set(
-          expressions.flatMap(
-            (expression) => expression.variants.map((variant) => variant.contentHash)
-          )
-        ).size;
-        const { confirmed } = await props.client.ctx.ui.showConfirm({
-          title: `Merge into ${name}?`,
-          message: `Combine ${variantCount} unique sprite variant${variantCount === 1 ? "" : "s"} from ${expressions.length} expression slots. The source slots will become one expression, and the change can be undone until the Studio is closed.`,
-          confirmLabel: "Merge expressions"
+        props.mutate({
+          type: "merge",
+          expressionIds: expressions.map((expression) => expression.id),
+          outfitId: props.outfit.id,
+          name
         });
-        if (confirmed) {
-          props.mutate({
-            type: "merge",
-            expressionIds: expressions.map((expression) => expression.id),
-            outfitId: props.outfit.id,
-            name
-          });
-        }
       }
     );
   }

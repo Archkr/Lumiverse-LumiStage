@@ -7,6 +7,7 @@ const styles = readFileSync(resolve(root, "src/ui/styles.ts"), "utf8");
 const studio = readFileSync(resolve(root, "src/ui/studio.tsx"), "utf8");
 const frontend = readFileSync(resolve(root, "src/frontend.tsx"), "utf8");
 const controls = readFileSync(resolve(root, "src/ui/host-controls.tsx"), "utf8");
+const modals = readFileSync(resolve(root, "src/ui/modals.tsx"), "utf8");
 const primitives = readFileSync(resolve(root, "src/ui/primitives.tsx"), "utf8");
 const stage = readFileSync(resolve(root, "src/ui/stage.tsx"), "utf8");
 
@@ -63,6 +64,18 @@ describe("replacement frontend design contract", () => {
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toContain("env(safe-area-inset-bottom)");
     expect(styles).toContain(":focus-visible");
+  });
+
+  it("keeps expression merging within the host's two-modal stack limit", () => {
+    const mergeStart = studio.indexOf("  function merge() {");
+    const mergeFlow = studio.slice(mergeStart, studio.indexOf("  return (", mergeStart));
+    expect(mergeStart).toBeGreaterThan(-1);
+    expect(mergeFlow).toContain("showTextPrompt(");
+    expect(mergeFlow).not.toContain("showConfirm(");
+    expect(mergeFlow).toContain('submitLabel: "Merge expressions"');
+    expect(mergeFlow).toContain("You can undo the merge until the Studio is closed.");
+    expect(modals).toContain("hint?: string");
+    expect(modals).toContain("hint={options.hint}");
   });
 
   it("keeps stage sprites full-strength and gives the Direct Stage catalog real scroll rows", () => {

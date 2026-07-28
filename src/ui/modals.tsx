@@ -26,6 +26,7 @@ export function showTextPrompt(
   options: {
     title: string;
     label: string;
+    hint?: string;
     placeholder?: string;
     initial?: string;
     submitLabel?: string;
@@ -50,7 +51,7 @@ export function showTextPrompt(
     }
     return (
       <form class="ls-modal-form" onSubmit={submit}>
-        <Field label={options.label}>
+        <Field label={options.label} hint={options.hint}>
           <input
             class="ls-input"
             autoFocus
