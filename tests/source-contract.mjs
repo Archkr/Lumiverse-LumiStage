@@ -77,15 +77,15 @@ for (const [label, text] of [["src/detector.ts", detector], ["dist/backend.js", 
   if (text.includes("max_tokens")) {
     violations.push(`${label}: detector requests must not impose a max_tokens output cap`);
   }
-  if (!text.includes("model: settings.detection.model")) {
-    violations.push(`${label}: selected detector model is missing from the authoritative dispatch request`);
+  if (!text.includes("{ model: settings.detection.model }")) {
+    violations.push(`${label}: selected detector model is missing from quiet-call parameters`);
   }
 }
-if (!backend.includes("spindle.generate.raw") || !backend.includes("spindle.generate.quiet")) {
-  violations.push("backend: detector must use raw dispatch for model overrides and quiet dispatch for connection defaults");
+if (!backend.includes("spindle.generate.quiet") || backend.includes("spindle.generate.raw")) {
+  violations.push("backend: every detector request must use the connection-aware quiet dispatch");
 }
-if (/\.\.\.\(settings\.detection\.model\s*\?\s*\{\s*model:/m.test(detector)) {
-  violations.push("src/detector.ts: selected model must not be sent as a provider parameter");
+if (/^\s*model:\s*settings\.detection\.model\s*\?\?/m.test(detector)) {
+  violations.push("src/detector.ts: selected model must not use the ignored top-level quiet-call field");
 }
 if (!frontend.includes("width: 1440") || !frontend.includes("maxHeight: 980")) {
   violations.push("frontend: full Studio must use the large host modal");

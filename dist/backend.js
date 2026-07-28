@@ -298,10 +298,11 @@ function resolveCharacterState(entry, previous, decision, override, settings, fo
   let decisionApplied = false;
   let outfit = orderedOutfit(profile, override?.outfitId ?? prior?.outfit.id ?? profile.defaultOutfitId);
   const priorInOutfit = prior?.outfit.id === outfit?.id ? prior : null;
-  let expression = outfit ? orderedExpression(outfit, fullLock ? override?.expressionId : priorInOutfit?.expression.id) : null;
+  const anchoredExpressionId = fullLock || outfitLock && !priorInOutfit ? override?.expressionId : priorInOutfit?.expression.id;
+  let expression = outfit ? orderedExpression(outfit, anchoredExpressionId) : null;
   let variant = expression ? orderedVariant(
     expression,
-    fullLock ? override?.variantId : priorInOutfit?.expression.id === expression.id ? priorInOutfit.variant?.id : null
+    fullLock || outfitLock && !priorInOutfit && override?.expressionId === expression.id ? override?.variantId : priorInOutfit?.expression.id === expression.id ? priorInOutfit.variant?.id : null
   ) : null;
   if (confident && !fullLock) {
     const detectedOutfit = profile.outfits.find((item) => item.id === decision.outfitId);
@@ -396,17 +397,15 @@ function isValidManualOverride(catalog, override) {
 function applyManualOverride(timeline, catalog, override, settings, now = Date.now()) {
   const existing = timeline.manualOverrides[override.characterId];
   const retainExistingOutfitLock = existing?.scope === "locked" && existing.lock === "outfit" && existing.outfitId === override.outfitId && override.scope === "once" && override.lock === "state";
-  const persistentOverride = retainExistingOutfitLock ? existing : override;
-  const storedOverride = persistentOverride.lock === "outfit" ? {
-    characterId: persistentOverride.characterId,
-    outfitId: persistentOverride.outfitId,
-    scope: persistentOverride.scope,
-    lock: persistentOverride.lock,
-    createdAt: persistentOverride.createdAt
-  } : persistentOverride;
+  const persistentOverride = retainExistingOutfitLock ? {
+    ...existing,
+    expressionId: override.expressionId,
+    variantId: override.variantId,
+    createdAt: override.createdAt
+  } : override;
   const manualOverrides = {
     ...timeline.manualOverrides,
-    [override.characterId]: storedOverride
+    [override.characterId]: persistentOverride
   };
   const focusIds = timeline.snapshot.focusedCharacterIds.length ? timeline.snapshot.focusedCharacterIds : [override.characterId];
   const profile = findCharacter(catalog, override.characterId)?.profile;
@@ -1728,9 +1727,9 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
     estimatedInputTokens,
     messages,
     connection_id: settings.detection.connectionId ?? void 0,
-    model: settings.detection.model ?? void 0,
     parameters: {
-      temperature: settings.detection.temperature
+      temperature: settings.detection.temperature,
+      ...settings.detection.model ? { model: settings.detection.model } : {}
     },
     reasoning: { source: "off" },
     tools
@@ -2072,21 +2071,63 @@ function replayTimeline(timeline, catalog, settings, messages, now = Date.now())
     (character) => character.confidence < settings.detection.confidence
   ) ?? false;
   let snapshot = emptySnapshot(timeline.chatId, now);
+  const pendingOverrides = Object.values(timeline.manualOverrides).sort((left, right) => left.createdAt - right.createdAt);
+  const activeOverrides = {};
+  let overrideIndex = 0;
+  const applyManualAnchor = (current, override) => {
+    activeOverrides[override.characterId] = override;
+    const retained = timeline.snapshot.characters[override.characterId];
+    const retainedInOutfit = retained?.outfitId === override.outfitId ? retained : null;
+    const expressionId = override.expressionId ?? retainedInOutfit?.expressionId;
+    const variantId = override.variantId ?? retainedInOutfit?.variantId;
+    const anchored = override.outfitId && expressionId ? catalog.find((entry) => entry.characterId === override.characterId)?.profile.outfits.find((outfit) => outfit.id === override.outfitId)?.expressions.find((expression) => expression.id === expressionId) : null;
+    const variant = anchored?.variants.find((item) => item.id === variantId) ?? anchored?.variants.slice().sort((left, right) => left.order - right.order || left.createdAt - right.createdAt)[0] ?? null;
+    const characters = anchored && variant ? [{
+      characterId: override.characterId,
+      outfitId: override.outfitId,
+      expressionId: anchored.id,
+      variantId: variant.id,
+      confidence: 1
+    }] : [];
+    const anchorDecision = {
+      schemaVersion: 2,
+      focusedCharacterIds: current.focusedCharacterIds.length ? current.focusedCharacterIds : [override.characterId],
+      characters
+    };
+    return applyDecision(
+      current,
+      catalog,
+      anchorDecision,
+      activeOverrides,
+      settings,
+      override.createdAt
+    );
+  };
+  const applyOverridesThrough = (current, createdAt) => {
+    let next = current;
+    while (overrideIndex < pendingOverrides.length && pendingOverrides[overrideIndex].createdAt <= createdAt) {
+      next = applyManualAnchor(next, pendingOverrides[overrideIndex]);
+      overrideIndex += 1;
+    }
+    return next;
+  };
   for (const message of messages) {
     if (message.role !== "assistant") continue;
     const cached = decisions.find(
       (record2) => record2.messageId === message.id && record2.swipeId === message.swipeId && record2.contentHash === message.contentHash
     );
     if (!cached) continue;
+    snapshot = applyOverridesThrough(snapshot, cached.createdAt);
     snapshot = applyDecision(
       snapshot,
       catalog,
       cached.decision,
-      timeline.manualOverrides,
+      activeOverrides,
       settings,
       cached.createdAt
     );
   }
+  snapshot = applyOverridesThrough(snapshot, Number.POSITIVE_INFINITY);
   if (!latestAssistant || !latestDecision || latestDecisionRejected || Object.keys(snapshot.characters).length === 0) {
     snapshot = retainedSnapshot;
   }
@@ -2191,27 +2232,8 @@ async function connectionViews(userId) {
     hasApiKey: connection.has_api_key
   }));
 }
-async function generateDetector(userId, request, settings, signal) {
-  const selectedModel = settings.model?.trim() || null;
-  if (!selectedModel) {
-    return spindle.generate.quiet({ ...request, userId, signal });
-  }
-  let connectionId = settings.connectionId;
-  if (!connectionId) {
-    const connections = await spindle.connections.list(userId).catch(() => []);
-    connectionId = connections.find((connection) => connection.is_default)?.id ?? null;
-  }
-  if (!connectionId) {
-    throw new Error("Select a LumiStage detection connection before overriding its model.");
-  }
-  return spindle.generate.raw({
-    ...request,
-    connection_id: connectionId,
-    provider: "",
-    model: selectedModel,
-    userId,
-    signal
-  });
+async function generateDetector(userId, request, signal) {
+  return spindle.generate.quiet({ ...request, userId, signal });
 }
 function queueKey(userId, chatId) {
   return `${userId}:${chatId}`;
@@ -2464,7 +2486,7 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
   if (!record2) {
     const recent = recentDetectorRuns.get(detectorMessageKey);
     const recentWindow = force ? 5e3 : 3e4;
-    if (recent && Date.now() - recent.completedAt <= recentWindow && (!force || recent.requestFingerprint === requestFingerprint)) {
+    if (recent && Date.now() - recent.completedAt <= recentWindow && recent.requestFingerprint === requestFingerprint) {
       record2 = recent.record;
       detectorInputTokens = recent.detectorInputTokens;
     }
@@ -2491,7 +2513,6 @@ async function analyzeLatest(userId, chatId, force = false, detectionOverride, e
         const response = await generateDetector(
           userId,
           request,
-          settings.detection,
           AbortSignal.timeout(6e4)
         );
         const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
@@ -3004,11 +3025,14 @@ async function handleMessage(message, userId) {
   }
   if (message.type === "request-diagnostics") {
     const context = activeContexts.get(userId);
+    const settings = await repository.getSettings(userId);
+    const diagnosticConnections = await connectionViews(userId);
+    const requestedConnection = settings.detection.connectionId ? diagnosticConnections.find((connection) => connection.id === settings.detection.connectionId) : diagnosticConnections.find((connection) => connection.isDefault);
     const diagnosticProfiles = context?.chatId ? (await profilesForChat(userId, context.chatId)).profiles : context?.characterId ? [await repository.getProfile(userId, context.characterId, await characterName(userId, context.characterId))] : [];
     const profile = diagnosticProfiles.find((item) => item.characterId === context?.characterId) ?? diagnosticProfiles[0] ?? null;
     const views = await variantViewsForProfiles(userId, diagnosticProfiles);
     const media = diagnosticProfiles.flatMap(allVariants);
-    const settings = await repository.getSettings(userId);
+    const latestDecision = context?.chatId ? (await repository.getTimeline(userId, context.chatId)).decisions.slice().sort((left, right) => right.createdAt - left.createdAt)[0] ?? null : null;
     const counters = countersFor(userId);
     const estimatedRequest = buildDetectorRequest(
       buildCatalog(diagnosticProfiles),
@@ -3034,8 +3058,12 @@ async function handleMessage(message, userId) {
       },
       connection: {
         generationPermission: hasPermission("generation"),
-        selection: settings.detection.connectionId ? "configured" : "active-host-connection",
-        modelOverride: settings.detection.model ? "configured" : "none"
+        selection: settings.detection.connectionId ? "configured" : "default-host-connection",
+        requestedConnectionId: requestedConnection?.id ?? settings.detection.connectionId,
+        requestedConnectionName: requestedConnection?.name ?? null,
+        requestedModel: settings.detection.model ?? requestedConnection?.model ?? null,
+        modelSource: settings.detection.model ? "configured" : "connection-default",
+        latestDecisionModel: latestDecision?.model ?? null
       },
       media: {
         total: media.length,

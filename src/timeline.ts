@@ -2,7 +2,10 @@ import { applyDecision, emptySnapshot, type CatalogEntry } from "./model";
 import type {
   ChatTimelineV2,
   DecisionRecordV2,
+  DetectionDecisionV2,
   LumiStageSettingsV2,
+  ManualOverrideV2,
+  StageSnapshotV2,
 } from "./types";
 
 export interface TimelineMessageKey {
@@ -86,6 +89,74 @@ export function replayTimeline(
     (character) => character.confidence < settings.detection.confidence,
   ) ?? false;
   let snapshot = emptySnapshot(timeline.chatId, now);
+  const pendingOverrides = Object.values(timeline.manualOverrides)
+    .sort((left, right) => left.createdAt - right.createdAt);
+  const activeOverrides: Record<string, ManualOverrideV2> = {};
+  let overrideIndex = 0;
+
+  const applyManualAnchor = (
+    current: StageSnapshotV2,
+    override: ManualOverrideV2,
+  ): StageSnapshotV2 => {
+    activeOverrides[override.characterId] = override;
+    const retained = timeline.snapshot.characters[override.characterId];
+    const retainedInOutfit = retained?.outfitId === override.outfitId ? retained : null;
+    const expressionId = override.expressionId ?? retainedInOutfit?.expressionId;
+    const variantId = override.variantId ?? retainedInOutfit?.variantId;
+    const anchored = override.outfitId && expressionId
+      ? catalog
+        .find((entry) => entry.characterId === override.characterId)
+        ?.profile.outfits
+        .find((outfit) => outfit.id === override.outfitId)
+        ?.expressions
+        .find((expression) => expression.id === expressionId)
+      : null;
+    const variant = anchored?.variants.find((item) => item.id === variantId)
+      ?? anchored?.variants
+        .slice()
+        .sort((left, right) => left.order - right.order || left.createdAt - right.createdAt)[0]
+      ?? null;
+    const characters = anchored && variant
+      ? [{
+          characterId: override.characterId,
+          outfitId: override.outfitId,
+          expressionId: anchored.id,
+          variantId: variant.id,
+          confidence: 1,
+        }]
+      : [];
+    const anchorDecision: DetectionDecisionV2 = {
+      schemaVersion: 2,
+      focusedCharacterIds: current.focusedCharacterIds.length
+        ? current.focusedCharacterIds
+        : [override.characterId],
+      characters,
+    };
+    return applyDecision(
+      current,
+      catalog,
+      anchorDecision,
+      activeOverrides,
+      settings,
+      override.createdAt,
+    );
+  };
+
+  const applyOverridesThrough = (
+    current: StageSnapshotV2,
+    createdAt: number,
+  ): StageSnapshotV2 => {
+    let next = current;
+    while (
+      overrideIndex < pendingOverrides.length
+      && pendingOverrides[overrideIndex].createdAt <= createdAt
+    ) {
+      next = applyManualAnchor(next, pendingOverrides[overrideIndex]);
+      overrideIndex += 1;
+    }
+    return next;
+  };
+
   for (const message of messages) {
     if (message.role !== "assistant") continue;
     const cached = decisions.find((record) =>
@@ -94,15 +165,17 @@ export function replayTimeline(
       && record.contentHash === message.contentHash
     );
     if (!cached) continue;
+    snapshot = applyOverridesThrough(snapshot, cached.createdAt);
     snapshot = applyDecision(
       snapshot,
       catalog,
       cached.decision,
-      timeline.manualOverrides,
+      activeOverrides,
       settings,
       cached.createdAt,
     );
   }
+  snapshot = applyOverridesThrough(snapshot, Number.POSITIVE_INFINITY);
   if (
     !latestAssistant
     || !latestDecision

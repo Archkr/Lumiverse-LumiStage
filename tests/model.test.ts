@@ -176,7 +176,7 @@ describe("state resolution", () => {
     expect(stateLocked?.variantId).toBe("variant-neutral-b");
   });
 
-  it("stores an outfit-only lock without reasserting its starting expression", () => {
+  it("stores an outfit anchor without preventing later automated expressions", () => {
     const profile = profileA();
     const catalog = buildCatalog([profile]);
     const settings = defaultSettings(1);
@@ -198,6 +198,8 @@ describe("state resolution", () => {
     expect(locked.manualOverrides["character-a"]).toEqual({
       characterId: "character-a",
       outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
       scope: "locked",
       lock: "outfit",
       createdAt: 2,
@@ -229,9 +231,15 @@ describe("state resolution", () => {
       lock: "state",
       createdAt: 4,
     }, settings, 4);
-    expect(manuallyShifted.manualOverrides["character-a"]).toEqual(
-      locked.manualOverrides["character-a"],
-    );
+    expect(manuallyShifted.manualOverrides["character-a"]).toEqual({
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 4,
+    });
     expect(manuallyShifted.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
       outfitId: "outfit-casual",
       expressionId: "expression-happy",

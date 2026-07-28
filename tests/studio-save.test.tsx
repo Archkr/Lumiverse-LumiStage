@@ -111,6 +111,7 @@ describe("Studio save conflict recovery", () => {
   it("updates and persists a model selected through the native picker", async () => {
     let receive: (message: BackendToFrontend) => void = () => undefined;
     let modelOnChange: SpindleModelComboboxOptions["onChange"];
+    let modelMountOptions: SpindleModelComboboxOptions | null = null;
     const sendToBackend = vi.fn((message: FrontendToBackend) => {
       if (message.type === "save-settings") {
         receive({
@@ -148,6 +149,7 @@ describe("Studio save conflict recovery", () => {
           target: Element,
           options: SpindleModelComboboxOptions,
         ) => {
+          modelMountOptions = options;
           modelOnChange = options.onChange;
           return mountedHandle(target, options.value ?? "");
         }),
@@ -159,7 +161,7 @@ describe("Studio save conflict recovery", () => {
     client.start();
     const state = backendState(3);
     state.settings.revision = 4;
-    state.settings.detection.connectionId = "connection-a";
+    state.settings.detection.connectionId = null;
     state.settings.detection.model = "model-old";
     state.connections = [{
       id: "connection-a",
@@ -173,6 +175,8 @@ describe("Studio save conflict recovery", () => {
     const view = render(<StudioWorkspace client={client} />);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await waitFor(() => expect(modelOnChange).toBeTypeOf("function"));
+    expect((modelMountOptions as SpindleModelComboboxOptions | null)?.connection)
+      .toEqual({ kind: "llm", id: "connection-a" });
 
     await act(async () => {
       modelOnChange?.("model-new");
@@ -189,7 +193,10 @@ describe("Studio save conflict recovery", () => {
         type: "save-settings",
         expectedRevision: 4,
         settings: expect.objectContaining({
-          detection: expect.objectContaining({ model: "model-new" }),
+          detection: expect.objectContaining({
+            connectionId: null,
+            model: "model-new",
+          }),
         }),
       }));
     });

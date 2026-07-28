@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { applyDecision, buildCatalog, createTimeline, defaultSettings } from "../src/model";
+import {
+  applyDecision,
+  applyManualOverride,
+  buildCatalog,
+  createTimeline,
+  defaultSettings,
+} from "../src/model";
 import {
   findCachedDecision,
   reconcileDecisionRecords,
@@ -134,6 +140,194 @@ describe("decision cache and replay", () => {
     );
     expect(replayed.snapshot.characters["character-a"].expressionId).toBe("expression-happy");
     expect(replayed.snapshot.characters["character-a"].variantId).toBe("variant-expression-happy");
+  });
+
+  it("replays an outfit-lock anchor chronologically and preserves manual expression shifts", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const oldDecision = {
+      ...recordA("before-lock", 0, "before-lock"),
+      createdAt: 10,
+    };
+    const timeline = createTimeline("chat", 1);
+    timeline.decisions = [oldDecision];
+    timeline.snapshot = applyDecision(
+      timeline.snapshot,
+      catalog,
+      oldDecision.decision,
+      {},
+      settings,
+      oldDecision.createdAt,
+    );
+    const locked = applyManualOverride(timeline, catalog, {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 20,
+    }, settings, 20);
+
+    const replayed = replayTimeline(
+      locked,
+      catalog,
+      settings,
+      [{ id: "before-lock", role: "assistant", swipeId: 0, contentHash: "before-lock" }],
+      30,
+    );
+    expect(replayed.manualOverrides["character-a"]).toEqual(expect.objectContaining({
+      lock: "outfit",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+      createdAt: 20,
+    }));
+    expect(replayed.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+    }));
+  });
+
+  it("uses the retained snapshot as the anchor for legacy outfit locks", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const oldDecision = {
+      ...recordA("before-lock", 0, "before-lock"),
+      createdAt: 10,
+    };
+    const timeline = createTimeline("chat", 1);
+    timeline.decisions = [oldDecision];
+    timeline.snapshot = applyDecision(
+      timeline.snapshot,
+      catalog,
+      {
+        schemaVersion: 2,
+        focusedCharacterIds: ["character-a"],
+        characters: [{
+          characterId: "character-a",
+          outfitId: "outfit-casual",
+          expressionId: "expression-angry",
+          variantId: "variant-expression-angry",
+          confidence: 1,
+        }],
+      },
+      {},
+      settings,
+      20,
+    );
+    timeline.manualOverrides["character-a"] = {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 20,
+    };
+
+    const replayed = replayTimeline(
+      timeline,
+      catalog,
+      settings,
+      [{ id: "before-lock", role: "assistant", swipeId: 0, contentHash: "before-lock" }],
+      30,
+    );
+    expect(replayed.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+    }));
+  });
+
+  it("allows post-lock decisions to change expressions but never the locked outfit", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const timeline = createTimeline("chat", 1);
+    timeline.manualOverrides["character-a"] = {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+      scope: "locked",
+      lock: "outfit",
+      createdAt: 20,
+    };
+    timeline.decisions = [
+      {
+        ...recordA("before-lock", 0, "before-lock", {
+          outfitId: "outfit-formal",
+          expressionId: "expression-formal",
+          variantId: "variant-expression-formal",
+        }),
+        createdAt: 10,
+      },
+      {
+        ...recordA("after-lock", 0, "after-lock", {
+          expressionId: "expression-happy",
+          variantId: "variant-expression-happy",
+        }),
+        createdAt: 30,
+      },
+      {
+        ...recordA("invalid-outfit", 0, "invalid-outfit", {
+          outfitId: "outfit-formal",
+          expressionId: "expression-formal",
+          variantId: "variant-expression-formal",
+        }),
+        createdAt: 40,
+      },
+    ];
+
+    const replayed = replayTimeline(
+      timeline,
+      catalog,
+      settings,
+      [
+        { id: "before-lock", role: "assistant", swipeId: 0, contentHash: "before-lock" },
+        { id: "after-lock", role: "assistant", swipeId: 0, contentHash: "after-lock" },
+        { id: "invalid-outfit", role: "assistant", swipeId: 0, contentHash: "invalid-outfit" },
+      ],
+      50,
+    );
+    expect(replayed.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-happy",
+      variantId: "variant-expression-happy",
+    }));
+  });
+
+  it("keeps a chronological state lock exact across later decisions", () => {
+    const catalog = buildCatalog([profileA()]);
+    const settings = defaultSettings(1);
+    const timeline = createTimeline("chat", 1);
+    timeline.manualOverrides["character-a"] = {
+      characterId: "character-a",
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+      scope: "locked",
+      lock: "state",
+      createdAt: 20,
+    };
+    timeline.decisions = [{
+      ...recordA("after-lock", 0, "after-lock", {
+        expressionId: "expression-happy",
+        variantId: "variant-expression-happy",
+      }),
+      createdAt: 30,
+    }];
+
+    const replayed = replayTimeline(
+      timeline,
+      catalog,
+      settings,
+      [{ id: "after-lock", role: "assistant", swipeId: 0, contentHash: "after-lock" }],
+      40,
+    );
+    expect(replayed.snapshot.characters["character-a"]).toEqual(expect.objectContaining({
+      outfitId: "outfit-casual",
+      expressionId: "expression-angry",
+      variantId: "variant-expression-angry",
+    }));
   });
 });
 

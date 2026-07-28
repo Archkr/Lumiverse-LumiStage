@@ -161,35 +161,11 @@ async function connectionViews(userId: string): Promise<LlmConnectionView[]> {
 async function generateDetector(
   userId: string,
   request: Record<string, unknown>,
-  settings: DetectionSettingsV2,
   signal: AbortSignal,
 ): Promise<DetectorResponse> {
-  const selectedModel = settings.model?.trim() || null;
-  if (!selectedModel) {
-    return (spindle.generate.quiet as unknown as (
-      input: Record<string, unknown>,
-    ) => Promise<DetectorResponse>)({ ...request, userId, signal });
-  }
-
-  let connectionId = settings.connectionId;
-  if (!connectionId) {
-    const connections = await spindle.connections.list(userId).catch(() => []);
-    connectionId = connections.find((connection) => connection.is_default)?.id ?? null;
-  }
-  if (!connectionId) {
-    throw new Error("Select a LumiStage detection connection before overriding its model.");
-  }
-
-  return (spindle.generate.raw as unknown as (
+  return (spindle.generate.quiet as unknown as (
     input: Record<string, unknown>,
-  ) => Promise<DetectorResponse>)({
-    ...request,
-    connection_id: connectionId,
-    provider: "",
-    model: selectedModel,
-    userId,
-    signal,
-  });
+  ) => Promise<DetectorResponse>)({ ...request, userId, signal });
 }
 
 function queueKey(userId: string, chatId: string): string {
@@ -509,7 +485,7 @@ async function analyzeLatest(
     if (
       recent
       && Date.now() - recent.completedAt <= recentWindow
-      && (!force || recent.requestFingerprint === requestFingerprint)
+      && recent.requestFingerprint === requestFingerprint
     ) {
       record = recent.record;
       detectorInputTokens = recent.detectorInputTokens;
@@ -541,7 +517,6 @@ async function analyzeLatest(
         const response = await generateDetector(
           userId,
           request,
-          settings.detection,
           AbortSignal.timeout(60_000),
         );
         const usedInputTokens = response.usage?.prompt_tokens
@@ -1110,6 +1085,11 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
   }
   if (message.type === "request-diagnostics") {
     const context = activeContexts.get(userId);
+    const settings = await repository.getSettings(userId);
+    const diagnosticConnections = await connectionViews(userId);
+    const requestedConnection = settings.detection.connectionId
+      ? diagnosticConnections.find((connection) => connection.id === settings.detection.connectionId)
+      : diagnosticConnections.find((connection) => connection.isDefault);
     const diagnosticProfiles = context?.chatId
       ? (await profilesForChat(userId, context.chatId)).profiles
       : context?.characterId
@@ -1118,7 +1098,11 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
     const profile = diagnosticProfiles.find((item) => item.characterId === context?.characterId) ?? diagnosticProfiles[0] ?? null;
     const views = await variantViewsForProfiles(userId, diagnosticProfiles);
     const media = diagnosticProfiles.flatMap(allVariants);
-    const settings = await repository.getSettings(userId);
+    const latestDecision = context?.chatId
+      ? (await repository.getTimeline(userId, context.chatId)).decisions
+        .slice()
+        .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
+      : null;
     const counters = countersFor(userId);
     const estimatedRequest = buildDetectorRequest(
       buildCatalog(diagnosticProfiles),
@@ -1146,8 +1130,12 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
       },
       connection: {
         generationPermission: hasPermission("generation"),
-        selection: settings.detection.connectionId ? "configured" : "active-host-connection",
-        modelOverride: settings.detection.model ? "configured" : "none",
+        selection: settings.detection.connectionId ? "configured" : "default-host-connection",
+        requestedConnectionId: requestedConnection?.id ?? settings.detection.connectionId,
+        requestedConnectionName: requestedConnection?.name ?? null,
+        requestedModel: settings.detection.model ?? requestedConnection?.model ?? null,
+        modelSource: settings.detection.model ? "configured" : "connection-default",
+        latestDecisionModel: latestDecision?.model ?? null,
       },
       media: {
         total: media.length,

@@ -142,7 +142,7 @@ export function DrawerDashboard(props: {
   const variantCount = profile ? allVariants(profile).length : 0;
   const connection = backend.settings.detection.connectionId
     ? backend.connections.find((item) => item.id === backend.settings.detection.connectionId)
-    : backend.connections.find((item) => item.isDefault) ?? backend.connections[0];
+    : backend.connections.find((item) => item.isDefault);
   const ready = backend.lastDetection.status !== "error";
 
   return (
@@ -174,7 +174,7 @@ export function DrawerDashboard(props: {
           <span class="ls-status-icon"><Icon name="automation" size={16} /></span>
           <span>
             <strong>{backend.settings.detection.enabled ? "Automatic direction" : "Manual direction"}</strong>
-            <small>{connection ? `${connection.name}${backend.settings.detection.model ? ` · ${backend.settings.detection.model}` : ""}` : "Uses active Lumiverse connection"}</small>
+            <small>{connection ? `${connection.name}${backend.settings.detection.model ? ` · ${backend.settings.detection.model}` : ""}` : "No default Lumiverse connection"}</small>
           </span>
         </div>
         <span class="ls-cue-dot" data-live={backend.settings.detection.enabled} />
@@ -975,7 +975,7 @@ function DiagnosticsPanel({ client }: { client: LumiStageClient }) {
   return (
     <section class="ls-settings-card ls-diagnostics-card">
       <div class="ls-settings-card-head">
-        <div><span class="ls-kicker">Runtime health</span><h3>Diagnostics</h3><p>Permission, queue, catalog, and detector status without transcript or raw model content.</p></div>
+        <div><span class="ls-kicker">Runtime health</span><h3>Diagnostics</h3><p>Permission, queue, catalog, and requested detector connection/model without transcript content.</p></div>
         <Button size="small" icon="refresh" disabled={loading} onClick={() => void refresh()}>{loading ? "Checking…" : "Run report"}</Button>
       </div>
       <div class="ls-permission-grid">
@@ -1014,13 +1014,15 @@ function SettingsView({ client }: { client: LumiStageClient }) {
     setDirty(true);
   };
   const connections = [
-    { value: "", label: "Use active Lumiverse connection", sublabel: "Follows the host selection" },
+    { value: "", label: "Use default Lumiverse connection", sublabel: "Follows the host backend default" },
     ...backend.connections.map((item) => ({
       value: item.id,
       label: item.name,
       sublabel: `${item.provider}${item.model ? ` · ${item.model}` : ""}`,
     })),
   ];
+  const defaultConnectionId = backend.connections.find((item) => item.isDefault)?.id ?? null;
+  const modelConnectionId = draft.detection.connectionId ?? defaultConnectionId;
   async function save() {
     try {
       const expectedRevision = Math.max(draft.revision, backend.settings.revision);
@@ -1073,7 +1075,7 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                   />
                 </div>
                 <div class="ls-settings-form-grid">
-                  <Field label="LLM connection" hint="Choose a profile or follow Lumiverse’s active connection.">
+                  <Field label="LLM connection" hint="Choose a profile or use Lumiverse’s backend default connection.">
                     <HostSelect
                       client={client}
                       label="LLM connection"
@@ -1089,7 +1091,8 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     <HostModelPicker
                       client={client}
                       value={draft.detection.model ?? ""}
-                      connectionId={draft.detection.connectionId}
+                      connectionId={modelConnectionId}
+                      disabled={!modelConnectionId}
                       onChange={(model) => edit({ ...draft, detection: { ...draft.detection, model: model || null } })}
                     />
                   </Field>

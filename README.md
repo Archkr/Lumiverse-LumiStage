@@ -397,7 +397,7 @@ Failed or unavailable media is cleared instead of leaving a stale sprite visible
 | Setting | Default | Notes |
 |---|---:|---|
 | Automatic direction | On | Runs after successful completed assistant replies. |
-| Connection | Active Lumiverse connection | May use a dedicated configured LLM connection. |
+| Connection | Default Lumiverse connection | May use a dedicated configured LLM connection. |
 | Model | Connection default | Can be overridden when the connection exposes models. |
 | Context messages | 5 | Recent messages sent to the detector. |
 | Temperature | 0.1 | Low by default for stable structured selection. |

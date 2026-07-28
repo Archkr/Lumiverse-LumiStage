@@ -379,13 +379,20 @@ export function resolveCharacterState(
 
   let outfit = orderedOutfit(profile, override?.outfitId ?? prior?.outfit.id ?? profile.defaultOutfitId);
   const priorInOutfit = prior?.outfit.id === outfit?.id ? prior : null;
+  const anchoredExpressionId = fullLock || (outfitLock && !priorInOutfit)
+    ? override?.expressionId
+    : priorInOutfit?.expression.id;
   let expression = outfit
-    ? orderedExpression(outfit, fullLock ? override?.expressionId : priorInOutfit?.expression.id)
+    ? orderedExpression(outfit, anchoredExpressionId)
     : null;
   let variant = expression
     ? orderedVariant(
         expression,
-        fullLock
+        fullLock || (
+          outfitLock
+          && !priorInOutfit
+          && override?.expressionId === expression.id
+        )
           ? override?.variantId
           : priorInOutfit?.expression.id === expression.id
             ? priorInOutfit.variant?.id
@@ -528,19 +535,17 @@ export function applyManualOverride(
     && override.scope === "once"
     && override.lock === "state"
   );
-  const persistentOverride = retainExistingOutfitLock ? existing : override;
-  const storedOverride: ManualOverrideV2 = persistentOverride.lock === "outfit"
+  const persistentOverride: ManualOverrideV2 = retainExistingOutfitLock
     ? {
-        characterId: persistentOverride.characterId,
-        outfitId: persistentOverride.outfitId,
-        scope: persistentOverride.scope,
-        lock: persistentOverride.lock,
-        createdAt: persistentOverride.createdAt,
+        ...existing,
+        expressionId: override.expressionId,
+        variantId: override.variantId,
+        createdAt: override.createdAt,
       }
-    : persistentOverride;
+    : override;
   const manualOverrides = {
     ...timeline.manualOverrides,
-    [override.characterId]: storedOverride,
+    [override.characterId]: persistentOverride,
   };
   const focusIds = timeline.snapshot.focusedCharacterIds.length
     ? timeline.snapshot.focusedCharacterIds

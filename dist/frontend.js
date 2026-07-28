@@ -6693,7 +6693,7 @@ function DrawerDashboard(props) {
   const appearance = props.client.effectiveAppearance();
   const profile = backend.profile ?? backend.stageProfiles[0] ?? null;
   const variantCount = profile ? allVariants(profile).length : 0;
-  const connection = backend.settings.detection.connectionId ? backend.connections.find((item) => item.id === backend.settings.detection.connectionId) : backend.connections.find((item) => item.isDefault) ?? backend.connections[0];
+  const connection = backend.settings.detection.connectionId ? backend.connections.find((item) => item.id === backend.settings.detection.connectionId) : backend.connections.find((item) => item.isDefault);
   const ready = backend.lastDetection.status !== "error";
   return /* @__PURE__ */ u2("div", { class: "ls-drawer", children: [
     /* @__PURE__ */ u2(ProgressNotice, { client: props.client }),
@@ -6716,7 +6716,7 @@ function DrawerDashboard(props) {
         /* @__PURE__ */ u2("span", { class: "ls-status-icon", children: /* @__PURE__ */ u2(Icon, { name: "automation", size: 16 }) }),
         /* @__PURE__ */ u2("span", { children: [
           /* @__PURE__ */ u2("strong", { children: backend.settings.detection.enabled ? "Automatic direction" : "Manual direction" }),
-          /* @__PURE__ */ u2("small", { children: connection ? `${connection.name}${backend.settings.detection.model ? ` \xB7 ${backend.settings.detection.model}` : ""}` : "Uses active Lumiverse connection" })
+          /* @__PURE__ */ u2("small", { children: connection ? `${connection.name}${backend.settings.detection.model ? ` \xB7 ${backend.settings.detection.model}` : ""}` : "No default Lumiverse connection" })
         ] })
       ] }),
       /* @__PURE__ */ u2("span", { class: "ls-cue-dot", "data-live": backend.settings.detection.enabled })
@@ -7522,7 +7522,7 @@ function DiagnosticsPanel({ client }) {
       /* @__PURE__ */ u2("div", { children: [
         /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Runtime health" }),
         /* @__PURE__ */ u2("h3", { children: "Diagnostics" }),
-        /* @__PURE__ */ u2("p", { children: "Permission, queue, catalog, and detector status without transcript or raw model content." })
+        /* @__PURE__ */ u2("p", { children: "Permission, queue, catalog, and requested detector connection/model without transcript content." })
       ] }),
       /* @__PURE__ */ u2(Button, { size: "small", icon: "refresh", disabled: loading, onClick: () => void refresh(), children: loading ? "Checking\u2026" : "Run report" })
     ] }),
@@ -7571,13 +7571,15 @@ function SettingsView({ client }) {
     setDirty(true);
   };
   const connections = [
-    { value: "", label: "Use active Lumiverse connection", sublabel: "Follows the host selection" },
+    { value: "", label: "Use default Lumiverse connection", sublabel: "Follows the host backend default" },
     ...backend.connections.map((item) => ({
       value: item.id,
       label: item.name,
       sublabel: `${item.provider}${item.model ? ` \xB7 ${item.model}` : ""}`
     }))
   ];
+  const defaultConnectionId = backend.connections.find((item) => item.isDefault)?.id ?? null;
+  const modelConnectionId = draft.detection.connectionId ?? defaultConnectionId;
   async function save() {
     try {
       const expectedRevision = Math.max(draft.revision, backend.settings.revision);
@@ -7653,7 +7655,7 @@ function SettingsView({ client }) {
             )
           ] }),
           /* @__PURE__ */ u2("div", { class: "ls-settings-form-grid", children: [
-            /* @__PURE__ */ u2(Field, { label: "LLM connection", hint: "Choose a profile or follow Lumiverse\u2019s active connection.", children: /* @__PURE__ */ u2(
+            /* @__PURE__ */ u2(Field, { label: "LLM connection", hint: "Choose a profile or use Lumiverse\u2019s backend default connection.", children: /* @__PURE__ */ u2(
               HostSelect,
               {
                 client,
@@ -7671,7 +7673,8 @@ function SettingsView({ client }) {
               {
                 client,
                 value: draft.detection.model ?? "",
-                connectionId: draft.detection.connectionId,
+                connectionId: modelConnectionId,
+                disabled: !modelConnectionId,
                 onChange: (model) => edit({ ...draft, detection: { ...draft.detection, model: model || null } })
               }
             ) })

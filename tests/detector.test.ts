@@ -325,7 +325,7 @@ describe("detector contract", () => {
       .toBe("variant-neutral-a");
   });
 
-  it("rejects duplicate character decisions and exposes the selected model for authoritative dispatch", () => {
+  it("rejects duplicate character decisions and sends the selected model through quiet parameters", () => {
     const profile = profileA();
     const catalog = buildCatalog([profile]);
     const duplicate = {
@@ -357,9 +357,10 @@ describe("detector contract", () => {
     const settings = defaultSettings(1);
     settings.detection.model = "reasoning-model";
     const request = buildDetectorRequest(ensembleCatalog, [], {}, settings);
-    expect(request.model).toBe("reasoning-model");
+    expect(request).not.toHaveProperty("model");
     expect(request.parameters).toEqual({
       temperature: 0.1,
+      model: "reasoning-model",
     });
     expect(request.parameters).not.toHaveProperty("max_tokens");
   });
