@@ -393,7 +393,6 @@ describe("operator-scoped backend runtime", () => {
             characterId: "character-a",
             outfitName: automaticOutfit.name,
             expressionName: automaticExpression.name,
-            fileName: automaticVariant.fileName,
             confidence: 1,
           }],
         },
@@ -430,6 +429,9 @@ describe("operator-scoped backend runtime", () => {
     ]);
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("__isChatHistory");
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("variant-");
+    expect(JSON.stringify(detectorRequest)).not.toContain(automaticVariant.fileName);
+    expect(JSON.stringify(detectorRequest)).not.toContain('"fileName":');
+    expect(JSON.stringify(detectorRequest)).not.toContain('"files":');
     expect(JSON.stringify(detectorRequest.messages)).not.toContain("This stale reply");
     const detectorSystem = String(detectorRequest.messages[0].content);
     const detectorCatalog = JSON.parse(

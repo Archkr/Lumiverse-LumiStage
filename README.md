@@ -53,7 +53,7 @@ It supports solo characters, group scenes, automatic LLM direction, manual locks
 | **Safe additive imports** | Import individual files or folder trees into the current Studio draft without replacing unrelated outfits. |
 | **Exact manual control** | Apply a sprite once, lock an outfit while expressions change, or lock one exact state. |
 | **Completed-reply automation** | Runs only after a successful assistant message finishes; streaming updates do not trigger expression changes. |
-| **One-call direction** | Sends the complete active filename catalog to one structured detector call, then resolves the selected files back to stable IDs. |
+| **One-call direction** | Sends the active outfit and expression catalog to one structured detector call, then randomly chooses an eligible variant locally. |
 | **Confidence-safe state** | A malformed or low-confidence result preserves the complete prior stage, including focus. |
 | **Solo and ensemble staging** | Displays one character at full strength or composes focused and supporting characters in group scenes. |
 | **Timeline replay** | Reconciles edits, deletions, swipes, and regenerations against message and content fingerprints. |
@@ -90,7 +90,7 @@ One structured detector call
           ├── character ID
           ├── outfit name
           ├── expression name
-          ├── exact filename
+          ├── expression selection
           ├── focus
           └── confidence
           │
@@ -104,8 +104,8 @@ Live Stage + floating stage
 1. Build a sprite library for each character.
 2. Open a chat containing one or more configured characters.
 3. After a successful assistant generation commits its final message, LumiStage reads the configured recent context.
-4. The detector receives the active character catalog and current stage state in one call.
-5. LumiStage validates every returned character and exact filename, resolves the selected folder back to stable IDs, and applies the configured confidence threshold to the complete decision.
+4. The detector receives active character, outfit, and expression names plus the current stage state in one call. Variant IDs and filenames remain private to LumiStage.
+5. LumiStage validates every returned character and expression, randomly chooses one eligible variant locally, resolves the selection to stable IDs, and applies the configured confidence threshold to the complete decision.
 6. The accepted state is saved to the chat timeline and rendered on every LumiStage surface.
 7. Edits, swipes, deletions, and regenerations reconcile the timeline instead of leaving stale sprites behind.
 
@@ -323,16 +323,17 @@ LumiStage reads persisted rows from `spindle.chat.getMessages`, marks them inter
 
 The detector:
 
-- receives every active character, outfit, expression, and exact filename without sending verbose internal outfit/expression/variant UUIDs;
+- receives every active character, outfit, and expression name without receiving variant IDs or filenames;
+- leaves exact variant selection to LumiStage, which randomly chooses among the selected expression's eligible variants;
 - receives current stage state and active manual locks;
 - waits for the exact completed assistant message and coalesces duplicate host/manual triggers into one structured generation call;
-- must copy the exact selected filename, including its extension, rather than inventing a `Character / Outfit / Emotion` label;
+- must copy exact outfit and expression names from the catalog rather than inventing labels;
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
 - asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;
 - has a 60-second abort;
 - overrides low connection/preset completion defaults with a user-controlled reasoning/output budget (32,768 tokens by default, configurable up to 1,000,000; the provider/model maximum still applies);
 - fails clearly before generation when estimated input exceeds 24,000 tokens;
-- rejects unknown filenames, duplicate character decisions, and ambiguous folder/file combinations.
+- rejects unknown or ambiguous outfit/expression selections and duplicate character decisions.
 
 ### Confidence behavior
 
@@ -627,7 +628,7 @@ Regression coverage includes:
 - archive validation and restore;
 - ownership-safe deletion;
 - whole-state confidence preservation;
-- exact-filename detector resolution and outfit changes;
+- private random variant resolution and detector-driven outfit/expression changes;
 - manual locks and forced cache bypass;
 - multi-character isolation and group pruning;
 - Direct Stage scroll rows;

@@ -73,46 +73,39 @@ function resolveCharacterId(value: string, catalog: CatalogEntry[]): string | nu
 function resolveCharacterDecision(
   value: unknown,
   catalog: CatalogEntry[],
+  random: () => number,
 ): DetectionCharacterDecisionV2 | null {
   const raw = asRecord(value);
   const characterSelector = selector(raw, ["characterId", "character", "characterName"]);
-  const fileSelector = selector(raw, ["fileName", "spriteFileName", "sprite", "variantId"]);
-  if (!characterSelector || !fileSelector) return null;
+  const outfitSelector = selector(raw, ["outfitName", "outfit", "outfitId"]);
+  const expressionSelector = selector(raw, ["expressionName", "expression", "expressionId"]);
+  if (!characterSelector || !outfitSelector || !expressionSelector) return null;
   const characterId = resolveCharacterId(characterSelector, catalog);
   const entry = catalog.find((candidate) => candidate.characterId === characterId);
   if (!entry) return null;
-
-  const rawParts = fileSelector.replace(/\\/g, "/").split("/").filter(Boolean);
-  const selectedFileName = rawParts.at(-1) ?? fileSelector;
-  const outfitHint = selector(raw, ["outfitName", "outfit", "outfitId"])
-    ?? (rawParts.length >= 3 ? rawParts.at(-3) ?? null : null);
-  const expressionHint = selector(raw, ["expressionName", "expression", "expressionId"])
-    ?? (rawParts.length >= 2 ? rawParts.at(-2) ?? null : null);
-  const locations = entry.profile.outfits.flatMap((outfit) =>
-    outfit.expressions.flatMap((expression) =>
-      expression.variants.map((variant) => ({ outfit, expression, variant }))
-    )
+  const outfitKey = normalizedKey(outfitSelector);
+  const outfits = entry.profile.outfits.filter(
+    (outfit) =>
+      outfit.id === outfitSelector
+      || normalizedKey(outfit.name) === outfitKey,
   );
-  const direct = locations.find(({ variant }) => variant.id === fileSelector);
-  let matches = direct
-    ? [direct]
-    : locations.filter(({ variant }) => normalizedKey(variant.fileName) === normalizedKey(selectedFileName));
-  if (matches.length > 1 && outfitHint) {
-    const key = normalizedKey(outfitHint);
-    const narrowed = matches.filter(({ outfit }) =>
-      outfit.id === outfitHint || normalizedKey(outfit.name) === key
-    );
-    if (narrowed.length) matches = narrowed;
-  }
-  if (matches.length > 1 && expressionHint) {
-    const key = normalizedKey(expressionHint);
-    const narrowed = matches.filter(({ expression }) =>
-      expression.id === expressionHint || normalizedKey(expression.name) === key
-    );
-    if (narrowed.length) matches = narrowed;
-  }
-  if (matches.length !== 1) return null;
-  const [{ outfit, expression, variant }] = matches;
+  if (outfits.length !== 1) return null;
+  const [outfit] = outfits;
+  const expressionKey = normalizedKey(expressionSelector);
+  const expressions = outfit.expressions.filter(
+    (expression) =>
+      expression.id === expressionSelector
+      || normalizedKey(expression.name) === expressionKey,
+  );
+  if (expressions.length !== 1 || expressions[0].variants.length === 0) return null;
+  const [expression] = expressions;
+  const roll = random();
+  const normalizedRoll = Number.isFinite(roll)
+    ? Math.max(0, Math.min(0.9999999999999999, roll))
+    : 0;
+  const variant = expression.variants[
+    Math.floor(normalizedRoll * expression.variants.length)
+  ];
   return {
     characterId: entry.characterId,
     outfitId: outfit.id,
@@ -125,11 +118,12 @@ function resolveCharacterDecision(
 export function normalizeDecision(
   value: unknown,
   catalog: CatalogEntry[] = [],
+  random: () => number = Math.random,
 ): DetectionDecisionV2 | null {
   const raw = asRecord(value);
   if (!Array.isArray(raw.characters) || !Array.isArray(raw.focusedCharacterIds)) return null;
   const parsedCharacters = raw.characters.map((item) =>
-    catalog.length ? resolveCharacterDecision(item, catalog) : legacyCharacterDecision(item)
+    catalog.length ? resolveCharacterDecision(item, catalog, random) : legacyCharacterDecision(item)
   );
   if (parsedCharacters.some((item) => !item)) return null;
   const characters = parsedCharacters as DetectionCharacterDecisionV2[];
@@ -163,10 +157,13 @@ function parseJsonText(value: string): unknown {
 export function parseDetectorResponse(
   response: DetectorResponse,
   catalog: CatalogEntry[] = [],
+  random: () => number = Math.random,
 ): DetectionDecisionV2 | null {
   const tool = response.tool_calls?.find((item) => item.name === "set_stage_state");
-  if (tool) return normalizeDecision(tool.args, catalog);
-  if (typeof response.content === "string") return normalizeDecision(parseJsonText(response.content), catalog);
+  if (tool) return normalizeDecision(tool.args, catalog, random);
+  if (typeof response.content === "string") {
+    return normalizeDecision(parseJsonText(response.content), catalog, random);
+  }
   return null;
 }
 
@@ -174,13 +171,12 @@ function characterSummary(entry: CatalogEntry): Record<string, unknown> {
   return {
     characterId: entry.characterId,
     name: entry.profile.characterName,
-    outfits: entry.profile.outfits.map((outfit) => ({
-      outfitName: outfit.name,
-      expressions: outfit.expressions.map((expression) => ({
-        expressionName: expression.name,
-        files: expression.variants.map((variant) => variant.fileName),
-      })),
-    })),
+    outfits: entry.profile.outfits.flatMap((outfit) => {
+      const expressions = outfit.expressions
+        .filter((expression) => expression.variants.length > 0)
+        .map((expression) => ({ expressionName: expression.name }));
+      return expressions.length ? [{ outfitName: outfit.name, expressions }] : [];
+    }),
   };
 }
 
@@ -242,13 +238,11 @@ function stateSummary(
     const profile = catalog.find((entry) => entry.characterId === characterId)?.profile;
     const outfit = profile?.outfits.find((item) => item.id === state.outfitId);
     const expression = outfit?.expressions.find((item) => item.id === state.expressionId);
-    const variant = expression?.variants.find((item) => item.id === state.variantId);
     return profile && outfit && expression
       ? [{
           characterId,
           outfitName: outfit.name,
           expressionName: expression.name,
-          fileName: variant?.fileName ?? null,
         }]
       : [];
   });
@@ -262,7 +256,6 @@ function overrideSummary(
     const profile = catalog.find((entry) => entry.characterId === override.characterId)?.profile;
     const outfit = profile?.outfits.find((item) => item.id === override.outfitId);
     const expression = outfit?.expressions.find((item) => item.id === override.expressionId);
-    const variant = expression?.variants.find((item) => item.id === override.variantId);
     if (!profile || !outfit) return [];
     const lockedOutfit = {
       characterId: override.characterId,
@@ -275,7 +268,6 @@ function overrideSummary(
       : [{
           ...lockedOutfit,
           expressionName: expression?.name ?? null,
-          fileName: variant?.fileName ?? null,
         }];
   });
 }
@@ -298,15 +290,14 @@ export function buildDetectorRequest(
     "Catalog expressionName values are general visible sprite states, not an emotion-only taxonomy.",
     "A state may describe facial emotion, full-body pose or posture, an activity or prop use, interaction or relative positioning with another character, physical condition, transformation, or narrative sequence/context.",
     "Examples include states such as \"drinking coffee\", \"after the fight\", or \"straddling another character\"; interpret every label from the perspective of the character who owns that catalog.",
-    "Use expressionName and fileName together as semantic clues. Select the most specific state directly supported by the completed scene, preferring a matching pose, action, interaction, condition, or contextual state over a generic mood such as happy or sad.",
+    "Select the most specific expressionName directly supported by the completed scene, preferring a matching pose, action, interaction, condition, or contextual state over a generic mood such as happy or sad.",
     "For compound, relational, and sequence states, require every material part of the label to be supported: the action or pose, the other participant when named or implied, and ordering such as before/after. Do not select one merely because its emotional tone fits.",
-    "For each updated character, copy one exact fileName (including its extension) from the chosen catalog expression.",
-    "The fileName is authoritative. Never invent a filename and never substitute a label such as Character / Outfit / Emotion.",
-    "Return outfitName and expressionName exactly as listed so duplicate filenames can be resolved inside the right folder.",
+    "For each updated character, return one exact outfitName and expressionName copied from the catalog.",
+    "Variants and filenames are intentionally hidden from you. LumiStage randomly selects an eligible variant after you choose the expression.",
     "Outfits are selectable visual states. You may switch away from the current outfit whenever the completed scene supports another outfit.",
     "Current states are context, not locks. Only entries under Manual locks constrain outfit or sprite selection.",
-    "An outfit lock fixes only outfitName. Within that outfit, choose any listed expressionName and exact fileName that matches the completed scene.",
-    "A state lock fixes the exact outfitName, expressionName, and fileName until it is cleared.",
+    "An outfit lock fixes only outfitName. Within that outfit, choose any listed expressionName that matches the completed scene.",
+    "A state lock fixes the exact outfitName and expressionName until it is cleared; LumiStage separately preserves its exact locked variant.",
     "Classify all relevant group-chat characters in this one call and identify the visual focus.",
     "Use the exact characterId from the catalog for each character and focusedCharacterIds entry.",
     "Confidence is 0..1 for the complete visible-state match.",
@@ -324,7 +315,7 @@ export function buildDetectorRequest(
   ];
   const tools = [{
     name: "set_stage_state",
-    description: "Select each visible character's exact sprite file and catalog state, including poses, actions, interactions, conditions, and contextual states as well as emotions.",
+    description: "Select each visible character's outfit and catalog expression, including poses, actions, interactions, conditions, and contextual states as well as emotions.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -340,7 +331,6 @@ export function buildDetectorRequest(
               "characterId",
               "outfitName",
               "expressionName",
-              "fileName",
               "confidence",
             ],
             properties: {
@@ -349,10 +339,6 @@ export function buildDetectorRequest(
               expressionName: {
                 type: "string",
                 description: "Exact catalog state label. It may represent an emotion, pose, action, interaction, condition, transformation, or sequence/context.",
-              },
-              fileName: {
-                type: "string",
-                description: "Exact filename copied from the selected catalog state, including extension. Use it with expressionName to distinguish specific visible states.",
               },
               confidence: { type: "number", minimum: 0, maximum: 1 },
             },

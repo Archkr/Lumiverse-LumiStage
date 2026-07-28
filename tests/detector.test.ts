@@ -62,37 +62,39 @@ describe("detector contract", () => {
     expect(validated.characters).toEqual([]);
   });
 
-  it("resolves an exact filename from a different outfit back to stable IDs", () => {
+  it("resolves the selected expression and randomly chooses one of its variants", () => {
     const catalog = buildCatalog([profileA()]);
-    const decision = parseDetectorResponse({
+    const response = {
       tool_calls: [{
         name: "set_stage_state",
         args: {
           focusedCharacterIds: ["Aster"],
           characters: [{
             characterId: "Aster",
-            outfitName: "Formal",
-            expressionName: "Composed",
-            fileName: "composed.png",
+            outfitName: "Casual",
+            expressionName: "Neutral",
             confidence: 0.95,
           }],
         },
       }],
-    }, catalog);
-    expect(decision).toEqual({
+    };
+    const firstVariant = parseDetectorResponse(response, catalog, () => 0);
+    const lastVariant = parseDetectorResponse(response, catalog, () => 0.999);
+    expect(firstVariant).toEqual({
       schemaVersion: 2,
       focusedCharacterIds: ["character-a"],
       characters: [{
         characterId: "character-a",
-        outfitId: "outfit-formal",
-        expressionId: "expression-formal",
-        variantId: "variant-expression-formal",
+        outfitId: "outfit-casual",
+        expressionId: "expression-neutral",
+        variantId: "variant-neutral-a",
         confidence: 0.95,
       }],
     });
+    expect(lastVariant?.characters[0].variantId).toBe("variant-neutral-b");
   });
 
-  it("sends every outfit, expression, and exact filename without verbose internal variant IDs", () => {
+  it("sends outfit and expression names without any variant details", () => {
     const profile = profileA();
     const request = buildDetectorRequest(
       buildCatalog([profile]),
@@ -110,10 +112,13 @@ describe("detector contract", () => {
     expect(system).toContain("Casual");
     expect(system).toContain("Formal");
     expect(system).toContain("Neutral");
-    expect(system).toContain("neutral-soft.png");
-    expect(system).toContain("neutral-side.png");
+    expect(system).not.toContain("neutral-soft.png");
+    expect(system).not.toContain("neutral-side.png");
     expect(system).not.toContain("variant-neutral-b");
-    expect(system).toContain("fileName is authoritative");
+    expect(system).not.toContain('"files"');
+    expect(system).not.toContain('"fileName"');
+    expect(system).toContain("Variants and filenames are intentionally hidden from you");
+    expect(system).toContain("randomly selects an eligible variant");
     expect(system).toContain("You may switch away from the current outfit");
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.reasoning).toEqual({ source: "off" });
@@ -124,9 +129,9 @@ describe("detector contract", () => {
       "characterId",
       "outfitName",
       "expressionName",
-      "fileName",
       "confidence",
     ]);
+    expect(tool.parameters.properties.characters.items.properties).not.toHaveProperty("fileName");
   });
 
   it("instructs the model to match general visible states instead of only emotions", () => {
@@ -156,8 +161,7 @@ describe("detector contract", () => {
     expect(tool.description).toContain("poses, actions, interactions, conditions, and contextual states");
     expect(tool.parameters.properties.characters.items.properties.expressionName.description)
       .toContain("pose, action, interaction, condition, transformation, or sequence/context");
-    expect(tool.parameters.properties.characters.items.properties.fileName.description)
-      .toContain("distinguish specific visible states");
+    expect(tool.parameters.properties.characters.items.properties).not.toHaveProperty("fileName");
   });
 
   it("lets the detector change expressions inside an outfit lock", () => {
@@ -210,7 +214,6 @@ describe("detector contract", () => {
             characterId: "character-a",
             outfitName: "Formal",
             expressionName: "Composed",
-            fileName: "composed.png",
             confidence: 1,
           }],
         },
@@ -225,7 +228,6 @@ describe("detector contract", () => {
             characterId: "character-a",
             outfitName: "Casual",
             expressionName: "Happy",
-            fileName: "happy.png",
             confidence: 1,
           }],
         },
@@ -248,7 +250,8 @@ describe("detector contract", () => {
       .find((line) => line.startsWith("Manual locks: "));
     expect(stateLockLine).toContain('"lock":"state"');
     expect(stateLockLine).toContain('"expressionName":"Neutral"');
-    expect(stateLockLine).toContain('"fileName":"neutral-soft.png"');
+    expect(stateLockLine).not.toContain("neutral-soft.png");
+    expect(stateLockLine).not.toContain('"fileName"');
     const stateSystem = String(
       (stateRequest.messages as Array<{ content: string }>)[0].content,
     );
@@ -262,9 +265,32 @@ describe("detector contract", () => {
       outfitName: "Casual",
       expressions: [expect.objectContaining({
         expressionName: "Neutral",
-        files: ["neutral-soft.png"],
       })],
     })]);
+    expect(JSON.stringify(stateCatalog)).not.toContain("neutral-soft.png");
+    expect(JSON.stringify(stateCatalog)).not.toContain('"files"');
+
+    const constrainedStateCatalog = constrainCatalogToManualOverrides(catalog, {
+      "character-a": {
+        ...outfitLock["character-a"],
+        lock: "state",
+      },
+    });
+    expect(parseDetectorResponse({
+      tool_calls: [{
+        name: "set_stage_state",
+        args: {
+          focusedCharacterIds: ["character-a"],
+          characters: [{
+            characterId: "character-a",
+            outfitName: "Casual",
+            expressionName: "Neutral",
+            confidence: 1,
+          }],
+        },
+      }],
+    }, constrainedStateCatalog, () => 0.999)?.characters[0].variantId)
+      .toBe("variant-neutral-a");
   });
 
   it("rejects duplicate character decisions and forwards model/output overrides through supported parameters", () => {

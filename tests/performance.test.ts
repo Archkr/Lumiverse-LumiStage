@@ -25,6 +25,28 @@ function largeProfile(count: number): CharacterProfileV2 {
   return profile;
 }
 
+function expressionHeavyProfile(count: number): CharacterProfileV2 {
+  const profile = createProfile("character-expressions", "Many Expressions");
+  const outfit = profile.outfits[0];
+  const baseExpression = outfit.expressions[0];
+  const baseVariant = baseExpression.variants[0];
+  outfit.expressions = Array.from({ length: count }, (_, index) => ({
+    ...baseExpression,
+    id: `expression-visible-${index}`,
+    name: `Visible contextual state ${index}`,
+    order: index,
+    variants: [{
+      ...baseVariant,
+      id: `variant-visible-${index}`,
+      imageId: `image-visible-${index}`,
+      contentHash: `hash-visible-${index}`,
+      fileName: `hidden-${index}.png`,
+    }],
+  }));
+  outfit.defaultExpressionId = outfit.expressions[0].id;
+  return profile;
+}
+
 function ensembleProfile(index: number): CharacterProfileV2 {
   const profile = createProfile(`character-${index}`, `Character ${index}`);
   const outfit = profile.outfits[0];
@@ -47,14 +69,14 @@ function ensembleProfile(index: number): CharacterProfileV2 {
 }
 
 describe("bounded large-library operations", () => {
-  it("keeps a 2,000-sprite filename catalog compact and still rejects genuinely oversized input", () => {
+  it("keeps 2,000 hidden variants compact and still rejects too many visible expressions", () => {
     const profile = largeProfile(2000);
     const started = performance.now();
     const request = buildDetectorRequest(buildCatalog([profile]), [], {}, defaultSettings(1));
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.estimatedInputTokens as number).toBeLessThan(12_000);
     expect(() => buildDetectorRequest(
-      buildCatalog([largeProfile(6000)]),
+      buildCatalog([expressionHeavyProfile(6000)]),
       [],
       {},
       defaultSettings(1),
