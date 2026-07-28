@@ -33,7 +33,6 @@ var DEFAULT_SETTINGS = {
     model: null,
     contextMessages: 5,
     temperature: 0.1,
-    maxOutputTokens: 32768,
     confidence: 0.6
   },
   appearance: {
@@ -94,7 +93,6 @@ function normalizeSettings(raw, now = Date.now()) {
       model: optionalId(detection.model),
       contextMessages: integer(detection.contextMessages, 5, 1, 20),
       temperature: finite(detection.temperature, 0.1, 0, 1),
-      maxOutputTokens: integer(detection.maxOutputTokens, 32768, 4096, 1e6),
       confidence: finite(detection.confidence ?? detection.stateConfidence, 0.6, 0, 1)
     },
     appearance: {
@@ -1700,7 +1698,6 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
     connection_id: settings.detection.connectionId ?? void 0,
     parameters: {
       temperature: settings.detection.temperature,
-      max_tokens: settings.detection.maxOutputTokens,
       ...settings.detection.model ? { model: settings.detection.model } : {}
     },
     reasoning: { source: "off" },
@@ -2981,8 +2978,7 @@ async function handleMessage(message, userId) {
       connection: {
         generationPermission: hasPermission("generation"),
         selection: settings.detection.connectionId ? "configured" : "active-host-connection",
-        modelOverride: settings.detection.model ? "configured" : "none",
-        outputBudgetTokens: settings.detection.maxOutputTokens
+        modelOverride: settings.detection.model ? "configured" : "none"
       },
       media: {
         total: media.length,

@@ -30,12 +30,7 @@ describe("V2 schema normalization and migration", () => {
     expect(settings.revision).toBe(0);
     expect(settings.detection.contextMessages).toBe(20);
     expect(settings.detection.temperature).toBe(0);
-    expect(settings.detection.maxOutputTokens).toBe(32_768);
     expect(settings.detection.confidence).toBe(0.72);
-    const raisedBudget = normalizeSettings({
-      detection: { maxOutputTokens: 2_000_000 },
-    });
-    expect(raisedBudget.detection.maxOutputTokens).toBe(1_000_000);
   });
 
   it("hoists a legacy single owner while preserving IDs and media", () => {

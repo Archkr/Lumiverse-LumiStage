@@ -225,7 +225,6 @@ describe("operator-scoped backend runtime", () => {
           model: null,
           contextMessages: 5,
           temperature: 0.1,
-          maxOutputTokens: 32_768,
           confidence: 0.6,
         },
         appearance: {
@@ -477,7 +476,6 @@ describe("operator-scoped backend runtime", () => {
           model: "manual-model",
           contextMessages: 3,
           temperature: 0.2,
-          maxOutputTokens: 65_536,
           confidence: 0.7,
         },
       }, "user-a"),
@@ -491,7 +489,6 @@ describe("operator-scoped backend runtime", () => {
           model: "manual-model",
           contextMessages: 3,
           temperature: 0.2,
-          maxOutputTokens: 65_536,
           confidence: 0.7,
         },
       }, "user-a"),
@@ -508,9 +505,9 @@ describe("operator-scoped backend runtime", () => {
       parameters: expect.objectContaining({
         model: "manual-model",
         temperature: 0.2,
-        max_tokens: 65_536,
       }),
     }));
+    expect(generateQuiet.mock.calls[0][0].parameters).not.toHaveProperty("max_tokens");
     expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
 
     eventHandlers.get("GENERATION_ENDED")?.({
@@ -531,7 +528,6 @@ describe("operator-scoped backend runtime", () => {
         model: "manual-model",
         contextMessages: 3,
         temperature: 0.2,
-        maxOutputTokens: 65_536,
         confidence: 0.7,
       },
     }, "user-a");

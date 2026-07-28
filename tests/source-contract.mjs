@@ -72,8 +72,8 @@ if (!backend.includes("spindle.chats.get(chatId, userId)")) violations.push("bac
 if (!backend.includes("spindle.connections.list(userId)")) violations.push("backend: connection reads must carry operator userId");
 if (!backend.includes("{ ...request, userId }")) violations.push("backend: detector generation must carry operator userId");
 for (const [label, text] of [["src/detector.ts", detector], ["dist/backend.js", backendBundle]]) {
-  if (!text.includes("max_tokens: settings.detection.maxOutputTokens")) {
-    violations.push(`${label}: detector output budget is not dispatched through max_tokens`);
+  if (text.includes("max_tokens")) {
+    violations.push(`${label}: detector requests must not impose a max_tokens output cap`);
   }
   if (!text.includes("{ model: settings.detection.model }")) {
     violations.push(`${label}: selected detector model is not dispatched through quiet-call parameters`);

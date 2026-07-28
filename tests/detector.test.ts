@@ -122,7 +122,8 @@ describe("detector contract", () => {
     expect(system).toContain("You may switch away from the current outfit");
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.reasoning).toEqual({ source: "off" });
-    expect(request.parameters).toEqual({ temperature: 0.1, max_tokens: 32_768 });
+    expect(request.parameters).toEqual({ temperature: 0.1 });
+    expect(request.parameters).not.toHaveProperty("max_tokens");
     const tool = (request.tools as Array<Record<string, any>>)[0];
     const required = tool.parameters.properties.characters.items.required;
     expect(required).toEqual([
@@ -293,7 +294,7 @@ describe("detector contract", () => {
       .toBe("variant-neutral-a");
   });
 
-  it("rejects duplicate character decisions and forwards model/output overrides through supported parameters", () => {
+  it("rejects duplicate character decisions and forwards the selected model without an output cap", () => {
     const profile = profileA();
     const catalog = buildCatalog([profile]);
     const duplicate = {
@@ -324,13 +325,12 @@ describe("detector contract", () => {
     });
     const settings = defaultSettings(1);
     settings.detection.model = "reasoning-model";
-    settings.detection.maxOutputTokens = 65_536;
     const request = buildDetectorRequest(ensembleCatalog, [], {}, settings);
     expect(request).not.toHaveProperty("model");
     expect(request.parameters).toEqual({
       temperature: 0.1,
-      max_tokens: 65_536,
       model: "reasoning-model",
     });
+    expect(request.parameters).not.toHaveProperty("max_tokens");
   });
 });

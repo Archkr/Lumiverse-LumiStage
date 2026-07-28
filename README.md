@@ -331,7 +331,7 @@ The detector:
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
 - asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;
 - has a 60-second abort;
-- overrides low connection/preset completion defaults with a user-controlled reasoning/output budget (32,768 tokens by default, configurable up to 1,000,000; the provider/model maximum still applies);
+- does not send `max_tokens`, leaving the selected controller and model to manage their own output limit;
 - fails clearly before generation when estimated input exceeds 24,000 tokens;
 - rejects unknown or ambiguous outfit/expression selections and duplicate character decisions.
 

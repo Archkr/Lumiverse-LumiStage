@@ -1103,16 +1103,6 @@ function SettingsView({ client }: { client: LumiStageClient }) {
                     onChange={(contextMessages) => edit({ ...draft, detection: { ...draft.detection, contextMessages } })}
                   />
                 </SettingRow>
-                <SettingRow title="Reasoning/output budget" description="Maximum completion tokens requested from the detector. The provider/model limit still applies.">
-                  <HostNumber
-                    client={client}
-                    value={draft.detection.maxOutputTokens}
-                    min={4_096}
-                    max={1_000_000}
-                    step={4_096}
-                    onChange={(maxOutputTokens) => edit({ ...draft, detection: { ...draft.detection, maxOutputTokens } })}
-                  />
-                </SettingRow>
                 <HostRange
                   client={client}
                   value={Math.round(draft.detection.confidence * 100)}

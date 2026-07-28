@@ -4571,7 +4571,6 @@ var DEFAULT_SETTINGS = {
     model: null,
     contextMessages: 5,
     temperature: 0.1,
-    maxOutputTokens: 32768,
     confidence: 0.6
   },
   appearance: {
@@ -7661,17 +7660,6 @@ function SettingsView({ client }) {
               min: 1,
               max: 20,
               onChange: (contextMessages) => edit({ ...draft, detection: { ...draft.detection, contextMessages } })
-            }
-          ) }),
-          /* @__PURE__ */ u2(SettingRow, { title: "Reasoning/output budget", description: "Maximum completion tokens requested from the detector. The provider/model limit still applies.", children: /* @__PURE__ */ u2(
-            HostNumber,
-            {
-              client,
-              value: draft.detection.maxOutputTokens,
-              min: 4096,
-              max: 1e6,
-              step: 4096,
-              onChange: (maxOutputTokens) => edit({ ...draft, detection: { ...draft.detection, maxOutputTokens } })
             }
           ) }),
           /* @__PURE__ */ u2(
