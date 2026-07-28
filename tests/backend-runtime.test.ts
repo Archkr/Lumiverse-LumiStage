@@ -211,6 +211,7 @@ describe("operator-scoped backend runtime", () => {
           model: null,
           contextMessages: 5,
           temperature: 0.1,
+          maxOutputTokens: 32_768,
           confidence: 0.6,
         },
         appearance: {
@@ -412,15 +413,20 @@ describe("operator-scoped backend runtime", () => {
         model: "manual-model",
         contextMessages: 3,
         temperature: 0.2,
+        maxOutputTokens: 65_536,
         confidence: 0.7,
       },
     }, "analyze-selected-model");
     expect(generateQuiet).toHaveBeenCalledTimes(1);
     expect(generateQuiet.mock.calls[0][0]).toEqual(expect.objectContaining({
       connection_id: "connection-manual",
-      model: "manual-model",
-      parameters: expect.objectContaining({ temperature: 0.2 }),
+      parameters: expect.objectContaining({
+        model: "manual-model",
+        temperature: 0.2,
+        max_tokens: 65_536,
+      }),
     }));
+    expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
 
     await handleFrontend({ type: "open-connections" }, "user-a");
     expect(openDrawerTab).toHaveBeenCalledWith("connections", { userId: "user-a" });

@@ -330,7 +330,7 @@ The detector:
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
 - asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;
 - has a 60-second abort;
-- does not impose a completion-token cap, leaving output capacity to the selected connection/provider so mandatory-reasoning models can finish their structured answer;
+- overrides low connection/preset completion defaults with a user-controlled reasoning/output budget (32,768 tokens by default, configurable up to 1,000,000; the provider/model maximum still applies);
 - fails clearly before generation when estimated input exceeds 24,000 tokens;
 - rejects unknown filenames, duplicate character decisions, and ambiguous folder/file combinations.
 

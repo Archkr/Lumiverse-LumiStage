@@ -1028,6 +1028,7 @@ async function handleMessage(message: FrontendToBackend, userId: string): Promis
         generationPermission: hasPermission("generation"),
         selection: settings.detection.connectionId ? "configured" : "active-host-connection",
         modelOverride: settings.detection.model ? "configured" : "none",
+        outputBudgetTokens: settings.detection.maxOutputTokens,
       },
       media: {
         total: media.length,

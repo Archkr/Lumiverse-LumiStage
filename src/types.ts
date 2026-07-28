@@ -48,6 +48,7 @@ export interface DetectionSettingsV2 {
   model: string | null;
   contextMessages: number;
   temperature: number;
+  maxOutputTokens: number;
   confidence: number;
 }
 
@@ -267,6 +268,7 @@ export const DEFAULT_SETTINGS: LumiStageSettingsV2 = {
     model: null,
     contextMessages: 5,
     temperature: 0.1,
+    maxOutputTokens: 32_768,
     confidence: 0.6,
   },
   appearance: {

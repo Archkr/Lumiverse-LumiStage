@@ -319,9 +319,10 @@ export function buildDetectorRequest(
     estimatedInputTokens,
     messages,
     connection_id: settings.detection.connectionId ?? undefined,
-    model: settings.detection.model ?? undefined,
     parameters: {
       temperature: settings.detection.temperature,
+      max_tokens: settings.detection.maxOutputTokens,
+      ...(settings.detection.model ? { model: settings.detection.model } : {}),
     },
     reasoning: { source: "off" },
     tools,

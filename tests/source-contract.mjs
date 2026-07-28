@@ -52,7 +52,9 @@ if (manifest.identifier !== "lumi_stage") violations.push("spindle.json: identif
 if (manifest.minimum_lumiverse_version !== "1.1.0") violations.push("spindle.json: minimum Lumiverse version must be 1.1.0");
 
 const backend = await readFile(resolve(root, "src/backend.ts"), "utf8");
+const detector = await readFile(resolve(root, "src/detector.ts"), "utf8");
 const frontend = await readFile(resolve(root, "src/frontend.tsx"), "utf8");
+const backendBundle = await readFile(resolve(root, "dist/backend.js"), "utf8");
 const frontendBundle = await readFile(resolve(root, "dist/frontend.js"), "utf8");
 const studio = await readFile(resolve(root, "src/ui/studio.tsx"), "utf8");
 const controls = await readFile(resolve(root, "src/ui/host-controls.tsx"), "utf8");
@@ -66,6 +68,17 @@ if (!backend.includes("spindle.characters.get(characterId, userId)")) violations
 if (!backend.includes("spindle.chats.get(chatId, userId)")) violations.push("backend: chat reads must carry operator userId");
 if (!backend.includes("spindle.connections.list(userId)")) violations.push("backend: connection reads must carry operator userId");
 if (!backend.includes("{ ...request, userId }")) violations.push("backend: detector generation must carry operator userId");
+for (const [label, text] of [["src/detector.ts", detector], ["dist/backend.js", backendBundle]]) {
+  if (!text.includes("max_tokens: settings.detection.maxOutputTokens")) {
+    violations.push(`${label}: detector output budget is not dispatched through max_tokens`);
+  }
+  if (!text.includes("{ model: settings.detection.model }")) {
+    violations.push(`${label}: selected detector model is not dispatched through quiet-call parameters`);
+  }
+}
+if (/^\s*model:\s*settings\.detection\.model\s*\?\?/m.test(detector)) {
+  violations.push("src/detector.ts: selected model is using the ignored top-level quiet-call field");
+}
 if (!frontend.includes("width: 1440") || !frontend.includes("maxHeight: 980")) {
   violations.push("frontend: full Studio must use the large host modal");
 }

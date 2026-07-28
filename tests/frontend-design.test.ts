@@ -71,5 +71,7 @@ describe("replacement frontend design contract", () => {
 
   it("uses the visible detector draft for manual analysis", () => {
     expect(studio).toContain("client.analyzeNow(draft.detection)");
+    expect(studio).toContain('title="Reasoning/output budget"');
+    expect(studio).toContain("value={draft.detection.maxOutputTokens}");
   });
 });

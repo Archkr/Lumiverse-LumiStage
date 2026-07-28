@@ -116,8 +116,7 @@ describe("detector contract", () => {
     expect(system).toContain("You may switch away from the current outfit");
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
     expect(request.reasoning).toEqual({ source: "off" });
-    expect(request.parameters).toEqual({ temperature: 0.1 });
-    expect((request.parameters as Record<string, unknown>)).not.toHaveProperty("max_tokens");
+    expect(request.parameters).toEqual({ temperature: 0.1, max_tokens: 32_768 });
     const tool = (request.tools as Array<Record<string, any>>)[0];
     const required = tool.parameters.properties.characters.items.required;
     expect(required).toEqual([
@@ -172,7 +171,7 @@ describe("detector contract", () => {
     expect(stateLockLine).toContain('"fileName":"neutral-soft.png"');
   });
 
-  it("rejects duplicate character decisions without imposing a reasoning-hostile output cap", () => {
+  it("rejects duplicate character decisions and forwards model/output overrides through supported parameters", () => {
     const profile = profileA();
     const catalog = buildCatalog([profile]);
     const duplicate = {
@@ -201,7 +200,15 @@ describe("detector contract", () => {
       next.characterId = `character-${index}`;
       return buildCatalog([next])[0];
     });
-    const request = buildDetectorRequest(ensembleCatalog, [], {}, defaultSettings(1));
-    expect((request.parameters as Record<string, unknown>)).not.toHaveProperty("max_tokens");
+    const settings = defaultSettings(1);
+    settings.detection.model = "reasoning-model";
+    settings.detection.maxOutputTokens = 65_536;
+    const request = buildDetectorRequest(ensembleCatalog, [], {}, settings);
+    expect(request).not.toHaveProperty("model");
+    expect(request.parameters).toEqual({
+      temperature: 0.1,
+      max_tokens: 65_536,
+      model: "reasoning-model",
+    });
   });
 });

@@ -64,6 +64,7 @@ export function normalizeSettings(raw: unknown, now = Date.now()): LumiStageSett
       model: optionalId(detection.model),
       contextMessages: integer(detection.contextMessages, 5, 1, 20),
       temperature: finite(detection.temperature, 0.1, 0, 1),
+      maxOutputTokens: integer(detection.maxOutputTokens, 32_768, 4_096, 1_000_000),
       confidence: finite(detection.confidence ?? detection.stateConfidence, 0.6, 0, 1),
     },
     appearance: {
