@@ -463,13 +463,17 @@ describe("operator-scoped backend runtime", () => {
       generationId: "generation-one",
       chatId: "chat-a",
     }, "user-a");
-    eventHandlers.get("MESSAGE_EDITED")?.({
+    expect(eventHandlers.has("MESSAGE_EDITED")).toBe(false);
+    eventHandlers.get("MESSAGE_SWIPED")?.({
       chatId: "chat-a",
       message: {
         id: "assistant-final",
         role: "assistant",
         content: "Aster smiles after the reply is complete.",
       },
+      action: "navigated",
+      swipeId: 0,
+      previousSwipeId: 0,
     }, "user-a");
     await new Promise((resolve) => setTimeout(resolve, 360));
     expect(generateQuiet).not.toHaveBeenCalled();
@@ -633,13 +637,16 @@ describe("operator-scoped backend runtime", () => {
     );
     expect(generateQuiet).toHaveBeenCalledTimes(1);
 
-    eventHandlers.get("MESSAGE_EDITED")?.({
+    eventHandlers.get("MESSAGE_SWIPED")?.({
       chatId: "chat-a",
       message: {
         id: "assistant-final",
         role: "assistant",
         content: "Aster smiles after the reply is complete.",
       },
+      action: "navigated",
+      swipeId: 0,
+      previousSwipeId: 0,
     }, "user-a");
     await new Promise((resolve) => setTimeout(resolve, 360));
     expect(generateQuiet).toHaveBeenCalledTimes(1);
@@ -735,13 +742,16 @@ describe("operator-scoped backend runtime", () => {
 
     generateQuiet.mockClear();
     defaultConnectionUpdatedAt = 101;
-    eventHandlers.get("MESSAGE_EDITED")?.({
+    eventHandlers.get("MESSAGE_SWIPED")?.({
       chatId: "chat-a",
       message: {
         id: "assistant-final",
         role: "assistant",
         content: "Aster smiles after the reply is complete.",
       },
+      action: "navigated",
+      swipeId: 0,
+      previousSwipeId: 0,
     }, "user-a");
     await new Promise((resolve) => setTimeout(resolve, 360));
     expect(generateQuiet).toHaveBeenCalledTimes(1);
@@ -925,13 +935,16 @@ describe("operator-scoped backend runtime", () => {
     const debugRunCountBeforeMessageDelete = malformedDebugState?.state.detectorDebugRuns.length ?? 0;
     generateQuiet.mockClear();
     sendToFrontend.mockClear();
-    eventHandlers.get("MESSAGE_EDITED")?.({
+    eventHandlers.get("MESSAGE_SWIPED")?.({
       chatId: "chat-a",
       message: {
         id: "assistant-debug-malformed",
         role: "assistant",
         content: "Aster waits for a clear direction.",
       },
+      action: "navigated",
+      swipeId: 0,
+      previousSwipeId: 0,
     }, "user-a");
     completedMessages.splice(0, completedMessages.length);
     eventHandlers.get("MESSAGE_DELETED")?.({

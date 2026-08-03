@@ -56,7 +56,7 @@ It supports solo characters, group scenes, automatic LLM direction, manual locks
 | **One-call direction** | Sends the active outfit and expression catalog to one structured detector call, then randomly chooses an eligible variant locally. |
 | **Confidence-safe state** | A malformed or low-confidence result preserves the complete prior stage, including focus. |
 | **Solo and ensemble staging** | Displays one character at full strength or composes focused and supporting characters in group scenes. |
-| **Timeline replay** | Reconciles edits, deletions, swipes, and regenerations against message and content fingerprints. |
+| **Timeline replay** | Reconciles deletions, swipes, and regenerations against message and content fingerprints. |
 | **Portable archives** | Exports and explicitly restores a complete character profile and its referenced media. |
 | **Revision-safe editing** | Uses revision checks for saves, imports, restores, deletion, settings, and chat layouts. |
 | **Diagnostics** | Reports configuration, revision, catalog, media, cleanup, and detector health without story text. |

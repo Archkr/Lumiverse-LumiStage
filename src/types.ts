@@ -191,7 +191,7 @@ export interface LlmConnectionView {
   hasApiKey: boolean;
 }
 
-export type DetectorTrigger = "completion" | "edit" | "swipe" | "manual";
+export type DetectorTrigger = "completion" | "swipe" | "manual";
 export type DetectorDebugSource = "preflight" | "provider" | "shared-flight" | "cache";
 export type DetectorDebugStatus =
   | "running"

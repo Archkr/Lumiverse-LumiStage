@@ -1656,7 +1656,7 @@ onEvent("GENERATION_STOPPED", (payload) => {
   markGenerationFinished(generationId);
 });
 
-for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"] as const) {
+for (const event of ["MESSAGE_SWIPED", "SWIPE_EDITED"] as const) {
   onEvent(event, (payload, eventUserId) => {
     const raw = asRecord(payload);
     const changedMessage = asRecord(raw.message);
@@ -1670,8 +1670,7 @@ for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"] as cons
           ?? undefined
         )
       : undefined;
-    const trigger: DetectorTrigger = event === "MESSAGE_EDITED" ? "edit" : "swipe";
-    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId, trigger);
+    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId, "swipe");
   });
 }
 

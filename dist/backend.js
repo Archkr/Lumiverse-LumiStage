@@ -3476,7 +3476,7 @@ onEvent("GENERATION_STOPPED", (payload) => {
   const generationId = readString(payload, ["generationId", "generation_id"]);
   markGenerationFinished(generationId);
 });
-for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"]) {
+for (const event of ["MESSAGE_SWIPED", "SWIPE_EDITED"]) {
   onEvent(event, (payload, eventUserId) => {
     const raw = asRecord3(payload);
     const changedMessage = asRecord3(raw.message);
@@ -3484,8 +3484,7 @@ for (const event of ["MESSAGE_EDITED", "MESSAGE_SWIPED", "SWIPE_EDITED"]) {
     const userId = resolveUserId(chatId, eventUserId);
     const role = readString(changedMessage, ["role"]) ?? readString(payload, ["role"]);
     const messageId = role === "assistant" ? readString(changedMessage, ["id", "messageId", "message_id"]) ?? readString(payload, ["messageId", "message_id"]) ?? void 0 : void 0;
-    const trigger = event === "MESSAGE_EDITED" ? "edit" : "swipe";
-    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId, trigger);
+    if (chatId && userId) scheduleAnalysis(userId, chatId, 280, false, messageId, "swipe");
   });
 }
 onEvent("MESSAGE_DELETED", (payload, eventUserId) => {
