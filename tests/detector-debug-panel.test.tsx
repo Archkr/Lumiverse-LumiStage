@@ -123,7 +123,7 @@ afterEach(() => {
 });
 
 describe("detector debug panel", () => {
-  it("mounts every run, keeps thinking collapsed, and copies a readable Markdown transcript", async () => {
+  it("mounts every run, keeps thinking collapsed, and copies only thinking plus readable model output", async () => {
     const runs = [
       debugRun("run-1", "accepted", "First hidden thought."),
       debugRun("run-2", "cached", null, false),
@@ -138,18 +138,23 @@ describe("detector debug panel", () => {
     expect(document.querySelectorAll(".ls-debug-run")).toHaveLength(2);
     expect(screen.getByText("First hidden thought.")).toBeTruthy();
     expect(document.querySelectorAll("details.ls-debug-thinking[open]")).toHaveLength(0);
-    expect(screen.getAllByText("Raw response")).toHaveLength(2);
-    expect(screen.getByText("No raw response—restored from cache.")).toBeTruthy();
-    expect(screen.getByText(/expressionName/)).toBeTruthy();
+    expect(screen.getAllByText("Output")).toHaveLength(2);
+    expect(screen.getByText("Cached decision; original model output is unavailable.")).toBeTruthy();
+    expect(screen.getByText(/Expression: Happy/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /copy all/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     const copied = writeText.mock.calls[0][0];
-    expect(copied).toContain("# LumiStage Detector Activity");
-    expect(copied).toContain("## Run 1 — Accepted");
+    expect(copied).toContain("Thinking\n\nFirst hidden thought.");
+    expect(copied).toContain("Output\n\nCharacter: character-a");
+    expect(copied).toContain("Outfit: Casual");
+    expect(copied).toContain("Expression: Happy");
     expect(copied).toContain("First hidden thought.");
-    expect(copied).toContain("## Run 2 — Cached");
-    expect(copied).toContain("No raw response—restored from cache.");
+    expect(copied).toContain("Cached decision; original model output is unavailable.");
+    expect(copied).not.toContain("Status:");
+    expect(copied).not.toContain("variantId");
+    expect(copied).not.toContain("tool_calls");
+    expect(copied).not.toContain("~~~");
     expect(panel.notify).toHaveBeenCalledWith("success", "Copied 2 detector runs.");
 
     panel.unmount();
@@ -167,13 +172,14 @@ describe("detector debug panel", () => {
     panel.unmount();
   });
 
-  it("formats errors and reasoning without requiring the UI", () => {
+  it("formats only reasoning and provider output without internal diagnostics", () => {
     const run = debugRun("run-1", "error", "Parsed reasoning.");
     run.error = "The detector did not return a valid stage decision.";
     run.outcome = "Detector run failed.";
     const transcript = formatDetectorDebugTranscript([run]);
-    expect(transcript).toContain("Status: Error");
     expect(transcript).toContain("Parsed reasoning.");
-    expect(transcript).toContain("The detector did not return a valid stage decision.");
+    expect(transcript).toContain("Expression: Happy");
+    expect(transcript).not.toContain("The detector did not return a valid stage decision.");
+    expect(transcript).not.toContain("Status:");
   });
 });

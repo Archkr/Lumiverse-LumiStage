@@ -6722,21 +6722,35 @@ var DEBUG_STATUS_LABELS = {
   skipped: "Skipped",
   error: "Error"
 };
-function debugRawText(run) {
-  if (!run.rawResponse) {
-    return run.source === "cache" ? "No raw response\u2014restored from cache." : run.status === "running" ? "Waiting for provider response\u2026" : "No raw response was returned.";
+function debugToolOutput(tool) {
+  if (tool.name !== "set_stage_state" || !tool.args || typeof tool.args !== "object" || Array.isArray(tool.args)) {
+    return tool.name;
   }
-  return JSON.stringify({
-    content: run.rawResponse.content,
-    tool_calls: run.rawResponse.toolCalls,
-    finish_reason: run.rawResponse.finishReason,
-    usage: run.rawResponse.usage
-  }, null, 2);
+  const args = tool.args;
+  const characters = Array.isArray(args.characters) ? args.characters : [];
+  const lines = characters.flatMap((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const character = value;
+    const selected = [
+      typeof character.characterId === "string" ? `Character: ${character.characterId}` : null,
+      typeof character.outfitName === "string" ? `Outfit: ${character.outfitName}` : null,
+      typeof character.expressionName === "string" ? `Expression: ${character.expressionName}` : null,
+      typeof character.confidence === "number" ? `Confidence: ${character.confidence}` : null
+    ].filter((line) => !!line);
+    return characters.length > 1 ? [`Character ${index + 1}`, ...selected] : selected;
+  });
+  const focused = Array.isArray(args.focusedCharacterIds) ? args.focusedCharacterIds.filter((value) => typeof value === "string") : [];
+  if (focused.length) lines.push(`Focused characters: ${focused.join(", ")}`);
+  return lines.length ? lines.join("\n") : tool.name;
 }
-function debugParsedText(run) {
-  if (run.parsedDecision) return JSON.stringify(run.parsedDecision, null, 2);
-  if (run.status === "running") return "Waiting for LumiStage to parse the response\u2026";
-  return run.error ?? run.outcome ?? "No parsed decision was produced.";
+function debugOutputText(run) {
+  if (!run.rawResponse) {
+    return run.source === "cache" ? "Cached decision; original model output is unavailable." : run.status === "running" ? "Waiting for provider response\u2026" : run.error ?? "No output was returned.";
+  }
+  const content = run.rawResponse.content?.trim();
+  if (content) return content;
+  const toolOutput = run.rawResponse.toolCalls.map(debugToolOutput).filter(Boolean).join("\n\n");
+  return toolOutput || "No output text was returned.";
 }
 function debugMetadata(run) {
   const parts = [
@@ -6749,44 +6763,12 @@ function debugMetadata(run) {
   return parts.join(" \xB7 ");
 }
 function formatDetectorDebugTranscript(runs) {
-  const sections = runs.map((run, index) => {
-    const metadata = [
-      `Status: ${DEBUG_STATUS_LABELS[run.status]}`,
-      `Trigger: ${run.trigger}`,
-      `Source: ${run.source}`,
-      `Started: ${new Date(run.startedAt).toISOString()}`,
-      `Completed: ${run.completedAt == null ? "\u2014" : new Date(run.completedAt).toISOString()}`,
-      `Duration: ${run.durationMs == null ? "\u2014" : `${run.durationMs} ms`}`,
-      `Message ID: ${run.messageId ?? "\u2014"}`,
-      `Connection: ${run.connectionName ?? "\u2014"}${run.connectionId ? ` (${run.connectionId})` : ""}`,
-      `Requested model: ${run.requestedModel ?? "\u2014"}`,
-      `Response: ${run.responseProvider ?? "\u2014"} / ${run.responseModel ?? "\u2014"}`,
-      `Confidence threshold: ${run.confidenceThreshold == null ? "\u2014" : `${Math.round(run.confidenceThreshold * 100)}%`}`,
-      `Outcome: ${run.outcome ?? "\u2014"}`,
-      `Error: ${run.error ?? "\u2014"}`
-    ];
-    return [
-      `## Run ${index + 1} \u2014 ${DEBUG_STATUS_LABELS[run.status]}`,
-      metadata.join("\n"),
-      "### Thinking",
-      "~~~text",
-      run.reasoning?.trim() || "No reasoning returned.",
-      "~~~",
-      "### Raw response",
-      "~~~json",
-      debugRawText(run),
-      "~~~",
-      "### Parsed result",
-      "~~~json",
-      debugParsedText(run),
-      "~~~"
-    ].join("\n\n");
-  });
-  return [
-    "# LumiStage Detector Activity",
-    `Generated: ${(/* @__PURE__ */ new Date()).toISOString()}`,
-    ...sections
-  ].join("\n\n");
+  return runs.map((run) => [
+    "Thinking",
+    run.reasoning?.trim() || "No reasoning returned.",
+    "Output",
+    debugOutputText(run)
+  ].join("\n\n")).join("\n\n\n\n");
 }
 async function writeDebugClipboard(text) {
   try {
@@ -6871,20 +6853,8 @@ function DetectorDebugPanel({ client }) {
             /* @__PURE__ */ u2("pre", { children: run.reasoning?.trim() || "No reasoning returned." })
           ] }),
           /* @__PURE__ */ u2("div", { class: "ls-debug-bubble ls-debug-output", children: [
-            /* @__PURE__ */ u2("div", { class: "ls-debug-bubble-title", children: [
-              /* @__PURE__ */ u2("span", { children: "Output" }),
-              /* @__PURE__ */ u2("small", { children: run.responseModel ?? run.requestedModel ?? "pending" })
-            ] }),
-            /* @__PURE__ */ u2("section", { children: [
-              /* @__PURE__ */ u2("span", { children: "Raw response" }),
-              /* @__PURE__ */ u2("pre", { children: debugRawText(run) })
-            ] }),
-            /* @__PURE__ */ u2("section", { children: [
-              /* @__PURE__ */ u2("span", { children: "Parsed result" }),
-              /* @__PURE__ */ u2("pre", { children: debugParsedText(run) })
-            ] }),
-            run.outcome && /* @__PURE__ */ u2("p", { children: run.outcome }),
-            run.error && /* @__PURE__ */ u2("p", { class: "ls-debug-error", children: run.error })
+            /* @__PURE__ */ u2("div", { class: "ls-debug-bubble-title", children: /* @__PURE__ */ u2("span", { children: "Output" }) }),
+            /* @__PURE__ */ u2("pre", { children: debugOutputText(run) })
           ] })
         ] }, run.id))
       }
@@ -8777,12 +8747,8 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-debug-bubble-title { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 7px; }
 .ls-debug-bubble-title > span { font-size: 9px; font-weight: 700; }
 .ls-debug-bubble-title > small { overflow: hidden; color: var(--ls-dim); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.ls-debug-output section + section { margin-top: 8px; }
-.ls-debug-output section > span { display: block; margin-bottom: 3px; color: var(--ls-dim); font-size: 7px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .ls-debug-bubble pre { max-height: none; overflow: visible; margin: 0; padding: 8px; border: 1px solid color-mix(in srgb, var(--ls-line) 75%, transparent); border-radius: 7px; background: var(--ls-panel-deep); color: var(--ls-muted); font: 8px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 .ls-debug-thinking pre { border-width: 1px 0 0; border-radius: 0; }
-.ls-debug-output p { margin: 7px 0 0; color: var(--ls-muted); font-size: 8px; line-height: 1.45; }
-.ls-debug-output .ls-debug-error { color: var(--ls-danger); }
 
 /* Full Studio */
 .ls-studio {

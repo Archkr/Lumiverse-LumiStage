@@ -234,7 +234,7 @@ Live Stage shows the resolved state for the active chat:
 
 **Analyze now** forces a fresh detector call and bypasses the normal decision cache.
 
-The drawer’s always-open **Detector activity** panel keeps an in-memory transcript for the active chat. Every session attempt is rendered in the scrollbox without lazy loading, with host-parsed reasoning collapsed by default and raw plus normalized output visible for debugging. **Copy all** exports the complete session transcript as Markdown. Transcripts are not persisted and disappear when the extension backend reloads.
+The drawer’s always-open **Detector activity** panel keeps an in-memory transcript for the active chat. Every session attempt is rendered in the scrollbox without lazy loading, with host-parsed reasoning collapsed by default and the model’s response text or tool selection shown without internal parsed IDs or JSON scaffolding. **Copy all** exports only each run’s thinking and output. Transcripts are not persisted and disappear when the extension backend reloads.
 
 ### Settings
 

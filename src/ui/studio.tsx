@@ -144,26 +144,42 @@ const DEBUG_STATUS_LABELS: Record<DetectorDebugRun["status"], string> = {
   error: "Error",
 };
 
-function debugRawText(run: DetectorDebugRun): string {
-  if (!run.rawResponse) {
-    return run.source === "cache"
-      ? "No raw response—restored from cache."
-      : run.status === "running"
-        ? "Waiting for provider response…"
-        : "No raw response was returned.";
+function debugToolOutput(tool: { name: string; args: unknown }): string {
+  if (tool.name !== "set_stage_state" || !tool.args || typeof tool.args !== "object" || Array.isArray(tool.args)) {
+    return tool.name;
   }
-  return JSON.stringify({
-    content: run.rawResponse.content,
-    tool_calls: run.rawResponse.toolCalls,
-    finish_reason: run.rawResponse.finishReason,
-    usage: run.rawResponse.usage,
-  }, null, 2);
+  const args = tool.args as Record<string, unknown>;
+  const characters = Array.isArray(args.characters) ? args.characters : [];
+  const lines = characters.flatMap((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const character = value as Record<string, unknown>;
+    const selected = [
+      typeof character.characterId === "string" ? `Character: ${character.characterId}` : null,
+      typeof character.outfitName === "string" ? `Outfit: ${character.outfitName}` : null,
+      typeof character.expressionName === "string" ? `Expression: ${character.expressionName}` : null,
+      typeof character.confidence === "number" ? `Confidence: ${character.confidence}` : null,
+    ].filter((line): line is string => !!line);
+    return characters.length > 1 ? [`Character ${index + 1}`, ...selected] : selected;
+  });
+  const focused = Array.isArray(args.focusedCharacterIds)
+    ? args.focusedCharacterIds.filter((value): value is string => typeof value === "string")
+    : [];
+  if (focused.length) lines.push(`Focused characters: ${focused.join(", ")}`);
+  return lines.length ? lines.join("\n") : tool.name;
 }
 
-function debugParsedText(run: DetectorDebugRun): string {
-  if (run.parsedDecision) return JSON.stringify(run.parsedDecision, null, 2);
-  if (run.status === "running") return "Waiting for LumiStage to parse the response…";
-  return run.error ?? run.outcome ?? "No parsed decision was produced.";
+function debugOutputText(run: DetectorDebugRun): string {
+  if (!run.rawResponse) {
+    return run.source === "cache"
+      ? "Cached decision; original model output is unavailable."
+      : run.status === "running"
+        ? "Waiting for provider response…"
+        : run.error ?? "No output was returned.";
+  }
+  const content = run.rawResponse.content?.trim();
+  if (content) return content;
+  const toolOutput = run.rawResponse.toolCalls.map(debugToolOutput).filter(Boolean).join("\n\n");
+  return toolOutput || "No output text was returned.";
 }
 
 function debugMetadata(run: DetectorDebugRun): string {
@@ -178,44 +194,13 @@ function debugMetadata(run: DetectorDebugRun): string {
 }
 
 export function formatDetectorDebugTranscript(runs: DetectorDebugRun[]): string {
-  const sections = runs.map((run, index) => {
-    const metadata = [
-      `Status: ${DEBUG_STATUS_LABELS[run.status]}`,
-      `Trigger: ${run.trigger}`,
-      `Source: ${run.source}`,
-      `Started: ${new Date(run.startedAt).toISOString()}`,
-      `Completed: ${run.completedAt == null ? "—" : new Date(run.completedAt).toISOString()}`,
-      `Duration: ${run.durationMs == null ? "—" : `${run.durationMs} ms`}`,
-      `Message ID: ${run.messageId ?? "—"}`,
-      `Connection: ${run.connectionName ?? "—"}${run.connectionId ? ` (${run.connectionId})` : ""}`,
-      `Requested model: ${run.requestedModel ?? "—"}`,
-      `Response: ${run.responseProvider ?? "—"} / ${run.responseModel ?? "—"}`,
-      `Confidence threshold: ${run.confidenceThreshold == null ? "—" : `${Math.round(run.confidenceThreshold * 100)}%`}`,
-      `Outcome: ${run.outcome ?? "—"}`,
-      `Error: ${run.error ?? "—"}`,
-    ];
-    return [
-      `## Run ${index + 1} — ${DEBUG_STATUS_LABELS[run.status]}`,
-      metadata.join("\n"),
-      "### Thinking",
-      "~~~text",
+  return runs.map((run) => [
+      "Thinking",
       run.reasoning?.trim() || "No reasoning returned.",
-      "~~~",
-      "### Raw response",
-      "~~~json",
-      debugRawText(run),
-      "~~~",
-      "### Parsed result",
-      "~~~json",
-      debugParsedText(run),
-      "~~~",
-    ].join("\n\n");
-  });
-  return [
-    "# LumiStage Detector Activity",
-    `Generated: ${new Date().toISOString()}`,
-    ...sections,
-  ].join("\n\n");
+      "Output",
+      debugOutputText(run),
+    ].join("\n\n"))
+    .join("\n\n\n\n");
 }
 
 async function writeDebugClipboard(text: string): Promise<void> {
@@ -300,17 +285,8 @@ export function DetectorDebugPanel({ client }: { client: LumiStageClient }) {
               <pre>{run.reasoning?.trim() || "No reasoning returned."}</pre>
             </details>
             <div class="ls-debug-bubble ls-debug-output">
-              <div class="ls-debug-bubble-title"><span>Output</span><small>{run.responseModel ?? run.requestedModel ?? "pending"}</small></div>
-              <section>
-                <span>Raw response</span>
-                <pre>{debugRawText(run)}</pre>
-              </section>
-              <section>
-                <span>Parsed result</span>
-                <pre>{debugParsedText(run)}</pre>
-              </section>
-              {run.outcome && <p>{run.outcome}</p>}
-              {run.error && <p class="ls-debug-error">{run.error}</p>}
+              <div class="ls-debug-bubble-title"><span>Output</span></div>
+              <pre>{debugOutputText(run)}</pre>
             </div>
           </article>
         ))}

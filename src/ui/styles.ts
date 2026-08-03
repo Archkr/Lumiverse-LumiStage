@@ -314,12 +314,8 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-debug-bubble-title { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 7px; }
 .ls-debug-bubble-title > span { font-size: 9px; font-weight: 700; }
 .ls-debug-bubble-title > small { overflow: hidden; color: var(--ls-dim); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.ls-debug-output section + section { margin-top: 8px; }
-.ls-debug-output section > span { display: block; margin-bottom: 3px; color: var(--ls-dim); font-size: 7px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .ls-debug-bubble pre { max-height: none; overflow: visible; margin: 0; padding: 8px; border: 1px solid color-mix(in srgb, var(--ls-line) 75%, transparent); border-radius: 7px; background: var(--ls-panel-deep); color: var(--ls-muted); font: 8px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 .ls-debug-thinking pre { border-width: 1px 0 0; border-radius: 0; }
-.ls-debug-output p { margin: 7px 0 0; color: var(--ls-muted); font-size: 8px; line-height: 1.45; }
-.ls-debug-output .ls-debug-error { color: var(--ls-danger); }
 
 /* Full Studio */
 .ls-studio {
