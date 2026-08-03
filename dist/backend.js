@@ -3289,6 +3289,26 @@ async function handleMessage(message, userId) {
     send({ type: "operation-complete", requestId: message.requestId }, userId);
     return;
   }
+  if (message.type === "edit-expression-names") {
+    if (!Array.isArray(message.names) || message.names.length === 0 || message.names.length > 2e4 || message.names.some((name) => typeof name !== "string")) {
+      throw new Error("Expression names must be a non-empty list of text values.");
+    }
+    const value = message.names.map((name) => name.replace(/[\r\n]+/g, " ")).join("\n");
+    if (value.length > 1e6) throw new Error("The expression-name list is too large to edit safely.");
+    const outfitName = typeof message.outfitName === "string" && message.outfitName.trim() ? message.outfitName.trim().slice(0, 80) : "Outfit";
+    const result = await spindle.textEditor.open({
+      title: `Expression names \xB7 ${outfitName}`,
+      value,
+      placeholder: "One expression name per line",
+      userId
+    });
+    send({
+      type: "operation-complete",
+      requestId: message.requestId,
+      result: { text: result.text, cancelled: result.cancelled }
+    }, userId);
+    return;
+  }
   if (message.type === "import-assets") {
     await importAssets(userId, message);
     return;

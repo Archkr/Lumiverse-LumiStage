@@ -84,6 +84,59 @@ describe("Studio workspace", () => {
     client.destroy();
   });
 
+  it("applies Lumiverse Find & Replace results as one undoable draft change", async () => {
+    let receive: (message: BackendToFrontend) => void = () => undefined;
+    const sendToBackend = vi.fn((message: FrontendToBackend) => {
+      if (message.type === "edit-expression-names") {
+        receive({
+          type: "operation-complete",
+          requestId: message.requestId,
+          result: { text: "Calm\nJoyful\nFurious", cancelled: false },
+        });
+      }
+    });
+    const client = new LumiStageClient({
+      sendToBackend,
+      onBackendMessage(handler: (message: BackendToFrontend) => void) {
+        receive = handler;
+        return () => { receive = () => undefined; };
+      },
+      components: {
+        mountSelect(target: Element) {
+          return {
+            componentId: "select",
+            element: target,
+            update: vi.fn(),
+            destroy: vi.fn(),
+            getValue: vi.fn(() => ""),
+            refresh: vi.fn(),
+          };
+        },
+      },
+    } as never);
+    client.start();
+    receive({ type: "state", state: backendState(3) });
+    const view = render(<StudioWorkspace client={client} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find & Replace" }));
+    await waitFor(() => expect(screen.getByText("Calm")).toBeTruthy());
+    expect(screen.getByText("Joyful")).toBeTruthy();
+    expect(screen.getByText("Furious")).toBeTruthy();
+    expect(sendToBackend).toHaveBeenCalledWith(expect.objectContaining({
+      type: "edit-expression-names",
+      outfitName: "Casual",
+      names: ["Neutral", "Happy", "Angry"],
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(screen.getByText("Neutral")).toBeTruthy());
+    expect(screen.getByText("Happy")).toBeTruthy();
+    expect(screen.getByText("Angry")).toBeTruthy();
+
+    view.unmount();
+    client.destroy();
+  });
+
   it("saves the preserved draft against the latest backend revision instead of disabling Save", async () => {
     let receive: (message: BackendToFrontend) => void = () => undefined;
     const sendToBackend = vi.fn((message: FrontendToBackend) => {

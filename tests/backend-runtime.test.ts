@@ -39,6 +39,7 @@ describe("operator-scoped backend runtime", () => {
     const chatGetMessages = vi.fn(async (): Promise<Array<Record<string, unknown>>> => []);
     const generateQuiet = vi.fn();
     const generateRaw = vi.fn();
+    const textEditorOpen = vi.fn(async () => ({ text: "Calm\nJoyful", cancelled: false }));
     const userStorageValues = new Map<string, unknown>();
     const storageKey = (path: string, userId?: string) => `${userId ?? ""}:${path}`;
     let settingsWriteBarrier: Promise<void> | null = null;
@@ -79,6 +80,7 @@ describe("operator-scoped backend runtime", () => {
       chat: { getMessages: chatGetMessages },
       connections: { list: connectionsList },
       generate: { quiet: generateQuiet, raw: generateRaw },
+      textEditor: { open: textEditorOpen },
       uploads: {
         get: vi.fn(async (id: string) => staged.get(id) ?? null),
         delete: vi.fn(async (id: string) => { staged.delete(id); }),
@@ -246,6 +248,25 @@ describe("operator-scoped backend runtime", () => {
         "user-a",
       );
     }
+
+    sendToFrontend.mockClear();
+    await handleFrontend({
+      type: "edit-expression-names",
+      requestId: "edit-expression-names",
+      outfitName: "Casual",
+      names: ["Neutral", "Happy"],
+    }, "user-a");
+    expect(textEditorOpen).toHaveBeenCalledWith({
+      title: "Expression names · Casual",
+      value: "Neutral\nHappy",
+      placeholder: "One expression name per line",
+      userId: "user-a",
+    });
+    expect(sendToFrontend).toHaveBeenCalledWith({
+      type: "operation-complete",
+      requestId: "edit-expression-names",
+      result: { text: "Calm\nJoyful", cancelled: false },
+    }, "user-a");
 
     await expectCompletion({
       type: "save-settings",

@@ -291,6 +291,7 @@ export type FrontendToBackend =
   | { type: "apply-manual"; requestId: string; chatId: string; override: ManualOverrideV2 }
   | { type: "clear-manual"; requestId: string; chatId: string; characterId: string }
   | { type: "analyze-now"; requestId: string; chatId: string }
+  | { type: "edit-expression-names"; requestId: string; outfitName: string; names: string[] }
   | ({ type: "import-assets" } & ImportRequestV2)
   | { type: "restore-archive"; requestId: string; characterId: string; upload: ImportUploadV2; expectedRevision: number; confirmed: true }
   | { type: "discard-uploads"; requestId: string; uploadIds: string[] }

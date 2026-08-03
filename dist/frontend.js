@@ -5165,6 +5165,19 @@ var LumiStageClient = class {
       chatId
     });
   }
+  async editExpressionNames(outfitName, names) {
+    const result = await this.request({
+      type: "edit-expression-names",
+      requestId: createId("expression-names"),
+      outfitName,
+      names
+    }, 10 * 6e4);
+    if (result.cancelled) return null;
+    if (typeof result.text !== "string") throw new Error("Lumiverse did not return the edited expression names.");
+    const lines = result.text.replace(/\r\n?/g, "\n").split("\n");
+    if (lines.length === names.length + 1 && lines.at(-1) === "") lines.pop();
+    return lines;
+  }
   uploadFile(file, onProgress, timeoutMs = 10 * 6e4) {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -7242,6 +7255,7 @@ function LibraryView(props) {
   const [query, setQuery] = d2("");
   const [batchMode, setBatchMode] = d2(false);
   const [selected, setSelected] = d2(/* @__PURE__ */ new Set());
+  const [editingNames, setEditingNames] = d2(false);
   const outfit = selectedOutfit(props.profile, outfitId);
   const filtered = T2(() => (outfit?.expressions ?? []).filter((expression) => {
     const needle = query.trim().toLocaleLowerCase();
@@ -7307,6 +7321,47 @@ function LibraryView(props) {
       if (profile.defaultOutfitId === outfit.id) profile.defaultOutfitId = profile.outfits[0]?.id ?? null;
       setOutfitId(profile.defaultOutfitId ?? profile.outfits[0]?.id ?? "");
     });
+  }
+  async function editExpressionNames() {
+    if (!outfit?.expressions.length || editingNames) return;
+    setEditingNames(true);
+    try {
+      const expressions = [...outfit.expressions].sort((a3, b3) => a3.order - b3.order);
+      const edited = await props.client.editExpressionNames(
+        outfit.name,
+        expressions.map((expression) => expression.name)
+      );
+      if (!edited) return;
+      if (edited.length !== expressions.length) {
+        throw new Error(
+          `Keep exactly one expression name per line. Expected ${expressions.length} lines but received ${edited.length}.`
+        );
+      }
+      const names = edited.map((name) => cleanName(name, ""));
+      if (names.some((name) => !name)) throw new Error("Expression names cannot be blank.");
+      const seen = /* @__PURE__ */ new Set();
+      for (const name of names) {
+        const key = normalizedKey(name);
+        if (seen.has(key)) throw new Error(`Find & Replace would create a duplicate expression named \u201C${name}\u201D.`);
+        seen.add(key);
+      }
+      if (expressions.every((expression, index) => expression.name === names[index])) {
+        props.client.notify("info", "No expression names changed.");
+        return;
+      }
+      const renamed = new Map(expressions.map((expression, index) => [expression.id, names[index]]));
+      props.update((profile) => {
+        const target = profile.outfits.find((candidate) => candidate.id === outfit.id);
+        target?.expressions.forEach((expression) => {
+          expression.name = renamed.get(expression.id) ?? expression.name;
+        });
+      });
+      props.client.notify("success", `Updated ${expressions.length} expression names. Save to commit the changes.`);
+    } catch (error) {
+      props.client.notify("error", error instanceof Error ? error.message : "Could not edit expression names.");
+    } finally {
+      setEditingNames(false);
+    }
   }
   function reorderOutfit(sourceId, targetId) {
     if (sourceId === targetId) return;
@@ -7431,6 +7486,16 @@ function LibraryView(props) {
         /* @__PURE__ */ u2(Toolbar, { children: [
           /* @__PURE__ */ u2(IconButton, { icon: "undo", label: "Undo", disabled: !props.canUndo, onClick: props.undo }),
           /* @__PURE__ */ u2(IconButton, { icon: "redo", label: "Redo", disabled: !props.canRedo, onClick: props.redo }),
+          /* @__PURE__ */ u2(
+            Button,
+            {
+              size: "small",
+              icon: "search",
+              disabled: !outfit?.expressions.length || editingNames,
+              onClick: () => void editExpressionNames(),
+              children: editingNames ? "Opening\u2026" : "Find & Replace"
+            }
+          ),
           /* @__PURE__ */ u2(
             Button,
             {

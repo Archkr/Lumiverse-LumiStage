@@ -409,6 +409,20 @@ export class LumiStageClient {
     });
   }
 
+  async editExpressionNames(outfitName: string, names: string[]): Promise<string[] | null> {
+    const result = await this.request<{ text?: string; cancelled?: boolean }>({
+      type: "edit-expression-names",
+      requestId: createId("expression-names"),
+      outfitName,
+      names,
+    }, 10 * 60_000);
+    if (result.cancelled) return null;
+    if (typeof result.text !== "string") throw new Error("Lumiverse did not return the edited expression names.");
+    const lines = result.text.replace(/\r\n?/g, "\n").split("\n");
+    if (lines.length === names.length + 1 && lines.at(-1) === "") lines.pop();
+    return lines;
+  }
+
   private uploadFile(
     file: File,
     onProgress?: (sent: number, total: number) => void,

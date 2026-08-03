@@ -740,6 +740,7 @@ function LibraryView(props: LibraryProps) {
   const [query, setQuery] = useState("");
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editingNames, setEditingNames] = useState(false);
   const outfit = selectedOutfit(props.profile, outfitId);
   const filtered = useMemo(() => (outfit?.expressions ?? []).filter((expression) => {
     const needle = query.trim().toLocaleLowerCase();
@@ -810,6 +811,48 @@ function LibraryView(props: LibraryProps) {
       if (profile.defaultOutfitId === outfit.id) profile.defaultOutfitId = profile.outfits[0]?.id ?? null;
       setOutfitId(profile.defaultOutfitId ?? profile.outfits[0]?.id ?? "");
     });
+  }
+
+  async function editExpressionNames() {
+    if (!outfit?.expressions.length || editingNames) return;
+    setEditingNames(true);
+    try {
+      const expressions = [...outfit.expressions].sort((a, b) => a.order - b.order);
+      const edited = await props.client.editExpressionNames(
+        outfit.name,
+        expressions.map((expression) => expression.name),
+      );
+      if (!edited) return;
+      if (edited.length !== expressions.length) {
+        throw new Error(
+          `Keep exactly one expression name per line. Expected ${expressions.length} lines but received ${edited.length}.`,
+        );
+      }
+      const names = edited.map((name) => cleanName(name, ""));
+      if (names.some((name) => !name)) throw new Error("Expression names cannot be blank.");
+      const seen = new Set<string>();
+      for (const name of names) {
+        const key = normalizedKey(name);
+        if (seen.has(key)) throw new Error(`Find & Replace would create a duplicate expression named “${name}”.`);
+        seen.add(key);
+      }
+      if (expressions.every((expression, index) => expression.name === names[index])) {
+        props.client.notify("info", "No expression names changed.");
+        return;
+      }
+      const renamed = new Map(expressions.map((expression, index) => [expression.id, names[index]]));
+      props.update((profile) => {
+        const target = profile.outfits.find((candidate) => candidate.id === outfit.id);
+        target?.expressions.forEach((expression) => {
+          expression.name = renamed.get(expression.id) ?? expression.name;
+        });
+      });
+      props.client.notify("success", `Updated ${expressions.length} expression names. Save to commit the changes.`);
+    } catch (error) {
+      props.client.notify("error", error instanceof Error ? error.message : "Could not edit expression names.");
+    } finally {
+      setEditingNames(false);
+    }
   }
 
   function reorderOutfit(sourceId: string, targetId: string) {
@@ -919,6 +962,14 @@ function LibraryView(props: LibraryProps) {
           <Toolbar>
             <IconButton icon="undo" label="Undo" disabled={!props.canUndo} onClick={props.undo} />
             <IconButton icon="redo" label="Redo" disabled={!props.canRedo} onClick={props.redo} />
+            <Button
+              size="small"
+              icon="search"
+              disabled={!outfit?.expressions.length || editingNames}
+              onClick={() => void editExpressionNames()}
+            >
+              {editingNames ? "Opening…" : "Find & Replace"}
+            </Button>
             <Button
               size="small"
               icon="batch"

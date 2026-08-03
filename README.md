@@ -214,6 +214,7 @@ Library is the full character sprite editor.
 - Inspect every exact variant in an expression.
 - Reorder variants, open full-size previews, import more media, or delete variants.
 - Search the current outfit.
+- Open Lumiverse's native Find & Replace editor to rename every expression in the current outfit as an undoable draft change.
 - Select all filtered expressions and move, copy, or delete them in one contextual operation.
 - Undo and redo local library edits before saving.
 
