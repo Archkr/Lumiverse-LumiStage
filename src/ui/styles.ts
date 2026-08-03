@@ -418,7 +418,7 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-outfit-list button i { color: var(--ls-accent); font-size: 8px; font-style: normal; text-transform: uppercase; }
 .ls-outfit-rail-foot { display: flex; align-items: center; padding: 0 13px; border-top: 1px solid var(--ls-line); color: var(--ls-dim); font-size: 8px; }
 .ls-outfit-rail-foot span { display: inline-flex; align-items: center; gap: 5px; }
-.ls-library-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; background: var(--ls-bg); }
+.ls-library-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--ls-bg); }
 .ls-library-toolbar { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--ls-line); background: var(--ls-bg); }
 .ls-outfit-title { min-width: 0; }
 .ls-outfit-title input {
@@ -436,7 +436,7 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 }
 .ls-outfit-title > span:last-child { color: var(--ls-dim); font-size: 9px; }
 .ls-library-command-row { min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--ls-line); background: color-mix(in srgb, var(--ls-panel) 94%, transparent); backdrop-filter: blur(10px); }
-.ls-expression-scroll { min-height: 0; overflow: auto; padding: 18px; }
+.ls-expression-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; padding: 18px; }
 .ls-expression-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 13px; align-content: start; }
 .ls-expression-card { min-width: 0; overflow: visible; border: 0; background: transparent; }
 .ls-expression-card-hit { width: 100%; display: block; padding: 0; border: 0; background: transparent; color: var(--ls-text); cursor: pointer; text-align: left; }

@@ -41,7 +41,49 @@ function backendState(revision: number): FrontendState {
   };
 }
 
-describe("Studio save conflict recovery", () => {
+describe("Studio workspace", () => {
+  it("renders every expression in the selected outfit without pagination", () => {
+    let receive: (message: BackendToFrontend) => void = () => undefined;
+    const client = new LumiStageClient({
+      sendToBackend: vi.fn(),
+      onBackendMessage(handler: (message: BackendToFrontend) => void) {
+        receive = handler;
+        return () => { receive = () => undefined; };
+      },
+      components: {
+        mountSelect(target: Element) {
+          return {
+            componentId: "select",
+            element: target,
+            update: vi.fn(),
+            destroy: vi.fn(),
+            getValue: vi.fn(() => ""),
+            refresh: vi.fn(),
+          };
+        },
+      },
+    } as never);
+    client.start();
+    const state = backendState(3);
+    const outfit = state.profile?.outfits.find((candidate) => candidate.id === "outfit-casual");
+    expect(outfit).toBeTruthy();
+    outfit!.expressions = Array.from({ length: 60 }, (_, order) => ({
+      id: `expression-${order}`,
+      name: `Expression ${order + 1}`,
+      order,
+      variants: [],
+    }));
+    state.stageProfiles = state.profile ? [state.profile] : [];
+    receive({ type: "state", state });
+
+    const view = render(<StudioWorkspace client={client} />);
+    const list = screen.getByRole("list", { name: "Casual expressions" });
+    expect(list.querySelectorAll(".ls-expression-card")).toHaveLength(60);
+
+    view.unmount();
+    client.destroy();
+  });
+
   it("saves the preserved draft against the latest backend revision instead of disabling Save", async () => {
     let receive: (message: BackendToFrontend) => void = () => undefined;
     const sendToBackend = vi.fn((message: FrontendToBackend) => {

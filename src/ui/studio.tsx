@@ -25,7 +25,6 @@ import {
   HostBadge,
   HostModelPicker,
   HostNumber,
-  HostPagination,
   HostRange,
   HostSelect,
   HostSwitch,
@@ -741,8 +740,6 @@ function LibraryView(props: LibraryProps) {
   const [query, setQuery] = useState("");
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(48);
   const outfit = selectedOutfit(props.profile, outfitId);
   const filtered = useMemo(() => (outfit?.expressions ?? []).filter((expression) => {
     const needle = query.trim().toLocaleLowerCase();
@@ -750,9 +747,6 @@ function LibraryView(props: LibraryProps) {
       || expression.name.toLocaleLowerCase().includes(needle)
       || expression.variants.some((variant) => variant.fileName.toLocaleLowerCase().includes(needle));
   }), [outfit, query]);
-  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const clampedPage = Math.min(page, pages);
-  const visible = filtered.slice((clampedPage - 1) * perPage, clampedPage * perPage);
   const inspected = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
 
   useEffect(() => {
@@ -760,8 +754,6 @@ function LibraryView(props: LibraryProps) {
       setOutfitId(props.profile.defaultOutfitId ?? props.profile.outfits[0]?.id ?? "");
     }
   }, [props.profile.revision, props.profile.outfits.length, outfitId]);
-  useEffect(() => setPage(1), [outfitId, query, perPage]);
-  useEffect(() => setPage((current) => Math.min(current, pages)), [pages]);
   useEffect(() => {
     setSelected(new Set());
     setBatchMode(false);
@@ -971,9 +963,9 @@ function LibraryView(props: LibraryProps) {
         )}
 
         <div class="ls-expression-scroll">
-          {visible.length ? (
+          {filtered.length ? (
             <div class="ls-expression-grid" role="list" aria-label={`${outfit?.name} expressions`}>
-              {visible.map((expression) => (
+              {filtered.map((expression) => (
                 <ExpressionCard
                   key={expression.id}
                   client={props.client}
@@ -1006,17 +998,6 @@ function LibraryView(props: LibraryProps) {
             />
           )}
         </div>
-        {filtered.length > perPage && (
-          <HostPagination
-            client={props.client}
-            page={Math.min(page, pages)}
-            pages={pages}
-            total={filtered.length}
-            perPage={perPage}
-            onPage={setPage}
-            onPerPage={(value) => { setPerPage(value); setPage(1); }}
-          />
-        )}
       </main>
 
       {outfit && inspected && (

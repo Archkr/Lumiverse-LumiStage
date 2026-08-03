@@ -5856,37 +5856,6 @@ function HostRange(props) {
   }, [props.value, props.min, props.max, props.step, props.label, props.hint, props.suffix]);
   return /* @__PURE__ */ u2("div", { class: "ls-native-control", ref: root });
 }
-function HostPagination(props) {
-  const root = A2(null);
-  const handle = A2(null);
-  const latest = A2(props);
-  latest.current = props;
-  h2(() => {
-    if (!root.current) return;
-    handle.current = props.client.ctx.components.mountPagination(root.current, {
-      currentPage: props.page,
-      totalPages: props.pages,
-      totalItems: props.total,
-      perPage: props.perPage,
-      perPageOptions: [24, 48, 96],
-      onPageChange: (page) => latest.current.onPage(page),
-      onPerPageChange: (value) => latest.current.onPerPage(value)
-    });
-    return () => {
-      handle.current?.destroy();
-      handle.current = null;
-    };
-  }, [props.client]);
-  h2(() => {
-    handle.current?.update({
-      currentPage: props.page,
-      totalPages: props.pages,
-      totalItems: props.total,
-      perPage: props.perPage
-    });
-  }, [props.page, props.pages, props.total, props.perPage]);
-  return /* @__PURE__ */ u2("div", { class: "ls-native-control ls-native-pagination", ref: root });
-}
 function HostBadge(props) {
   const root = A2(null);
   h2(() => {
@@ -7273,24 +7242,17 @@ function LibraryView(props) {
   const [query, setQuery] = d2("");
   const [batchMode, setBatchMode] = d2(false);
   const [selected, setSelected] = d2(/* @__PURE__ */ new Set());
-  const [page, setPage] = d2(1);
-  const [perPage, setPerPage] = d2(48);
   const outfit = selectedOutfit(props.profile, outfitId);
   const filtered = T2(() => (outfit?.expressions ?? []).filter((expression) => {
     const needle = query.trim().toLocaleLowerCase();
     return !needle || expression.name.toLocaleLowerCase().includes(needle) || expression.variants.some((variant) => variant.fileName.toLocaleLowerCase().includes(needle));
   }), [outfit, query]);
-  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const clampedPage = Math.min(page, pages);
-  const visible = filtered.slice((clampedPage - 1) * perPage, clampedPage * perPage);
   const inspected = outfit?.expressions.find((item) => item.id === expressionId) ?? null;
   h2(() => {
     if (!props.profile.outfits.some((item) => item.id === outfitId)) {
       setOutfitId(props.profile.defaultOutfitId ?? props.profile.outfits[0]?.id ?? "");
     }
   }, [props.profile.revision, props.profile.outfits.length, outfitId]);
-  h2(() => setPage(1), [outfitId, query, perPage]);
-  h2(() => setPage((current) => Math.min(current, pages)), [pages]);
   h2(() => {
     setSelected(/* @__PURE__ */ new Set());
     setBatchMode(false);
@@ -7518,7 +7480,7 @@ function LibraryView(props) {
           }
         }
       ),
-      /* @__PURE__ */ u2("div", { class: "ls-expression-scroll", children: visible.length ? /* @__PURE__ */ u2("div", { class: "ls-expression-grid", role: "list", "aria-label": `${outfit?.name} expressions`, children: visible.map((expression) => /* @__PURE__ */ u2(
+      /* @__PURE__ */ u2("div", { class: "ls-expression-scroll", children: filtered.length ? /* @__PURE__ */ u2("div", { class: "ls-expression-grid", role: "list", "aria-label": `${outfit?.name} expressions`, children: filtered.map((expression) => /* @__PURE__ */ u2(
         ExpressionCard,
         {
           client: props.client,
@@ -7549,22 +7511,7 @@ function LibraryView(props) {
           description: query ? "Try another name or sprite filename." : "Create an expression slot or import a folder of sprites.",
           action: !query && /* @__PURE__ */ u2(Button, { icon: "plus", variant: "primary", onClick: addExpression, children: "New expression" })
         }
-      ) }),
-      filtered.length > perPage && /* @__PURE__ */ u2(
-        HostPagination,
-        {
-          client: props.client,
-          page: Math.min(page, pages),
-          pages,
-          total: filtered.length,
-          perPage,
-          onPage: setPage,
-          onPerPage: (value) => {
-            setPerPage(value);
-            setPage(1);
-          }
-        }
-      )
+      ) })
     ] }),
     outfit && inspected && /* @__PURE__ */ u2(
       VariantTray,
@@ -8851,7 +8798,7 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-outfit-list button i { color: var(--ls-accent); font-size: 8px; font-style: normal; text-transform: uppercase; }
 .ls-outfit-rail-foot { display: flex; align-items: center; padding: 0 13px; border-top: 1px solid var(--ls-line); color: var(--ls-dim); font-size: 8px; }
 .ls-outfit-rail-foot span { display: inline-flex; align-items: center; gap: 5px; }
-.ls-library-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; background: var(--ls-bg); }
+.ls-library-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--ls-bg); }
 .ls-library-toolbar { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--ls-line); background: var(--ls-bg); }
 .ls-outfit-title { min-width: 0; }
 .ls-outfit-title input {
@@ -8869,7 +8816,7 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 }
 .ls-outfit-title > span:last-child { color: var(--ls-dim); font-size: 9px; }
 .ls-library-command-row { min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--ls-line); background: color-mix(in srgb, var(--ls-panel) 94%, transparent); backdrop-filter: blur(10px); }
-.ls-expression-scroll { min-height: 0; overflow: auto; padding: 18px; }
+.ls-expression-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; padding: 18px; }
 .ls-expression-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 13px; align-content: start; }
 .ls-expression-card { min-width: 0; overflow: visible; border: 0; background: transparent; }
 .ls-expression-card-hit { width: 100%; display: block; padding: 0; border: 0; background: transparent; color: var(--ls-text); cursor: pointer; text-align: left; }
@@ -9464,3 +9411,9 @@ function setup(ctx) {
 export {
   setup
 };
+/*! Bundled license information:
+
+tus-js-client/lib.esm/upload.js:
+tus-js-client/lib.esm/browser/fileReader.js:
+  (*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/facebook/regenerator/blob/main/LICENSE *)
+*/
