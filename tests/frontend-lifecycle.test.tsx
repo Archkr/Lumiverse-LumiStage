@@ -162,6 +162,7 @@ function state(permissions: FrontendState["permissions"]): FrontendState {
     activeCharacterId: "character-a",
     activeCharacterName: "Aster",
     queueDepth: 0,
+    detectorDebugRuns: [],
     lastDetection: { status: "idle", message: "Ready", at: null },
   };
 }

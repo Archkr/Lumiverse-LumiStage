@@ -234,6 +234,8 @@ Live Stage shows the resolved state for the active chat:
 
 **Analyze now** forces a fresh detector call and bypasses the normal decision cache.
 
+The drawer’s always-open **Detector activity** panel keeps an in-memory transcript for the active chat. Every session attempt is rendered in the scrollbox without lazy loading, with host-parsed reasoning collapsed by default and raw plus normalized output visible for debugging. **Copy all** exports the complete session transcript as Markdown. Transcripts are not persisted and disappear when the extension backend reloads.
+
 ### Settings
 
 Settings is divided into:
@@ -330,7 +332,7 @@ The detector:
 - sends an empty quiet-call model override for “connection default,” preventing legacy preset model fields from replacing the connection’s resolved model;
 - must copy exact outfit and expression names from the catalog rather than inventing labels;
 - may switch outfits whenever the completed scene supports it unless a manual outfit/state lock constrains the choice;
-- asks the host to disable optional API reasoning while remaining compatible with models that reason mandatorily;
+- inherits the selected connection’s reasoning configuration and exposes any host-parsed reasoning in the session-only drawer debugger; enabled reasoning may increase latency and token usage;
 - has a 60-second abort;
 - does not send `max_tokens`, leaving the selected controller and model to manage their own output limit;
 - fails clearly before generation when estimated input exceeds 24,000 tokens;

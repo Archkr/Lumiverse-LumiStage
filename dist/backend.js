@@ -1731,7 +1731,7 @@ function buildDetectorRequest(catalog, recentMessages, currentStates, settings, 
       temperature: settings.detection.temperature,
       model: settings.detection.model ?? ""
     },
-    reasoning: { source: "off" },
+    reasoning: { source: "inherit" },
     tools
   };
 }
@@ -2184,10 +2184,73 @@ var lastDetection = /* @__PURE__ */ new Map();
 var detectorFlights = /* @__PURE__ */ new Map();
 var recentDetectorRuns = /* @__PURE__ */ new Map();
 var lastDetectorDispatch = /* @__PURE__ */ new Map();
+var detectorDebugRuns = /* @__PURE__ */ new Map();
 var detectorSettingsEpochs = /* @__PURE__ */ new Map();
 var mediaViewCache = /* @__PURE__ */ new Map();
 var diagnosticCounters = /* @__PURE__ */ new Map();
 var onEvent = spindle.on;
+function startDetectorDebugRun(userId, chatId, trigger) {
+  const run = {
+    id: crypto.randomUUID(),
+    trigger,
+    source: "preflight",
+    status: "running",
+    startedAt: Date.now(),
+    completedAt: null,
+    durationMs: null,
+    messageId: null,
+    connectionId: null,
+    connectionName: null,
+    requestedModel: null,
+    responseProvider: null,
+    responseModel: null,
+    confidenceThreshold: null,
+    reasoning: null,
+    rawResponse: null,
+    parsedDecision: null,
+    outcome: null,
+    error: null
+  };
+  const key = queueKey(userId, chatId);
+  detectorDebugRuns.set(key, [...detectorDebugRuns.get(key) ?? [], run]);
+  return run;
+}
+function updateDetectorDebugRun(userId, chatId, runId, patch) {
+  const key = queueKey(userId, chatId);
+  const runs = detectorDebugRuns.get(key) ?? [];
+  const current = runs.find((run) => run.id === runId);
+  if (!current) return null;
+  const terminal = patch.status != null && patch.status !== "running";
+  const completedAt = terminal ? patch.completedAt ?? Date.now() : patch.completedAt ?? current.completedAt;
+  const updated = {
+    ...current,
+    ...patch,
+    completedAt,
+    durationMs: completedAt == null ? null : Math.max(0, completedAt - current.startedAt)
+  };
+  detectorDebugRuns.set(key, runs.map((run) => run.id === runId ? updated : run));
+  return updated;
+}
+function finishDetectorDebugRun(userId, chatId, runId, status, patch = {}) {
+  return updateDetectorDebugRun(userId, chatId, runId, { ...patch, status });
+}
+function detectorRawResponse(response) {
+  const usage = response.usage;
+  return {
+    content: typeof response.content === "string" ? response.content : null,
+    toolCalls: (response.tool_calls ?? []).map((tool) => ({
+      name: tool.name,
+      args: structuredClone(tool.args)
+    })),
+    finishReason: typeof response.finish_reason === "string" ? response.finish_reason : null,
+    usage: usage ? {
+      promptTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null,
+      inputTokens: typeof usage.input_tokens === "number" ? usage.input_tokens : null,
+      completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : null,
+      totalTokens: typeof usage.total_tokens === "number" ? usage.total_tokens : null
+    } : null
+  };
+}
 function asRecord3(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -2478,6 +2541,7 @@ async function buildState(userId, chatId, characterId) {
     activeCharacterId,
     activeCharacterName,
     queueDepth: activeChatId ? queueDepth.get(queueKey(userId, activeChatId)) ?? 0 : 0,
+    detectorDebugRuns: activeChatId ? structuredClone(detectorDebugRuns.get(queueKey(userId, activeChatId)) ?? []) : [],
     lastDetection: activeChatId ? lastDetection.get(queueKey(userId, activeChatId)) ?? { status: "idle", message: "No detection has run yet.", at: null } : { status: "idle", message: "No detection has run yet.", at: null }
   };
 }
@@ -2516,26 +2580,51 @@ async function rebuildTimeline(timeline, catalog, settings, messages) {
   })));
   return replayTimeline(timeline, catalog, settings, keys);
 }
-async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageId, trigger = force ? "manual" : "completion") {
+async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageId, trigger = force ? "manual" : "completion", debugRunId) {
+  const finishDebug = (status, patch = {}) => debugRunId ? finishDetectorDebugRun(userId, chatId, debugRunId, status, patch) : null;
+  const updateDebug = (patch) => debugRunId ? updateDetectorDebugRun(userId, chatId, debugRunId, patch) : null;
   if (!hasPermission("generation") || !hasPermission("chat_mutation") || !hasPermission("chats")) {
-    lastDetection.set(queueKey(userId, chatId), { status: "error", message: "Generation, Chats, and Chat History permissions are required for automation.", at: Date.now() });
+    const message = "Generation, Chats, and Chat History permissions are required for automation.";
+    finishDebug("error", { outcome: "Detector preflight failed.", error: message });
+    lastDetection.set(queueKey(userId, chatId), { status: "error", message, at: Date.now() });
     await sendState(userId).catch(() => void 0);
     return;
   }
   const settings = await repository.getSettings(userId);
   const settingsEpoch = detectorSettingsEpoch(userId);
-  if (!settings.detection.enabled && !force) return;
+  if (!settings.detection.enabled && !force) {
+    finishDebug("skipped", { outcome: "Automatic detection is disabled." });
+    await sendState(userId).catch(() => void 0);
+    return;
+  }
   const dispatch = await resolveDetectorDispatch(userId, settings.detection);
+  updateDebug({
+    connectionId: dispatch.resolvedConnectionId,
+    connectionName: dispatch.resolvedConnectionName,
+    requestedModel: dispatch.requestedModel,
+    confidenceThreshold: settings.detection.confidence
+  });
   const set = await profilesForChat(userId, chatId);
   if (set.catalog.length === 0 || !set.profiles.some((profile) => allVariants(profile).length > 0)) {
-    lastDetection.set(queueKey(userId, chatId), { status: "error", message: "No LumiStage media is configured for this chat.", at: Date.now() });
+    const message = "No LumiStage media is configured for this chat.";
+    finishDebug("error", { outcome: "Detector preflight failed.", error: message });
+    lastDetection.set(queueKey(userId, chatId), { status: "error", message, at: Date.now() });
     await sendState(userId).catch(() => void 0);
     return;
   }
   const messages = await messagesForAnalysis(chatId, expectedMessageId);
-  if (!messages) return;
+  if (!messages) {
+    finishDebug("skipped", { outcome: "The completed assistant message was not available for analysis." });
+    await sendState(userId).catch(() => void 0);
+    return;
+  }
   const latest = [...messages].reverse().find((message) => message.role === "assistant" && !!message.content);
-  if (!latest) return;
+  if (!latest) {
+    finishDebug("skipped", { outcome: "No assistant reply with content was available for analysis." });
+    await sendState(userId).catch(() => void 0);
+    return;
+  }
+  updateDebug({ messageId: latest.id });
   let timeline = await repository.getTimeline(userId, chatId);
   const expectedTimelineRevision = timeline.revision;
   const contentHash = await sha256(latest.content);
@@ -2569,13 +2658,25 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
   const detectorMessageKey = `${queueKey(userId, chatId)}:${latest.id}:${latest.swipeId}:${contentHash}`;
   const flightKey = `${detectorMessageKey}:${requestFingerprint}`;
   let detectorInputTokens = null;
+  let runOutcome = null;
   if (!record2) {
     const recent = recentDetectorRuns.get(flightKey);
     const recentWindow = force ? 5e3 : 3e4;
     if (recent && Date.now() - recent.completedAt <= recentWindow && recent.requestFingerprint === requestFingerprint) {
       record2 = recent.record;
       detectorInputTokens = recent.detectorInputTokens;
+      runOutcome = recent;
     }
+  }
+  if (record2) {
+    updateDebug({
+      source: "cache",
+      responseProvider: record2.provider,
+      responseModel: record2.model,
+      parsedDecision: record2.decision,
+      reasoning: runOutcome?.reasoning ?? null,
+      rawResponse: runOutcome?.rawResponse ?? null
+    });
   }
   lastDetection.set(queueKey(userId, chatId), { status: "running", message: record2 ? "Restoring cached stage decision\u2026" : "Analyzing the latest reply\u2026", at: Date.now() });
   await sendState(userId).catch(() => void 0);
@@ -2594,6 +2695,7 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
     detectorInputTokens = typeof estimatedInputTokens === "number" ? estimatedInputTokens : null;
     let flight = detectorFlights.get(flightKey);
     if (!flight) {
+      updateDebug({ source: "provider" });
       const dispatchDiagnostic = {
         ...dispatch,
         dispatchId: crypto.randomUUID(),
@@ -2624,10 +2726,19 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
           if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
           dispatchDiagnostic.responseProvider = response.provider ?? null;
           dispatchDiagnostic.responseModel = response.model ?? null;
+          const rawResponse = detectorRawResponse(response);
+          const reasoning = typeof response.reasoning === "string" && response.reasoning.trim() ? response.reasoning : null;
+          updateDebug({
+            responseProvider: response.provider ?? null,
+            responseModel: response.model ?? dispatch.requestedModel,
+            reasoning,
+            rawResponse
+          });
           const usedInputTokens = response.usage?.prompt_tokens ?? response.usage?.input_tokens ?? detectorInputTokens;
           const parsed = parseDetectorResponse(response, detectorCatalog);
           if (!parsed) throw new Error("The detector did not return a valid stage decision.");
           const decision = validateDecision(parsed, detectorCatalog);
+          updateDebug({ parsedDecision: decision });
           if (decision.characters.length === 0 && decision.focusedCharacterIds.length === 0) {
             throw new Error("The detector returned no valid characters.");
           }
@@ -2646,7 +2757,10 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
             },
             detectorInputTokens: usedInputTokens,
             requestFingerprint,
-            completedAt: Date.now()
+            completedAt: Date.now(),
+            reasoning,
+            rawResponse,
+            parsedDecision: decision
           };
         } catch (error) {
           const obsolete = error instanceof ObsoleteDetectorRun || settingsEpoch !== detectorSettingsEpoch(userId);
@@ -2667,6 +2781,8 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
       };
       detectorFlights.set(flightKey, tracked);
       flight = tracked;
+    } else {
+      updateDebug({ source: "shared-flight" });
     }
     const outcome = await flight.promise;
     if (settingsEpoch !== detectorSettingsEpoch(userId) || flight.settingsEpoch !== detectorSettingsEpoch(userId)) {
@@ -2674,6 +2790,14 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
     }
     record2 = outcome.record;
     detectorInputTokens = outcome.detectorInputTokens;
+    runOutcome = outcome;
+    updateDebug({
+      responseProvider: outcome.record.provider,
+      responseModel: outcome.record.model,
+      reasoning: outcome.reasoning,
+      rawResponse: outcome.rawResponse,
+      parsedDecision: outcome.parsedDecision
+    });
     recentDetectorRuns.set(flightKey, outcome);
     const cutoff = Date.now() - 6e4;
     for (const [key, recent] of recentDetectorRuns) {
@@ -2687,6 +2811,17 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
   if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
   timeline = await repository.saveTimeline(userId, timeline, expectedTimelineRevision);
   if (settingsEpoch !== detectorSettingsEpoch(userId)) throw new ObsoleteDetectorRun();
+  const belowThreshold = record2.decision.characters.filter(
+    (character) => character.confidence < settings.detection.confidence
+  );
+  const debugRun = debugRunId ? (detectorDebugRuns.get(queueKey(userId, chatId)) ?? []).find((run) => run.id === debugRunId) : null;
+  const terminalStatus = belowThreshold.length ? "rejected" : debugRun?.source === "cache" ? "cached" : "accepted";
+  finishDebug(terminalStatus, {
+    responseProvider: record2.provider,
+    responseModel: record2.model,
+    parsedDecision: record2.decision,
+    outcome: belowThreshold.length ? `Prior stage preserved because ${belowThreshold.length} character decision(s) fell below the ${Math.round(settings.detection.confidence * 100)}% confidence threshold.` : terminalStatus === "cached" ? "Restored and applied a cached detector decision." : "Applied the detector decision to the stage."
+  });
   lastDetection.set(queueKey(userId, chatId), {
     status: "success",
     message: `Stage settled for ${record2.decision.focusedCharacterIds.length || record2.decision.characters.length} character(s).${detectorInputTokens ? ` Detector input: ${detectorInputTokens.toLocaleString()} tokens.` : ""}`,
@@ -2696,11 +2831,26 @@ async function analyzeLatestOnce(userId, chatId, force = false, expectedMessageI
 }
 async function analyzeLatest(userId, chatId, force = false, expectedMessageId, trigger = force ? "manual" : "completion") {
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const debugRun = startDetectorDebugRun(userId, chatId, trigger);
+    await sendState(userId).catch(() => void 0);
     try {
-      await analyzeLatestOnce(userId, chatId, force, expectedMessageId, trigger);
+      await analyzeLatestOnce(userId, chatId, force, expectedMessageId, trigger, debugRun.id);
       return;
     } catch (error) {
-      if (!(error instanceof ObsoleteDetectorRun)) throw error;
+      const obsolete = error instanceof ObsoleteDetectorRun;
+      const message = obsolete ? "Cancelled because detector settings changed." : error instanceof Error ? error.message : "Stage detection failed.";
+      finishDetectorDebugRun(
+        userId,
+        chatId,
+        debugRun.id,
+        obsolete ? "cancelled" : "error",
+        {
+          outcome: obsolete ? "Detector run cancelled before it could be applied." : "Detector run failed.",
+          error: message
+        }
+      );
+      await sendState(userId).catch(() => void 0);
+      if (!obsolete) throw error;
     }
   }
   throw new Error("Detector settings kept changing while analysis was starting. Try again once saving is complete.");
@@ -3391,6 +3541,7 @@ onEvent("CHAT_DELETED", (payload, eventUserId) => {
   queueDepth.delete(key);
   lastDetection.delete(key);
   lastDetectorDispatch.delete(key);
+  detectorDebugRuns.delete(key);
   settleBackground(repository.deleteTimeline(userId, chatId));
 });
 spindle.permissions.onChanged(() => {

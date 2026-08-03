@@ -281,6 +281,46 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-drawer-empty { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; padding: 11px; border: 1px dashed color-mix(in srgb, var(--ls-accent) 22%, var(--ls-line)); border-radius: 9px; background: color-mix(in srgb, var(--ls-accent) 5%, var(--ls-panel)); color: var(--ls-muted); font-size: 10px; }
 .ls-drawer-empty svg { flex: 0 0 auto; color: var(--ls-accent); }
 
+.ls-debug-panel { min-width: 0; overflow: hidden; margin-top: 16px; border: 1px solid var(--ls-line); border-radius: 11px; background: linear-gradient(155deg, var(--ls-panel), var(--ls-panel-deep)); box-shadow: inset 0 1px color-mix(in srgb, var(--ls-text) 4%, transparent), var(--ls-shadow-sm); }
+.ls-debug-head { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--ls-line); background: color-mix(in srgb, var(--ls-panel-raised) 65%, transparent); }
+.ls-debug-head > div { min-width: 0; }
+.ls-debug-head strong, .ls-debug-head small { display: block; }
+.ls-debug-head strong { margin-top: 3px; font-size: 12px; }
+.ls-debug-head small { overflow: hidden; color: var(--ls-dim); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.ls-debug-head > .ls-button { flex: 0 0 auto; }
+.ls-debug-scroll { height: clamp(240px, 40dvh, 420px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 10px; }
+.ls-debug-empty { height: 100%; min-height: 180px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--ls-dim); font-size: 10px; text-align: center; }
+.ls-debug-empty svg { color: var(--ls-accent); }
+.ls-debug-run { min-width: 0; padding: 10px 0 14px; border-bottom: 1px solid color-mix(in srgb, var(--ls-line) 72%, transparent); }
+.ls-debug-run:first-child { padding-top: 0; }
+.ls-debug-run:last-child { padding-bottom: 0; border-bottom: 0; }
+.ls-debug-run > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ls-debug-run > header > span { color: var(--ls-muted); font-size: 9px; font-weight: 700; }
+.ls-debug-run > header > strong { padding: 2px 6px; border: 1px solid var(--ls-line); border-radius: 999px; background: var(--ls-panel-raised); color: var(--ls-muted); font-size: 7px; letter-spacing: .07em; text-transform: uppercase; }
+.ls-debug-run > header > strong[data-status="running"] { border-color: color-mix(in srgb, var(--ls-accent) 38%, var(--ls-line)); color: var(--ls-accent); }
+.ls-debug-run > header > strong[data-status="accepted"], .ls-debug-run > header > strong[data-status="cached"] { border-color: color-mix(in srgb, var(--ls-success) 38%, var(--ls-line)); color: var(--ls-success); }
+.ls-debug-run > header > strong[data-status="rejected"], .ls-debug-run > header > strong[data-status="skipped"] { border-color: color-mix(in srgb, var(--ls-warning) 42%, var(--ls-line)); color: var(--ls-warning); }
+.ls-debug-run > header > strong[data-status="cancelled"], .ls-debug-run > header > strong[data-status="error"] { border-color: color-mix(in srgb, var(--ls-danger) 40%, var(--ls-line)); color: var(--ls-danger); }
+.ls-debug-run > small { display: block; margin: 4px 0 8px; overflow-wrap: anywhere; color: var(--ls-dim); font-size: 7px; line-height: 1.45; }
+.ls-debug-bubble { max-width: 94%; overflow: hidden; border: 1px solid var(--ls-line); border-radius: 10px; }
+.ls-debug-thinking { margin: 0 auto 7px 0; background: var(--ls-panel-raised); }
+.ls-debug-thinking summary { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 8px 9px; color: var(--ls-muted); cursor: pointer; list-style: none; }
+.ls-debug-thinking summary::-webkit-details-marker { display: none; }
+.ls-debug-thinking summary > span { font-size: 9px; font-weight: 700; }
+.ls-debug-thinking summary > small { overflow: hidden; color: var(--ls-dim); font-size: 7px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.ls-debug-thinking summary > svg { transition: transform var(--ls-fast); }
+.ls-debug-thinking[open] summary > svg { transform: rotate(180deg); }
+.ls-debug-output { margin-left: auto; padding: 9px; border-color: color-mix(in srgb, var(--ls-accent) 24%, var(--ls-line)); background: color-mix(in srgb, var(--ls-accent) 6%, var(--ls-panel-deep)); }
+.ls-debug-bubble-title { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 7px; }
+.ls-debug-bubble-title > span { font-size: 9px; font-weight: 700; }
+.ls-debug-bubble-title > small { overflow: hidden; color: var(--ls-dim); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.ls-debug-output section + section { margin-top: 8px; }
+.ls-debug-output section > span { display: block; margin-bottom: 3px; color: var(--ls-dim); font-size: 7px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.ls-debug-bubble pre { max-height: none; overflow: visible; margin: 0; padding: 8px; border: 1px solid color-mix(in srgb, var(--ls-line) 75%, transparent); border-radius: 7px; background: var(--ls-panel-deep); color: var(--ls-muted); font: 8px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
+.ls-debug-thinking pre { border-width: 1px 0 0; border-radius: 0; }
+.ls-debug-output p { margin: 7px 0 0; color: var(--ls-muted); font-size: 8px; line-height: 1.45; }
+.ls-debug-output .ls-debug-error { color: var(--ls-danger); }
+
 /* Full Studio */
 .ls-studio {
   position: relative;

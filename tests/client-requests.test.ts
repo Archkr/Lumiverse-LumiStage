@@ -28,6 +28,7 @@ function state(): FrontendState {
     activeCharacterId: profile.characterId,
     activeCharacterName: profile.characterName,
     queueDepth: 0,
+    detectorDebugRuns: [],
     lastDetection: { status: "idle", message: "Ready", at: null },
   };
 }

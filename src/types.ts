@@ -191,6 +191,51 @@ export interface LlmConnectionView {
   hasApiKey: boolean;
 }
 
+export type DetectorTrigger = "completion" | "edit" | "swipe" | "manual";
+export type DetectorDebugSource = "preflight" | "provider" | "shared-flight" | "cache";
+export type DetectorDebugStatus =
+  | "running"
+  | "accepted"
+  | "rejected"
+  | "cached"
+  | "cancelled"
+  | "skipped"
+  | "error";
+
+export interface DetectorDebugRawResponse {
+  content: string | null;
+  toolCalls: Array<{ name: string; args: unknown }>;
+  finishReason: string | null;
+  usage: {
+    promptTokens: number | null;
+    inputTokens: number | null;
+    completionTokens: number | null;
+    totalTokens: number | null;
+  } | null;
+}
+
+export interface DetectorDebugRun {
+  id: string;
+  trigger: DetectorTrigger;
+  source: DetectorDebugSource;
+  status: DetectorDebugStatus;
+  startedAt: number;
+  completedAt: number | null;
+  durationMs: number | null;
+  messageId: string | null;
+  connectionId: string | null;
+  connectionName: string | null;
+  requestedModel: string | null;
+  responseProvider: string | null;
+  responseModel: string | null;
+  confidenceThreshold: number | null;
+  reasoning: string | null;
+  rawResponse: DetectorDebugRawResponse | null;
+  parsedDecision: DetectionDecisionV2 | null;
+  outcome: string | null;
+  error: string | null;
+}
+
 export interface FrontendState {
   settings: LumiStageSettingsV2;
   profile: CharacterProfileV2 | null;
@@ -204,6 +249,7 @@ export interface FrontendState {
   activeCharacterId: string | null;
   activeCharacterName: string | null;
   queueDepth: number;
+  detectorDebugRuns: DetectorDebugRun[];
   lastDetection: {
     status: "idle" | "running" | "success" | "error";
     message: string;

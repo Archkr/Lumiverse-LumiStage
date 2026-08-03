@@ -9,12 +9,16 @@ import {
 
 export interface DetectorResponse {
   content?: string | null;
+  reasoning?: string | null;
+  finish_reason?: string | null;
   tool_calls?: Array<{ name: string; args: unknown }>;
   provider?: string;
   model?: string;
   usage?: {
     prompt_tokens?: number;
     input_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
   };
 }
 
@@ -367,7 +371,7 @@ export function buildDetectorRequest(
       temperature: settings.detection.temperature,
       model: settings.detection.model ?? "",
     },
-    reasoning: { source: "off" },
+    reasoning: { source: "inherit" },
     tools,
   };
 }

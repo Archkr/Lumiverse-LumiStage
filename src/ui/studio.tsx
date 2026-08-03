@@ -12,6 +12,7 @@ import { cleanName, normalizedKey } from "../ids";
 import type {
   BatchMutationV2,
   CharacterProfileV2,
+  DetectorDebugRun,
   ExpressionSlotV2,
   LumiStageSettingsPatchV2,
   LumiStageSettingsV2,
@@ -133,6 +134,191 @@ function CurrentPreview({ client }: { client: LumiStageClient }) {
   );
 }
 
+const DEBUG_STATUS_LABELS: Record<DetectorDebugRun["status"], string> = {
+  running: "Running",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  cached: "Cached",
+  cancelled: "Cancelled",
+  skipped: "Skipped",
+  error: "Error",
+};
+
+function debugRawText(run: DetectorDebugRun): string {
+  if (!run.rawResponse) {
+    return run.source === "cache"
+      ? "No raw response—restored from cache."
+      : run.status === "running"
+        ? "Waiting for provider response…"
+        : "No raw response was returned.";
+  }
+  return JSON.stringify({
+    content: run.rawResponse.content,
+    tool_calls: run.rawResponse.toolCalls,
+    finish_reason: run.rawResponse.finishReason,
+    usage: run.rawResponse.usage,
+  }, null, 2);
+}
+
+function debugParsedText(run: DetectorDebugRun): string {
+  if (run.parsedDecision) return JSON.stringify(run.parsedDecision, null, 2);
+  if (run.status === "running") return "Waiting for LumiStage to parse the response…";
+  return run.error ?? run.outcome ?? "No parsed decision was produced.";
+}
+
+function debugMetadata(run: DetectorDebugRun): string {
+  const parts = [
+    new Date(run.startedAt).toLocaleTimeString(),
+    run.trigger,
+    run.source,
+  ];
+  if (run.requestedModel) parts.push(run.requestedModel);
+  if (run.durationMs != null) parts.push(`${run.durationMs.toLocaleString()} ms`);
+  return parts.join(" · ");
+}
+
+export function formatDetectorDebugTranscript(runs: DetectorDebugRun[]): string {
+  const sections = runs.map((run, index) => {
+    const metadata = [
+      `Status: ${DEBUG_STATUS_LABELS[run.status]}`,
+      `Trigger: ${run.trigger}`,
+      `Source: ${run.source}`,
+      `Started: ${new Date(run.startedAt).toISOString()}`,
+      `Completed: ${run.completedAt == null ? "—" : new Date(run.completedAt).toISOString()}`,
+      `Duration: ${run.durationMs == null ? "—" : `${run.durationMs} ms`}`,
+      `Message ID: ${run.messageId ?? "—"}`,
+      `Connection: ${run.connectionName ?? "—"}${run.connectionId ? ` (${run.connectionId})` : ""}`,
+      `Requested model: ${run.requestedModel ?? "—"}`,
+      `Response: ${run.responseProvider ?? "—"} / ${run.responseModel ?? "—"}`,
+      `Confidence threshold: ${run.confidenceThreshold == null ? "—" : `${Math.round(run.confidenceThreshold * 100)}%`}`,
+      `Outcome: ${run.outcome ?? "—"}`,
+      `Error: ${run.error ?? "—"}`,
+    ];
+    return [
+      `## Run ${index + 1} — ${DEBUG_STATUS_LABELS[run.status]}`,
+      metadata.join("\n"),
+      "### Thinking",
+      "~~~text",
+      run.reasoning?.trim() || "No reasoning returned.",
+      "~~~",
+      "### Raw response",
+      "~~~json",
+      debugRawText(run),
+      "~~~",
+      "### Parsed result",
+      "~~~json",
+      debugParsedText(run),
+      "~~~",
+    ].join("\n\n");
+  });
+  return [
+    "# LumiStage Detector Activity",
+    `Generated: ${new Date().toISOString()}`,
+    ...sections,
+  ].join("\n\n");
+}
+
+async function writeDebugClipboard(text: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // Fall through to the selection-based clipboard path used by restricted panels.
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = typeof document.execCommand === "function" && document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard access is unavailable in this panel.");
+}
+
+export function DetectorDebugPanel({ client }: { client: LumiStageClient }) {
+  const { backend } = useClientState(client);
+  const runs = backend.detectorDebugRuns;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(true);
+  const lastRun = runs.at(-1);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node && followRef.current) node.scrollTop = node.scrollHeight;
+  }, [backend.activeChatId, runs.length, lastRun?.status, lastRun?.completedAt]);
+
+  async function copyAll() {
+    try {
+      await writeDebugClipboard(formatDetectorDebugTranscript(runs));
+      client.notify("success", `Copied ${runs.length} detector run${runs.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Could not copy detector activity.");
+    }
+  }
+
+  return (
+    <section class="ls-debug-panel" aria-label="Detector activity">
+      <header class="ls-debug-head">
+        <div>
+          <span class="ls-kicker">Debug transcript</span>
+          <strong>Detector activity</strong>
+          <small>{runs.length} session run{runs.length === 1 ? "" : "s"}</small>
+        </div>
+        <Button size="small" icon="copy" disabled={!runs.length} onClick={() => void copyAll()}>
+          Copy all
+        </Button>
+      </header>
+      <div
+        class="ls-debug-scroll"
+        ref={scrollRef}
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          followRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 28;
+        }}
+      >
+        {!backend.activeChatId ? (
+          <div class="ls-debug-empty"><Icon name="diagnostics" size={18} /><span>Open a chat to inspect detector activity.</span></div>
+        ) : !runs.length ? (
+          <div class="ls-debug-empty"><Icon name="diagnostics" size={18} /><span>No detector activity in this session yet.</span></div>
+        ) : runs.map((run, index) => (
+          <article class="ls-debug-run" key={run.id} data-status={run.status}>
+            <header>
+              <span>Run {index + 1}</span>
+              <strong data-status={run.status}>{DEBUG_STATUS_LABELS[run.status]}</strong>
+            </header>
+            <small>{debugMetadata(run)}</small>
+            <details class="ls-debug-bubble ls-debug-thinking">
+              <summary>
+                <span>Thinking</span>
+                <small>{run.reasoning?.trim() ? `${run.reasoning.trim().length.toLocaleString()} characters` : "none returned"}</small>
+                <Icon name="chevronDown" size={13} />
+              </summary>
+              <pre>{run.reasoning?.trim() || "No reasoning returned."}</pre>
+            </details>
+            <div class="ls-debug-bubble ls-debug-output">
+              <div class="ls-debug-bubble-title"><span>Output</span><small>{run.responseModel ?? run.requestedModel ?? "pending"}</small></div>
+              <section>
+                <span>Raw response</span>
+                <pre>{debugRawText(run)}</pre>
+              </section>
+              <section>
+                <span>Parsed result</span>
+                <pre>{debugParsedText(run)}</pre>
+              </section>
+              {run.outcome && <p>{run.outcome}</p>}
+              {run.error && <p class="ls-debug-error">{run.error}</p>}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function DrawerDashboard(props: {
   client: LumiStageClient;
   onOpenStudio: () => void;
@@ -222,6 +408,8 @@ export function DrawerDashboard(props: {
           <span>Select a character in Lumiverse to create its independent outfit library.</span>
         </div>
       )}
+
+      <DetectorDebugPanel client={props.client} />
     </div>
   );
 }

@@ -121,7 +121,7 @@ describe("detector contract", () => {
     expect(system).toContain("randomly selects an eligible variant");
     expect(system).toContain("You may switch away from the current outfit");
     expect(request.estimatedInputTokens).toEqual(expect.any(Number));
-    expect(request.reasoning).toEqual({ source: "off" });
+    expect(request.reasoning).toEqual({ source: "inherit" });
     expect(request.parameters).toEqual({ temperature: 0.1, model: "" });
     expect(request.parameters).not.toHaveProperty("max_tokens");
     const tool = (request.tools as Array<Record<string, any>>)[0];

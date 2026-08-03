@@ -58,6 +58,7 @@ const EMPTY_BACKEND: FrontendState = {
   activeCharacterId: null,
   activeCharacterName: null,
   queueDepth: 0,
+  detectorDebugRuns: [],
   lastDetection: { status: "idle", message: "Connecting to LumiStage…", at: null },
 };
 

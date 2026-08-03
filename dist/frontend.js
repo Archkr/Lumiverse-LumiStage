@@ -4873,6 +4873,7 @@ var EMPTY_BACKEND = {
   activeCharacterId: null,
   activeCharacterName: null,
   queueDepth: 0,
+  detectorDebugRuns: [],
   lastDetection: { status: "idle", message: "Connecting to LumiStage\u2026", at: null }
 };
 var LumiStageClient = class {
@@ -6712,6 +6713,184 @@ function CurrentPreview({ client }) {
     ] })
   ] });
 }
+var DEBUG_STATUS_LABELS = {
+  running: "Running",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  cached: "Cached",
+  cancelled: "Cancelled",
+  skipped: "Skipped",
+  error: "Error"
+};
+function debugRawText(run) {
+  if (!run.rawResponse) {
+    return run.source === "cache" ? "No raw response\u2014restored from cache." : run.status === "running" ? "Waiting for provider response\u2026" : "No raw response was returned.";
+  }
+  return JSON.stringify({
+    content: run.rawResponse.content,
+    tool_calls: run.rawResponse.toolCalls,
+    finish_reason: run.rawResponse.finishReason,
+    usage: run.rawResponse.usage
+  }, null, 2);
+}
+function debugParsedText(run) {
+  if (run.parsedDecision) return JSON.stringify(run.parsedDecision, null, 2);
+  if (run.status === "running") return "Waiting for LumiStage to parse the response\u2026";
+  return run.error ?? run.outcome ?? "No parsed decision was produced.";
+}
+function debugMetadata(run) {
+  const parts = [
+    new Date(run.startedAt).toLocaleTimeString(),
+    run.trigger,
+    run.source
+  ];
+  if (run.requestedModel) parts.push(run.requestedModel);
+  if (run.durationMs != null) parts.push(`${run.durationMs.toLocaleString()} ms`);
+  return parts.join(" \xB7 ");
+}
+function formatDetectorDebugTranscript(runs) {
+  const sections = runs.map((run, index) => {
+    const metadata = [
+      `Status: ${DEBUG_STATUS_LABELS[run.status]}`,
+      `Trigger: ${run.trigger}`,
+      `Source: ${run.source}`,
+      `Started: ${new Date(run.startedAt).toISOString()}`,
+      `Completed: ${run.completedAt == null ? "\u2014" : new Date(run.completedAt).toISOString()}`,
+      `Duration: ${run.durationMs == null ? "\u2014" : `${run.durationMs} ms`}`,
+      `Message ID: ${run.messageId ?? "\u2014"}`,
+      `Connection: ${run.connectionName ?? "\u2014"}${run.connectionId ? ` (${run.connectionId})` : ""}`,
+      `Requested model: ${run.requestedModel ?? "\u2014"}`,
+      `Response: ${run.responseProvider ?? "\u2014"} / ${run.responseModel ?? "\u2014"}`,
+      `Confidence threshold: ${run.confidenceThreshold == null ? "\u2014" : `${Math.round(run.confidenceThreshold * 100)}%`}`,
+      `Outcome: ${run.outcome ?? "\u2014"}`,
+      `Error: ${run.error ?? "\u2014"}`
+    ];
+    return [
+      `## Run ${index + 1} \u2014 ${DEBUG_STATUS_LABELS[run.status]}`,
+      metadata.join("\n"),
+      "### Thinking",
+      "~~~text",
+      run.reasoning?.trim() || "No reasoning returned.",
+      "~~~",
+      "### Raw response",
+      "~~~json",
+      debugRawText(run),
+      "~~~",
+      "### Parsed result",
+      "~~~json",
+      debugParsedText(run),
+      "~~~"
+    ].join("\n\n");
+  });
+  return [
+    "# LumiStage Detector Activity",
+    `Generated: ${(/* @__PURE__ */ new Date()).toISOString()}`,
+    ...sections
+  ].join("\n\n");
+}
+async function writeDebugClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = typeof document.execCommand === "function" && document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard access is unavailable in this panel.");
+}
+function DetectorDebugPanel({ client }) {
+  const { backend } = useClientState(client);
+  const runs = backend.detectorDebugRuns;
+  const scrollRef = A2(null);
+  const followRef = A2(true);
+  const lastRun = runs.at(-1);
+  h2(() => {
+    const node = scrollRef.current;
+    if (node && followRef.current) node.scrollTop = node.scrollHeight;
+  }, [backend.activeChatId, runs.length, lastRun?.status, lastRun?.completedAt]);
+  async function copyAll() {
+    try {
+      await writeDebugClipboard(formatDetectorDebugTranscript(runs));
+      client.notify("success", `Copied ${runs.length} detector run${runs.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      client.notify("error", error instanceof Error ? error.message : "Could not copy detector activity.");
+    }
+  }
+  return /* @__PURE__ */ u2("section", { class: "ls-debug-panel", "aria-label": "Detector activity", children: [
+    /* @__PURE__ */ u2("header", { class: "ls-debug-head", children: [
+      /* @__PURE__ */ u2("div", { children: [
+        /* @__PURE__ */ u2("span", { class: "ls-kicker", children: "Debug transcript" }),
+        /* @__PURE__ */ u2("strong", { children: "Detector activity" }),
+        /* @__PURE__ */ u2("small", { children: [
+          runs.length,
+          " session run",
+          runs.length === 1 ? "" : "s"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2(Button, { size: "small", icon: "copy", disabled: !runs.length, onClick: () => void copyAll(), children: "Copy all" })
+    ] }),
+    /* @__PURE__ */ u2(
+      "div",
+      {
+        class: "ls-debug-scroll",
+        ref: scrollRef,
+        onScroll: (event) => {
+          const node = event.currentTarget;
+          followRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 28;
+        },
+        children: !backend.activeChatId ? /* @__PURE__ */ u2("div", { class: "ls-debug-empty", children: [
+          /* @__PURE__ */ u2(Icon, { name: "diagnostics", size: 18 }),
+          /* @__PURE__ */ u2("span", { children: "Open a chat to inspect detector activity." })
+        ] }) : !runs.length ? /* @__PURE__ */ u2("div", { class: "ls-debug-empty", children: [
+          /* @__PURE__ */ u2(Icon, { name: "diagnostics", size: 18 }),
+          /* @__PURE__ */ u2("span", { children: "No detector activity in this session yet." })
+        ] }) : runs.map((run, index) => /* @__PURE__ */ u2("article", { class: "ls-debug-run", "data-status": run.status, children: [
+          /* @__PURE__ */ u2("header", { children: [
+            /* @__PURE__ */ u2("span", { children: [
+              "Run ",
+              index + 1
+            ] }),
+            /* @__PURE__ */ u2("strong", { "data-status": run.status, children: DEBUG_STATUS_LABELS[run.status] })
+          ] }),
+          /* @__PURE__ */ u2("small", { children: debugMetadata(run) }),
+          /* @__PURE__ */ u2("details", { class: "ls-debug-bubble ls-debug-thinking", children: [
+            /* @__PURE__ */ u2("summary", { children: [
+              /* @__PURE__ */ u2("span", { children: "Thinking" }),
+              /* @__PURE__ */ u2("small", { children: run.reasoning?.trim() ? `${run.reasoning.trim().length.toLocaleString()} characters` : "none returned" }),
+              /* @__PURE__ */ u2(Icon, { name: "chevronDown", size: 13 })
+            ] }),
+            /* @__PURE__ */ u2("pre", { children: run.reasoning?.trim() || "No reasoning returned." })
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "ls-debug-bubble ls-debug-output", children: [
+            /* @__PURE__ */ u2("div", { class: "ls-debug-bubble-title", children: [
+              /* @__PURE__ */ u2("span", { children: "Output" }),
+              /* @__PURE__ */ u2("small", { children: run.responseModel ?? run.requestedModel ?? "pending" })
+            ] }),
+            /* @__PURE__ */ u2("section", { children: [
+              /* @__PURE__ */ u2("span", { children: "Raw response" }),
+              /* @__PURE__ */ u2("pre", { children: debugRawText(run) })
+            ] }),
+            /* @__PURE__ */ u2("section", { children: [
+              /* @__PURE__ */ u2("span", { children: "Parsed result" }),
+              /* @__PURE__ */ u2("pre", { children: debugParsedText(run) })
+            ] }),
+            run.outcome && /* @__PURE__ */ u2("p", { children: run.outcome }),
+            run.error && /* @__PURE__ */ u2("p", { class: "ls-debug-error", children: run.error })
+          ] })
+        ] }, run.id))
+      }
+    )
+  ] });
+}
 function DrawerDashboard(props) {
   const { backend } = useClientState(props.client);
   const appearance = props.client.effectiveAppearance();
@@ -6793,7 +6972,8 @@ function DrawerDashboard(props) {
     !profile && /* @__PURE__ */ u2("div", { class: "ls-drawer-empty", children: [
       /* @__PURE__ */ u2(Icon, { name: "library", size: 20 }),
       /* @__PURE__ */ u2("span", { children: "Select a character in Lumiverse to create its independent outfit library." })
-    ] })
+    ] }),
+    /* @__PURE__ */ u2(DetectorDebugPanel, { client: props.client })
   ] });
 }
 function ExpressionCard(props) {
@@ -8563,6 +8743,46 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-drawer-utility button:disabled { opacity: .4; cursor: default; }
 .ls-drawer-empty { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; padding: 11px; border: 1px dashed color-mix(in srgb, var(--ls-accent) 22%, var(--ls-line)); border-radius: 9px; background: color-mix(in srgb, var(--ls-accent) 5%, var(--ls-panel)); color: var(--ls-muted); font-size: 10px; }
 .ls-drawer-empty svg { flex: 0 0 auto; color: var(--ls-accent); }
+
+.ls-debug-panel { min-width: 0; overflow: hidden; margin-top: 16px; border: 1px solid var(--ls-line); border-radius: 11px; background: linear-gradient(155deg, var(--ls-panel), var(--ls-panel-deep)); box-shadow: inset 0 1px color-mix(in srgb, var(--ls-text) 4%, transparent), var(--ls-shadow-sm); }
+.ls-debug-head { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--ls-line); background: color-mix(in srgb, var(--ls-panel-raised) 65%, transparent); }
+.ls-debug-head > div { min-width: 0; }
+.ls-debug-head strong, .ls-debug-head small { display: block; }
+.ls-debug-head strong { margin-top: 3px; font-size: 12px; }
+.ls-debug-head small { overflow: hidden; color: var(--ls-dim); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.ls-debug-head > .ls-button { flex: 0 0 auto; }
+.ls-debug-scroll { height: clamp(240px, 40dvh, 420px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 10px; }
+.ls-debug-empty { height: 100%; min-height: 180px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--ls-dim); font-size: 10px; text-align: center; }
+.ls-debug-empty svg { color: var(--ls-accent); }
+.ls-debug-run { min-width: 0; padding: 10px 0 14px; border-bottom: 1px solid color-mix(in srgb, var(--ls-line) 72%, transparent); }
+.ls-debug-run:first-child { padding-top: 0; }
+.ls-debug-run:last-child { padding-bottom: 0; border-bottom: 0; }
+.ls-debug-run > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ls-debug-run > header > span { color: var(--ls-muted); font-size: 9px; font-weight: 700; }
+.ls-debug-run > header > strong { padding: 2px 6px; border: 1px solid var(--ls-line); border-radius: 999px; background: var(--ls-panel-raised); color: var(--ls-muted); font-size: 7px; letter-spacing: .07em; text-transform: uppercase; }
+.ls-debug-run > header > strong[data-status="running"] { border-color: color-mix(in srgb, var(--ls-accent) 38%, var(--ls-line)); color: var(--ls-accent); }
+.ls-debug-run > header > strong[data-status="accepted"], .ls-debug-run > header > strong[data-status="cached"] { border-color: color-mix(in srgb, var(--ls-success) 38%, var(--ls-line)); color: var(--ls-success); }
+.ls-debug-run > header > strong[data-status="rejected"], .ls-debug-run > header > strong[data-status="skipped"] { border-color: color-mix(in srgb, var(--ls-warning) 42%, var(--ls-line)); color: var(--ls-warning); }
+.ls-debug-run > header > strong[data-status="cancelled"], .ls-debug-run > header > strong[data-status="error"] { border-color: color-mix(in srgb, var(--ls-danger) 40%, var(--ls-line)); color: var(--ls-danger); }
+.ls-debug-run > small { display: block; margin: 4px 0 8px; overflow-wrap: anywhere; color: var(--ls-dim); font-size: 7px; line-height: 1.45; }
+.ls-debug-bubble { max-width: 94%; overflow: hidden; border: 1px solid var(--ls-line); border-radius: 10px; }
+.ls-debug-thinking { margin: 0 auto 7px 0; background: var(--ls-panel-raised); }
+.ls-debug-thinking summary { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 8px 9px; color: var(--ls-muted); cursor: pointer; list-style: none; }
+.ls-debug-thinking summary::-webkit-details-marker { display: none; }
+.ls-debug-thinking summary > span { font-size: 9px; font-weight: 700; }
+.ls-debug-thinking summary > small { overflow: hidden; color: var(--ls-dim); font-size: 7px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.ls-debug-thinking summary > svg { transition: transform var(--ls-fast); }
+.ls-debug-thinking[open] summary > svg { transform: rotate(180deg); }
+.ls-debug-output { margin-left: auto; padding: 9px; border-color: color-mix(in srgb, var(--ls-accent) 24%, var(--ls-line)); background: color-mix(in srgb, var(--ls-accent) 6%, var(--ls-panel-deep)); }
+.ls-debug-bubble-title { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 7px; }
+.ls-debug-bubble-title > span { font-size: 9px; font-weight: 700; }
+.ls-debug-bubble-title > small { overflow: hidden; color: var(--ls-dim); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.ls-debug-output section + section { margin-top: 8px; }
+.ls-debug-output section > span { display: block; margin-bottom: 3px; color: var(--ls-dim); font-size: 7px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.ls-debug-bubble pre { max-height: none; overflow: visible; margin: 0; padding: 8px; border: 1px solid color-mix(in srgb, var(--ls-line) 75%, transparent); border-radius: 7px; background: var(--ls-panel-deep); color: var(--ls-muted); font: 8px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
+.ls-debug-thinking pre { border-width: 1px 0 0; border-radius: 0; }
+.ls-debug-output p { margin: 7px 0 0; color: var(--ls-muted); font-size: 8px; line-height: 1.45; }
+.ls-debug-output .ls-debug-error { color: var(--ls-danger); }
 
 /* Full Studio */
 .ls-studio {

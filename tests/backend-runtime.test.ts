@@ -442,6 +442,9 @@ describe("operator-scoped backend runtime", () => {
         model: typeof parameters.model === "string" && parameters.model
           ? parameters.model
           : defaultConnectionModel,
+        reasoning: "The completed scene supports Aster's bright expression.",
+        finish_reason: "tool_calls",
+        usage: { prompt_tokens: 42, completion_tokens: 9, total_tokens: 51 },
         tool_calls: [{
           name: "set_stage_state",
           args: {
@@ -497,6 +500,7 @@ describe("operator-scoped backend runtime", () => {
       temperature: 0.1,
       model: "saved-model",
     }));
+    expect(detectorRequest.reasoning).toEqual({ source: "inherit" });
     expect(generateRaw).not.toHaveBeenCalled();
     const detectorSystem = String(detectorRequest.messages[0].content);
     const detectorCatalog = JSON.parse(
@@ -528,6 +532,29 @@ describe("operator-scoped backend runtime", () => {
         variantId: automaticVariant.id,
       }));
     }, { timeout: 2_000 });
+    const acceptedDebugState = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state" && message.state.detectorDebugRuns?.some(
+        (run: { messageId: string; status: string }) => run.messageId === "assistant-final" && run.status === "accepted",
+      ));
+    const acceptedDebugRun = acceptedDebugState?.state.detectorDebugRuns.find(
+      (run: { messageId: string; status: string }) => run.messageId === "assistant-final" && run.status === "accepted",
+    );
+    expect(acceptedDebugRun).toEqual(expect.objectContaining({
+      source: "provider",
+      reasoning: "The completed scene supports Aster's bright expression.",
+      responseProvider: "openai",
+      responseModel: "saved-model",
+      parsedDecision: expect.objectContaining({
+        characters: [expect.objectContaining({ expressionId: automaticExpression.id })],
+      }),
+      rawResponse: expect.objectContaining({
+        finishReason: "tool_calls",
+        toolCalls: [expect.objectContaining({ name: "set_stage_state" })],
+        usage: expect.objectContaining({ promptTokens: 42, totalTokens: 51 }),
+      }),
+    }));
 
     await expectCompletion({
       type: "patch-settings",
@@ -573,6 +600,16 @@ describe("operator-scoped backend runtime", () => {
     expect(generateQuiet.mock.calls[0][0].parameters).not.toHaveProperty("max_tokens");
     expect(generateQuiet.mock.calls[0][0]).not.toHaveProperty("model");
     expect(generateRaw).not.toHaveBeenCalled();
+    const concurrentDebugState = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state" && message.state.detectorDebugRuns?.some(
+        (run: { status: string; source: string }) => run.status === "cached" && run.source === "cache",
+      ));
+    expect(concurrentDebugState?.state.detectorDebugRuns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ trigger: "manual", source: "provider", status: "accepted" }),
+      expect.objectContaining({ trigger: "manual", source: "cache", status: "cached" }),
+    ]));
 
     eventHandlers.get("GENERATION_ENDED")?.({
       generationId: "generation-one",
@@ -754,6 +791,16 @@ describe("operator-scoped backend runtime", () => {
     expect(generateQuiet.mock.calls.map(([request]) =>
       (request.parameters as Record<string, unknown>).model
     )).toEqual(["", "replacement-model"]);
+    const cancellationDebugState = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state" && message.state.detectorDebugRuns?.some(
+        (run: { status: string }) => run.status === "cancelled",
+      ));
+    expect(cancellationDebugState?.state.detectorDebugRuns).toContainEqual(expect.objectContaining({
+      status: "cancelled",
+      error: "Cancelled because detector settings changed.",
+    }));
 
     generateQuiet.mockClear();
     let releaseSettingsWrite: () => void = () => {};
@@ -800,6 +847,90 @@ describe("operator-scoped backend runtime", () => {
 
     await handleFrontend({ type: "open-connections" }, "user-a");
     expect(openDrawerTab).toHaveBeenCalledWith("connections", { userId: "user-a" });
+
+    completedMessages.splice(0, completedMessages.length, {
+      id: "assistant-debug-low",
+      role: "assistant",
+      content: "Aster's visible state is uncertain.",
+      swipe_id: 0,
+    });
+    generateQuiet.mockImplementationOnce(async () => ({
+      provider: "openai",
+      model: "automatic-race-model",
+      reasoning: "The available expression is only weakly supported.",
+      tool_calls: [{
+        name: "set_stage_state",
+        args: {
+          focusedCharacterIds: ["character-a"],
+          characters: [{
+            characterId: "character-a",
+            outfitName: automaticOutfit.name,
+            expressionName: automaticExpression.name,
+            confidence: 0.2,
+          }],
+        },
+      }],
+    }));
+    sendToFrontend.mockClear();
+    await handleFrontend({
+      type: "analyze-now",
+      requestId: "debug-low-confidence",
+      chatId: "chat-a",
+    }, "user-a");
+    const rejectedDebugState = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state" && message.state.detectorDebugRuns?.some(
+        (run: { messageId: string; status: string }) => run.messageId === "assistant-debug-low" && run.status === "rejected",
+      ));
+    expect(rejectedDebugState?.state.detectorDebugRuns).toContainEqual(expect.objectContaining({
+      messageId: "assistant-debug-low",
+      status: "rejected",
+      reasoning: "The available expression is only weakly supported.",
+      outcome: expect.stringContaining("below the 70% confidence threshold"),
+    }));
+
+    completedMessages.splice(0, completedMessages.length, {
+      id: "assistant-debug-malformed",
+      role: "assistant",
+      content: "Aster waits for a clear direction.",
+      swipe_id: 0,
+    });
+    generateQuiet.mockImplementationOnce(async () => ({
+      provider: "openai",
+      model: "automatic-race-model",
+      reasoning: "I could not produce the requested tool call.",
+      content: "No structured decision available.",
+    }));
+    sendToFrontend.mockClear();
+    await handleFrontend({
+      type: "analyze-now",
+      requestId: "debug-malformed-output",
+      chatId: "chat-a",
+    }, "user-a");
+    const malformedDebugState = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state" && message.state.detectorDebugRuns?.some(
+        (run: { messageId: string; status: string }) => run.messageId === "assistant-debug-malformed" && run.status === "error",
+      ));
+    expect(malformedDebugState?.state.detectorDebugRuns).toContainEqual(expect.objectContaining({
+      messageId: "assistant-debug-malformed",
+      status: "error",
+      reasoning: "I could not produce the requested tool call.",
+      rawResponse: expect.objectContaining({ content: "No structured decision available." }),
+      error: "The detector did not return a valid stage decision.",
+    }));
+
+    eventHandlers.get("CHAT_DELETED")?.({ chatId: "chat-a" }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    sendToFrontend.mockClear();
+    await handleFrontend({ type: "ready", chatId: "chat-a", characterId: "character-a" }, "user-a");
+    const stateAfterDelete = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state");
+    expect(stateAfterDelete?.state.detectorDebugRuns).toEqual([]);
   });
 });
 
