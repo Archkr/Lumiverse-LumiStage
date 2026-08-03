@@ -922,6 +922,30 @@ describe("operator-scoped backend runtime", () => {
       error: "The detector did not return a valid stage decision.",
     }));
 
+    const debugRunCountBeforeMessageDelete = malformedDebugState?.state.detectorDebugRuns.length ?? 0;
+    generateQuiet.mockClear();
+    sendToFrontend.mockClear();
+    eventHandlers.get("MESSAGE_EDITED")?.({
+      chatId: "chat-a",
+      message: {
+        id: "assistant-debug-malformed",
+        role: "assistant",
+        content: "Aster waits for a clear direction.",
+      },
+    }, "user-a");
+    completedMessages.splice(0, completedMessages.length);
+    eventHandlers.get("MESSAGE_DELETED")?.({
+      chatId: "chat-a",
+      messageId: "assistant-debug-malformed",
+    }, "user-a");
+    await new Promise((resolve) => setTimeout(resolve, 360));
+    expect(generateQuiet).not.toHaveBeenCalled();
+    const stateAfterMessageDelete = [...sendToFrontend.mock.calls]
+      .reverse()
+      .map(([message]) => message)
+      .find((message) => message.type === "state");
+    expect(stateAfterMessageDelete?.state.detectorDebugRuns).toHaveLength(debugRunCountBeforeMessageDelete);
+
     eventHandlers.get("CHAT_DELETED")?.({ chatId: "chat-a" }, "user-a");
     await new Promise((resolve) => setTimeout(resolve, 0));
     sendToFrontend.mockClear();

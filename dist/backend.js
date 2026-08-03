@@ -3493,6 +3493,10 @@ onEvent("MESSAGE_DELETED", (payload, eventUserId) => {
   const messageId = readString(payload, ["messageId", "message_id"]);
   const userId = resolveUserId(chatId, eventUserId);
   if (!chatId || !messageId || !userId) return;
+  const key = queueKey(userId, chatId);
+  const pendingAnalysis = scheduled.get(key);
+  if (pendingAnalysis) clearTimeout(pendingAnalysis);
+  scheduled.delete(key);
   settleBackground(enqueueAnalysis(userId, chatId, async () => {
     const settings = await repository.getSettings(userId);
     const set = await profilesForChat(userId, chatId);
