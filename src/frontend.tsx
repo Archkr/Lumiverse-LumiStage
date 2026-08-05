@@ -11,6 +11,7 @@ import { LumiStageClient } from "./ui/client";
 import { LUMI_STAGE_ICON } from "./ui/icons";
 import { showQuickPicker } from "./ui/modals";
 import { Stage } from "./ui/stage";
+import { resolveStageWidgetLayout, type StageViewport } from "./ui/stage-layout";
 import { CharacterSetup, DrawerDashboard, StudioWorkspace } from "./ui/studio";
 import { LUMI_STAGE_CSS } from "./ui/styles";
 
@@ -46,6 +47,17 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let renderedCharacterId: string | null = null;
   let syncing = false;
   let disposed = false;
+  const coarsePointerQuery = window.matchMedia?.("(pointer: coarse)") ?? null;
+  let stageViewport: StageViewport = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    coarsePointer: coarsePointerQuery?.matches ?? false,
+  };
+
+  const currentStageLayout = () => resolveStageWidgetLayout(
+    client.effectiveAppearance(),
+    stageViewport,
+  );
 
   const openStudio = (characterId?: string) => {
     if (characterId) {
@@ -119,9 +131,11 @@ export function setup(ctx: SpindleFrontendContext): () => void {
 
   const renderStage = () => {
     if (!floatWidget) return;
+    const layout = currentStageLayout();
     render(
       <Stage
         client={client}
+        mobile={layout.mobile}
         onQuick={() => showQuickPicker(client)}
         onFullscreen={() => {
           if (!floatWidget) return;
@@ -134,6 +148,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
           void saveAppearance({ visible: false });
         }}
         onResize={(width, height, commit) => {
+          if (layout.mobile) return;
           floatWidget?.setSize(width, height);
           if (commit) void saveAppearance({ width, height });
         }}
@@ -145,18 +160,26 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const createFloatWidget = () => {
     if (floatWidget) return;
     const appearance = client.effectiveAppearance();
+    const layout = currentStageLayout();
     try {
       floatWidget = ctx.ui.createFloatWidget({
-        width: appearance.width,
-        height: appearance.height,
-        initialPosition: initialPosition(appearance.width, appearance.height, appearance.x, appearance.y),
+        width: layout.width,
+        height: layout.height,
+        initialPosition: initialPosition(
+          layout.width,
+          layout.height,
+          layout.mobile ? -1 : appearance.x,
+          layout.mobile ? -1 : appearance.y,
+        ),
         snapToEdge: true,
         tooltip: "LumiStage — drag to move",
         chromeless: true,
         fullscreen: appearance.fullscreen,
       });
       floatWidget.setVisible(appearance.visible);
-      unsubscribeDrag = floatWidget.onDragEnd(({ x, y }) => void saveAppearance({ x, y }));
+      unsubscribeDrag = floatWidget.onDragEnd(({ x, y }) => {
+        if (!currentStageLayout().mobile) void saveAppearance({ x, y });
+      });
       renderStage();
     } catch {
       floatWidget = null;
@@ -188,6 +211,27 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     floatWidget = null;
   };
 
+  const handleStageViewportChange = () => {
+    stageViewport = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      coarsePointer: coarsePointerQuery?.matches ?? false,
+    };
+    if (!floatWidget) return;
+    const appearance = client.effectiveAppearance();
+    const layout = currentStageLayout();
+    if (!floatWidget.isFullscreen()) {
+      floatWidget.setSize(layout.width, layout.height);
+      if (!layout.mobile && appearance.x >= 0 && appearance.y >= 0) {
+        floatWidget.moveTo(appearance.x, appearance.y);
+      }
+    }
+    renderStage();
+  };
+
+  window.addEventListener("resize", handleStageViewportChange);
+  coarsePointerQuery?.addEventListener("change", handleStageViewportChange);
+
   const syncSurfaces = () => {
     if (disposed || syncing) return;
     syncing = true;
@@ -205,9 +249,12 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       inputAction?.setEnabled(Boolean(state.activeChatId && state.stageProfiles.length));
       if (floatWidget) {
         const appearance = client.effectiveAppearance();
+        const layout = currentStageLayout();
         if (!floatWidget.isFullscreen()) {
-          floatWidget.setSize(appearance.width, appearance.height);
-          if (appearance.x >= 0 && appearance.y >= 0) floatWidget.moveTo(appearance.x, appearance.y);
+          floatWidget.setSize(layout.width, layout.height);
+          if (!layout.mobile && appearance.x >= 0 && appearance.y >= 0) {
+            floatWidget.moveTo(appearance.x, appearance.y);
+          }
         }
         if (floatWidget.isFullscreen() !== appearance.fullscreen) {
           floatWidget.setFullscreen(appearance.fullscreen);
@@ -237,6 +284,8 @@ export function setup(ctx: SpindleFrontendContext): () => void {
 
   return () => {
     disposed = true;
+    window.removeEventListener("resize", handleStageViewportChange);
+    coarsePointerQuery?.removeEventListener("change", handleStageViewportChange);
     unsubscribeChat();
     unsubscribeEditor();
     unsubscribeClient();

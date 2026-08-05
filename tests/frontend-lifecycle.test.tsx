@@ -9,6 +9,8 @@ import { profileA } from "./fixtures";
 
 afterEach(() => {
   document.body.replaceChildren();
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 });
 });
 
 function root() {
@@ -38,6 +40,7 @@ function mockContext() {
   const removeEditor = vi.fn();
   const removeInputClick = vi.fn();
   const removeDrag = vi.fn();
+  let dragHandler: ((position: { x: number; y: number }) => void) | null = null;
   const drawer = {
     root: root(),
     tabId: "lumi_stage:studio",
@@ -77,7 +80,10 @@ function mockContext() {
     setFullscreen: vi.fn((next: boolean) => { fullscreen = next; }),
     isFullscreen: vi.fn(() => fullscreen),
     destroy: vi.fn(),
-    onDragEnd: vi.fn(() => removeDrag),
+    onDragEnd: vi.fn((handler: (position: { x: number; y: number }) => void) => {
+      dragHandler = handler;
+      return removeDrag;
+    }),
   };
   const modalRoot = root();
   const modal = {
@@ -143,6 +149,9 @@ function mockContext() {
     },
     emitEditor() {
       editorHandler?.();
+    },
+    emitDrag(position: { x: number; y: number }) {
+      dragHandler?.(position);
     },
   };
 }
@@ -240,5 +249,44 @@ describe("frontend host lifecycle", () => {
     expect(mock.removeDrag).toHaveBeenCalledOnce();
     expect(mock.removeStyle).toHaveBeenCalledOnce();
     expect(document.body.classList.contains("ls-host-select-portals")).toBe(false);
+  });
+
+  it("uses transient compact mobile bounds without overwriting the desktop layout", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 844 });
+    const mock = mockContext();
+    const cleanup = setup(mock.context as never);
+
+    await act(async () => {
+      mock.emitBackend({ type: "state", state: state({
+        generation: true,
+        chats: true,
+        chatMutation: true,
+        characters: true,
+        images: true,
+        uiPanels: true,
+      }) });
+    });
+
+    expect(mock.context.ui.createFloatWidget).toHaveBeenCalledWith(expect.objectContaining({
+      width: 320,
+      height: 280,
+    }));
+    expect(mock.float.root.querySelector('.ls-stage-root[data-mobile="true"]')).not.toBeNull();
+    expect(mock.float.root.querySelector(".ls-stage-resize")).toBeNull();
+
+    const sendsBeforeDrag = mock.context.sendToBackend.mock.calls.length;
+    mock.emitDrag({ x: 12, y: 18 });
+    await act(async () => Promise.resolve());
+    expect(mock.context.sendToBackend).toHaveBeenCalledTimes(sendsBeforeDrag);
+
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 700 });
+    fireEvent(window, new Event("resize"));
+    expect(mock.float.setSize).toHaveBeenLastCalledWith(320, 420);
+    expect(mock.float.root.querySelector('.ls-stage-root[data-mobile="false"]')).not.toBeNull();
+    expect(mock.float.root.querySelector(".ls-stage-resize")).not.toBeNull();
+
+    cleanup();
   });
 });

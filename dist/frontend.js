@@ -6596,6 +6596,7 @@ function Stage(props) {
       style,
       "data-chrome": appearance.showChrome,
       "data-empty": characters.length === 0,
+      "data-mobile": props.mobile,
       "data-transition": appearance.transition,
       children: /* @__PURE__ */ u2("div", { class: "ls-stage-chrome", children: [
         /* @__PURE__ */ u2("div", { class: "ls-stage-grab", children: [
@@ -6624,10 +6625,34 @@ function Stage(props) {
             /* @__PURE__ */ u2("span", { children: "Choose a state or complete a reply." })
           ] })
         ] }),
-        /* @__PURE__ */ u2("button", { type: "button", class: "ls-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
+        !props.mobile && /* @__PURE__ */ u2("button", { type: "button", class: "ls-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
       ] })
     }
   );
+}
+
+// src/ui/stage-layout.ts
+var MOBILE_STAGE_BREAKPOINT = 600;
+var MOBILE_STAGE_VIEWPORT_PADDING = 12;
+var MOBILE_STAGE_MAX_WIDTH = 360;
+var MOBILE_STAGE_MIN_HEIGHT = 180;
+var MOBILE_STAGE_MAX_HEIGHT = 280;
+function resolveStageWidgetLayout(requested, viewport) {
+  const width = Math.max(1, Math.round(requested.width));
+  const height = Math.max(1, Math.round(requested.height));
+  const mobile = viewport.coarsePointer || viewport.width <= MOBILE_STAGE_BREAKPOINT;
+  if (!mobile) return { width, height, mobile: false };
+  const availableWidth = Math.max(1, Math.round(viewport.width) - MOBILE_STAGE_VIEWPORT_PADDING * 2);
+  const availableHeight = Math.max(1, Math.round(viewport.height) - MOBILE_STAGE_VIEWPORT_PADDING * 2);
+  const mobileHeightCap = Math.min(
+    MOBILE_STAGE_MAX_HEIGHT,
+    Math.max(MOBILE_STAGE_MIN_HEIGHT, Math.round(viewport.height * 0.38))
+  );
+  return {
+    width: Math.min(width, availableWidth, MOBILE_STAGE_MAX_WIDTH),
+    height: Math.min(height, availableHeight, mobileHeightCap),
+    mobile: true
+  };
 }
 
 // src/ui/studio.tsx
@@ -9133,6 +9158,15 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-stage-root[data-transition="cut"] .ls-stage-character { transition: none; }
 .ls-stage-root[data-transition="lift"] .ls-stage-character { transform: translateY(8px) scale(.94); }
 .ls-stage-root[data-transition="lift"] .ls-stage-character[data-focused="true"] { transform: translateY(0) scale(var(--ls2-stage-focus-scale)); }
+.ls-stage-root[data-mobile="true"][data-chrome="true"] .ls-stage-chrome { grid-template-rows: 42px minmax(0, 1fr); }
+.ls-stage-root[data-mobile="true"] .ls-stage-grab { padding: 0 3px 0 11px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-live { font-size: 10px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-actions { gap: 1px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-actions button { width: 38px; height: 38px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-ensemble { padding: 6px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-character figcaption { padding: 4px 5px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-character figcaption strong { font-size: 10px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-character figcaption span { font-size: 8px; }
 
 @container lumi-stage (max-height: 180px) {
   .ls-stage-waiting {
@@ -9340,6 +9374,16 @@ function setup(ctx) {
   let renderedCharacterId = null;
   let syncing = false;
   let disposed = false;
+  const coarsePointerQuery = window.matchMedia?.("(pointer: coarse)") ?? null;
+  let stageViewport = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    coarsePointer: coarsePointerQuery?.matches ?? false
+  };
+  const currentStageLayout = () => resolveStageWidgetLayout(
+    client.effectiveAppearance(),
+    stageViewport
+  );
   const openStudio = (characterId) => {
     if (characterId) {
       const active2 = ctx.getActiveChat();
@@ -9404,11 +9448,13 @@ function setup(ctx) {
   };
   const renderStage = () => {
     if (!floatWidget) return;
+    const layout = currentStageLayout();
     R(
       /* @__PURE__ */ u2(
         Stage,
         {
           client,
+          mobile: layout.mobile,
           onQuick: () => showQuickPicker(client),
           onFullscreen: () => {
             if (!floatWidget) return;
@@ -9421,6 +9467,7 @@ function setup(ctx) {
             void saveAppearance({ visible: false });
           },
           onResize: (width, height, commit) => {
+            if (layout.mobile) return;
             floatWidget?.setSize(width, height);
             if (commit) void saveAppearance({ width, height });
           }
@@ -9432,18 +9479,26 @@ function setup(ctx) {
   const createFloatWidget = () => {
     if (floatWidget) return;
     const appearance = client.effectiveAppearance();
+    const layout = currentStageLayout();
     try {
       floatWidget = ctx.ui.createFloatWidget({
-        width: appearance.width,
-        height: appearance.height,
-        initialPosition: initialPosition(appearance.width, appearance.height, appearance.x, appearance.y),
+        width: layout.width,
+        height: layout.height,
+        initialPosition: initialPosition(
+          layout.width,
+          layout.height,
+          layout.mobile ? -1 : appearance.x,
+          layout.mobile ? -1 : appearance.y
+        ),
         snapToEdge: true,
         tooltip: "LumiStage \u2014 drag to move",
         chromeless: true,
         fullscreen: appearance.fullscreen
       });
       floatWidget.setVisible(appearance.visible);
-      unsubscribeDrag = floatWidget.onDragEnd(({ x: x2, y: y3 }) => void saveAppearance({ x: x2, y: y3 }));
+      unsubscribeDrag = floatWidget.onDragEnd(({ x: x2, y: y3 }) => {
+        if (!currentStageLayout().mobile) void saveAppearance({ x: x2, y: y3 });
+      });
       renderStage();
     } catch {
       floatWidget = null;
@@ -9471,6 +9526,25 @@ function setup(ctx) {
     }
     floatWidget = null;
   };
+  const handleStageViewportChange = () => {
+    stageViewport = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      coarsePointer: coarsePointerQuery?.matches ?? false
+    };
+    if (!floatWidget) return;
+    const appearance = client.effectiveAppearance();
+    const layout = currentStageLayout();
+    if (!floatWidget.isFullscreen()) {
+      floatWidget.setSize(layout.width, layout.height);
+      if (!layout.mobile && appearance.x >= 0 && appearance.y >= 0) {
+        floatWidget.moveTo(appearance.x, appearance.y);
+      }
+    }
+    renderStage();
+  };
+  window.addEventListener("resize", handleStageViewportChange);
+  coarsePointerQuery?.addEventListener("change", handleStageViewportChange);
   const syncSurfaces = () => {
     if (disposed || syncing) return;
     syncing = true;
@@ -9488,9 +9562,12 @@ function setup(ctx) {
       inputAction?.setEnabled(Boolean(state.activeChatId && state.stageProfiles.length));
       if (floatWidget) {
         const appearance = client.effectiveAppearance();
+        const layout = currentStageLayout();
         if (!floatWidget.isFullscreen()) {
-          floatWidget.setSize(appearance.width, appearance.height);
-          if (appearance.x >= 0 && appearance.y >= 0) floatWidget.moveTo(appearance.x, appearance.y);
+          floatWidget.setSize(layout.width, layout.height);
+          if (!layout.mobile && appearance.x >= 0 && appearance.y >= 0) {
+            floatWidget.moveTo(appearance.x, appearance.y);
+          }
         }
         if (floatWidget.isFullscreen() !== appearance.fullscreen) {
           floatWidget.setFullscreen(appearance.fullscreen);
@@ -9517,6 +9594,8 @@ function setup(ctx) {
   });
   return () => {
     disposed = true;
+    window.removeEventListener("resize", handleStageViewportChange);
+    coarsePointerQuery?.removeEventListener("change", handleStageViewportChange);
     unsubscribeChat();
     unsubscribeEditor();
     unsubscribeClient();

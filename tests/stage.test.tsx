@@ -69,6 +69,7 @@ describe("floating stage emphasis", () => {
     const view = render(
       <Stage
         client={client}
+        mobile={false}
         onFullscreen={vi.fn()}
         onHide={vi.fn()}
         onQuick={vi.fn()}

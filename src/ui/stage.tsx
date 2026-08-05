@@ -35,6 +35,7 @@ function StageCharacter(props: {
 
 export function Stage(props: {
   client: LumiStageClient;
+  mobile: boolean;
   onFullscreen: () => void;
   onHide: () => void;
   onQuick: () => void;
@@ -94,6 +95,7 @@ export function Stage(props: {
       style={style}
       data-chrome={appearance.showChrome}
       data-empty={characters.length === 0}
+      data-mobile={props.mobile}
       data-transition={appearance.transition}
     >
       <div class="ls-stage-chrome">
@@ -125,7 +127,7 @@ export function Stage(props: {
             </span>
           </div>
         )}
-        <button type="button" class="ls-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>
+        {!props.mobile && <button type="button" class="ls-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>}
       </div>
     </div>
   );

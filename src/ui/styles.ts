@@ -688,6 +688,15 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-stage-root[data-transition="cut"] .ls-stage-character { transition: none; }
 .ls-stage-root[data-transition="lift"] .ls-stage-character { transform: translateY(8px) scale(.94); }
 .ls-stage-root[data-transition="lift"] .ls-stage-character[data-focused="true"] { transform: translateY(0) scale(var(--ls2-stage-focus-scale)); }
+.ls-stage-root[data-mobile="true"][data-chrome="true"] .ls-stage-chrome { grid-template-rows: 42px minmax(0, 1fr); }
+.ls-stage-root[data-mobile="true"] .ls-stage-grab { padding: 0 3px 0 11px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-live { font-size: 10px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-actions { gap: 1px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-actions button { width: 38px; height: 38px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-ensemble { padding: 6px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-character figcaption { padding: 4px 5px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-character figcaption strong { font-size: 10px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-character figcaption span { font-size: 8px; }
 
 @container lumi-stage (max-height: 180px) {
   .ls-stage-waiting {
