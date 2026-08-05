@@ -64,6 +64,12 @@ describe("replacement frontend design contract", () => {
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toContain("env(safe-area-inset-bottom)");
     expect(styles).toContain(":focus-visible");
+    expect(studio).toContain('class="ls-outfit-actions"');
+    expect(studio).toContain('class="ls-library-actions"');
+    expect(studio).toContain('class="ls-batch-actions"');
+    expect(styles).toContain("overscroll-behavior-x: contain");
+    expect(styles).toContain(".ls-library-main:has(> .ls-batch-bar) .ls-expression-scroll");
+    expect(styles).not.toContain(".ls-library-toolbar .ls-toolbar { display: none; }");
   });
 
   it("keeps expression merging within the host's two-modal stack limit", () => {

@@ -693,7 +693,7 @@ function BatchBar(props: {
           }))}
         />
       </div>
-      <Toolbar>
+      <Toolbar class="ls-batch-actions">
         <Button
           size="small"
           icon="move"
@@ -944,7 +944,7 @@ function LibraryView(props: LibraryProps) {
             />
             <span>{filtered.length} expression{filtered.length === 1 ? "" : "s"}</span>
           </div>
-          <Toolbar>
+          <Toolbar class="ls-outfit-actions">
             <Button
               size="small"
               icon="check"
@@ -959,7 +959,7 @@ function LibraryView(props: LibraryProps) {
 
         <div class="ls-library-command-row">
           <SearchInput value={query} onInput={setQuery} placeholder="Search expressions and sprite filenames…" />
-          <Toolbar>
+          <Toolbar class="ls-library-actions">
             <IconButton icon="undo" label="Undo" disabled={!props.canUndo} onClick={props.undo} />
             <IconButton icon="redo" label="Redo" disabled={!props.canRedo} onClick={props.redo} />
             <Button
