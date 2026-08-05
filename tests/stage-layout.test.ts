@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveStageWidgetLayout } from "../src/ui/stage-layout";
+import { resolveResizedStageWidgetLayout, resolveStageWidgetLayout } from "../src/ui/stage-layout";
 
 describe("floating stage viewport layout", () => {
   it("preserves the saved stage size on desktop", () => {
@@ -35,5 +35,12 @@ describe("floating stage viewport layout", () => {
       { width: 320, height: 420 },
       { width: 200, height: 160, coarsePointer: true },
     )).toEqual({ width: 176, height: 136, mobile: true });
+  });
+
+  it("allows a user-resized mobile stage to grow up to the padded viewport", () => {
+    expect(resolveResizedStageWidgetLayout(
+      { width: 500, height: 500 },
+      { width: 390, height: 844, coarsePointer: true },
+    )).toEqual({ width: 366, height: 500, mobile: true });
   });
 });

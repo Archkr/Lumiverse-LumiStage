@@ -103,8 +103,9 @@ describe("replacement frontend design contract", () => {
     expect(styles).toContain("container-name: lumi-stage");
     expect(styles).toContain("@container lumi-stage (max-height: 180px)");
     expect(stage).toContain("data-mobile={props.mobile}");
-    expect(stage).toContain("{!props.mobile && <button");
+    expect(stage).toContain('class="ls-stage-resize"');
     expect(styles).toContain('.ls-stage-root[data-mobile="true"] .ls-stage-actions button');
+    expect(styles).toContain('.ls-stage-root[data-mobile="true"] .ls-stage-resize');
   });
 
   it("flushes detector settings before manual analysis instead of dispatching an unsaved draft", () => {

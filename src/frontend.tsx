@@ -11,7 +11,11 @@ import { LumiStageClient } from "./ui/client";
 import { LUMI_STAGE_ICON } from "./ui/icons";
 import { showQuickPicker } from "./ui/modals";
 import { Stage } from "./ui/stage";
-import { resolveStageWidgetLayout, type StageViewport } from "./ui/stage-layout";
+import {
+  resolveResizedStageWidgetLayout,
+  resolveStageWidgetLayout,
+  type StageViewport,
+} from "./ui/stage-layout";
 import { CharacterSetup, DrawerDashboard, StudioWorkspace } from "./ui/studio";
 import { LUMI_STAGE_CSS } from "./ui/styles";
 
@@ -47,6 +51,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   let renderedCharacterId: string | null = null;
   let syncing = false;
   let disposed = false;
+  let mobileStageSize: { width: number; height: number } | null = null;
   const coarsePointerQuery = window.matchMedia?.("(pointer: coarse)") ?? null;
   let stageViewport: StageViewport = {
     width: window.innerWidth,
@@ -54,10 +59,12 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     coarsePointer: coarsePointerQuery?.matches ?? false,
   };
 
-  const currentStageLayout = () => resolveStageWidgetLayout(
-    client.effectiveAppearance(),
-    stageViewport,
-  );
+  const currentStageLayout = () => {
+    const initial = resolveStageWidgetLayout(client.effectiveAppearance(), stageViewport);
+    return initial.mobile && mobileStageSize
+      ? resolveResizedStageWidgetLayout(mobileStageSize, stageViewport)
+      : initial;
+  };
 
   const openStudio = (characterId?: string) => {
     if (characterId) {
@@ -135,7 +142,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     render(
       <Stage
         client={client}
+        height={layout.height}
         mobile={layout.mobile}
+        width={layout.width}
         onQuick={() => showQuickPicker(client)}
         onFullscreen={() => {
           if (!floatWidget) return;
@@ -148,7 +157,15 @@ export function setup(ctx: SpindleFrontendContext): () => void {
           void saveAppearance({ visible: false });
         }}
         onResize={(width, height, commit) => {
-          if (layout.mobile) return;
+          if (layout.mobile) {
+            const resized = resolveResizedStageWidgetLayout({ width, height }, stageViewport);
+            floatWidget?.setSize(resized.width, resized.height);
+            if (commit) {
+              mobileStageSize = { width: resized.width, height: resized.height };
+              renderStage();
+            }
+            return;
+          }
           floatWidget?.setSize(width, height);
           if (commit) void saveAppearance({ width, height });
         }}

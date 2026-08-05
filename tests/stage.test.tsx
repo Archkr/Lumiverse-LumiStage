@@ -66,19 +66,24 @@ describe("floating stage emphasis", () => {
     client.start();
     receive({ type: "state", state });
 
+    const onResize = vi.fn();
     const view = render(
       <Stage
         client={client}
-        mobile={false}
+        width={320}
+        height={280}
+        mobile={true}
         onFullscreen={vi.fn()}
         onHide={vi.fn()}
         onQuick={vi.fn()}
-        onResize={vi.fn()}
+        onResize={onResize}
       />,
     );
 
     expect(screen.getByAltText("Aster · Casual · Neutral")).toBeTruthy();
     expect(document.querySelector(".ls-stage-character")?.getAttribute("data-idle")).toBe("false");
+    expect(screen.getByRole("button", { name: "Resize LumiStage" })).toBeTruthy();
+    expect(onResize).not.toHaveBeenCalled();
 
     view.unmount();
     client.destroy();

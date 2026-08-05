@@ -35,6 +35,8 @@ function StageCharacter(props: {
 
 export function Stage(props: {
   client: LumiStageClient;
+  width: number;
+  height: number;
   mobile: boolean;
   onFullscreen: () => void;
   onHide: () => void;
@@ -63,13 +65,15 @@ export function Stage(props: {
     event.stopPropagation();
     const startX = event.clientX;
     const startY = event.clientY;
-    const startWidth = appearance.width;
-    const startHeight = appearance.height;
+    const startWidth = props.width;
+    const startHeight = props.height;
+    const minWidth = props.mobile ? Math.min(180, startWidth) : 200;
+    const minHeight = props.mobile ? Math.min(160, startHeight) : 240;
     let width = startWidth;
     let height = startHeight;
     const move = (next: PointerEvent) => {
-      width = Math.max(200, Math.min(1200, Math.round(startWidth + next.clientX - startX)));
-      height = Math.max(240, Math.min(1000, Math.round(startHeight + next.clientY - startY)));
+      width = Math.max(minWidth, Math.min(1200, Math.round(startWidth + next.clientX - startX)));
+      height = Math.max(minHeight, Math.min(1000, Math.round(startHeight + next.clientY - startY)));
       props.onResize(width, height, false);
     };
     resizeCleanup.current?.();
@@ -127,7 +131,7 @@ export function Stage(props: {
             </span>
           </div>
         )}
-        {!props.mobile && <button type="button" class="ls-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>}
+        <button type="button" class="ls-stage-resize" onPointerDown={startResize} aria-label="Resize LumiStage" title="Resize stage"><span /></button>
       </div>
     </div>
   );

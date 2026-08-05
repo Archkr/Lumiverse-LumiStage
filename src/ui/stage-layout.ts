@@ -38,3 +38,19 @@ export function resolveStageWidgetLayout(
     mobile: true,
   };
 }
+
+export function resolveResizedStageWidgetLayout(
+  requested: { width: number; height: number },
+  viewport: StageViewport,
+): StageWidgetLayout {
+  const width = Math.max(1, Math.round(requested.width));
+  const height = Math.max(1, Math.round(requested.height));
+  const mobile = viewport.coarsePointer || viewport.width <= MOBILE_STAGE_BREAKPOINT;
+  if (!mobile) return { width, height, mobile: false };
+
+  return {
+    width: Math.min(width, Math.max(1, Math.round(viewport.width) - MOBILE_STAGE_VIEWPORT_PADDING * 2)),
+    height: Math.min(height, Math.max(1, Math.round(viewport.height) - MOBILE_STAGE_VIEWPORT_PADDING * 2)),
+    mobile: true,
+  };
+}

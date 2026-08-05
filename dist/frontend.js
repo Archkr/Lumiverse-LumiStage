@@ -6564,13 +6564,15 @@ function Stage(props) {
     event.stopPropagation();
     const startX = event.clientX;
     const startY = event.clientY;
-    const startWidth = appearance.width;
-    const startHeight = appearance.height;
+    const startWidth = props.width;
+    const startHeight = props.height;
+    const minWidth = props.mobile ? Math.min(180, startWidth) : 200;
+    const minHeight = props.mobile ? Math.min(160, startHeight) : 240;
     let width = startWidth;
     let height = startHeight;
     const move = (next) => {
-      width = Math.max(200, Math.min(1200, Math.round(startWidth + next.clientX - startX)));
-      height = Math.max(240, Math.min(1e3, Math.round(startHeight + next.clientY - startY)));
+      width = Math.max(minWidth, Math.min(1200, Math.round(startWidth + next.clientX - startX)));
+      height = Math.max(minHeight, Math.min(1e3, Math.round(startHeight + next.clientY - startY)));
       props.onResize(width, height, false);
     };
     resizeCleanup.current?.();
@@ -6625,7 +6627,7 @@ function Stage(props) {
             /* @__PURE__ */ u2("span", { children: "Choose a state or complete a reply." })
           ] })
         ] }),
-        !props.mobile && /* @__PURE__ */ u2("button", { type: "button", class: "ls-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
+        /* @__PURE__ */ u2("button", { type: "button", class: "ls-stage-resize", onPointerDown: startResize, "aria-label": "Resize LumiStage", title: "Resize stage", children: /* @__PURE__ */ u2("span", {}) })
       ] })
     }
   );
@@ -6651,6 +6653,17 @@ function resolveStageWidgetLayout(requested, viewport) {
   return {
     width: Math.min(width, availableWidth, MOBILE_STAGE_MAX_WIDTH),
     height: Math.min(height, availableHeight, mobileHeightCap),
+    mobile: true
+  };
+}
+function resolveResizedStageWidgetLayout(requested, viewport) {
+  const width = Math.max(1, Math.round(requested.width));
+  const height = Math.max(1, Math.round(requested.height));
+  const mobile = viewport.coarsePointer || viewport.width <= MOBILE_STAGE_BREAKPOINT;
+  if (!mobile) return { width, height, mobile: false };
+  return {
+    width: Math.min(width, Math.max(1, Math.round(viewport.width) - MOBILE_STAGE_VIEWPORT_PADDING * 2)),
+    height: Math.min(height, Math.max(1, Math.round(viewport.height) - MOBILE_STAGE_VIEWPORT_PADDING * 2)),
     mobile: true
   };
 }
@@ -9163,6 +9176,8 @@ body.ls-host-select-portals [class*="popoverPortal"] {
 .ls-stage-root[data-mobile="true"] .ls-stage-live { font-size: 10px; }
 .ls-stage-root[data-mobile="true"] .ls-stage-actions { gap: 1px; }
 .ls-stage-root[data-mobile="true"] .ls-stage-actions button { width: 38px; height: 38px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-resize { width: 42px; height: 42px; }
+.ls-stage-root[data-mobile="true"] .ls-stage-resize span { right: 7px; bottom: 7px; width: 12px; height: 12px; border-width: 0 2px 2px 0; }
 .ls-stage-root[data-mobile="true"] .ls-stage-ensemble { padding: 6px; }
 .ls-stage-root[data-mobile="true"] .ls-stage-character figcaption { padding: 4px 5px; }
 .ls-stage-root[data-mobile="true"] .ls-stage-character figcaption strong { font-size: 10px; }
@@ -9374,16 +9389,17 @@ function setup(ctx) {
   let renderedCharacterId = null;
   let syncing = false;
   let disposed = false;
+  let mobileStageSize = null;
   const coarsePointerQuery = window.matchMedia?.("(pointer: coarse)") ?? null;
   let stageViewport = {
     width: window.innerWidth,
     height: window.innerHeight,
     coarsePointer: coarsePointerQuery?.matches ?? false
   };
-  const currentStageLayout = () => resolveStageWidgetLayout(
-    client.effectiveAppearance(),
-    stageViewport
-  );
+  const currentStageLayout = () => {
+    const initial = resolveStageWidgetLayout(client.effectiveAppearance(), stageViewport);
+    return initial.mobile && mobileStageSize ? resolveResizedStageWidgetLayout(mobileStageSize, stageViewport) : initial;
+  };
   const openStudio = (characterId) => {
     if (characterId) {
       const active2 = ctx.getActiveChat();
@@ -9454,7 +9470,9 @@ function setup(ctx) {
         Stage,
         {
           client,
+          height: layout.height,
           mobile: layout.mobile,
+          width: layout.width,
           onQuick: () => showQuickPicker(client),
           onFullscreen: () => {
             if (!floatWidget) return;
@@ -9467,7 +9485,15 @@ function setup(ctx) {
             void saveAppearance({ visible: false });
           },
           onResize: (width, height, commit) => {
-            if (layout.mobile) return;
+            if (layout.mobile) {
+              const resized = resolveResizedStageWidgetLayout({ width, height }, stageViewport);
+              floatWidget?.setSize(resized.width, resized.height);
+              if (commit) {
+                mobileStageSize = { width: resized.width, height: resized.height };
+                renderStage();
+              }
+              return;
+            }
             floatWidget?.setSize(width, height);
             if (commit) void saveAppearance({ width, height });
           }

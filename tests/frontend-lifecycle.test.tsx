@@ -273,7 +273,7 @@ describe("frontend host lifecycle", () => {
       height: 280,
     }));
     expect(mock.float.root.querySelector('.ls-stage-root[data-mobile="true"]')).not.toBeNull();
-    expect(mock.float.root.querySelector(".ls-stage-resize")).toBeNull();
+    expect(mock.float.root.querySelector(".ls-stage-resize")).not.toBeNull();
 
     const sendsBeforeDrag = mock.context.sendToBackend.mock.calls.length;
     mock.emitDrag({ x: 12, y: 18 });
